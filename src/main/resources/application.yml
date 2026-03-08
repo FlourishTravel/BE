@@ -44,7 +44,8 @@ spring:
       allow-unquoted-control-chars: true
 
 server:
-  port: ${SERVER_PORT:8080}
+  # PORT: Railway/Render tự set; SERVER_PORT: dùng khi chạy local hoặc set tay
+  port: ${PORT:${SERVER_PORT:8080}}
   servlet:
     context-path: /api
 

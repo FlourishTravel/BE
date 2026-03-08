@@ -28,6 +28,9 @@ public class OpenApiConfig {
                 .info(apiInfo())
                 .servers(List.of(
                         new Server()
+                                .url("/api")
+                                .description("Current host (Swagger cùng server)"),
+                        new Server()
                                 .url("http://localhost:" + serverPort + "/api")
                                 .description("Local server")
                 ))
