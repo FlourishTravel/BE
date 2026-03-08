@@ -10,6 +10,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Gọi LLM (Gemini hoặc OpenAI) để tạo nội dung. Ưu tiên Gemini nếu có key.
@@ -24,7 +25,7 @@ public class LlmService {
     @Value("${app.gemini.api-key:}")
     private String geminiApiKey;
 
-    @Value("${app.gemini.model:gemini-3-flash-preview}")
+    @Value("${app.gemini.model:gemini-2.0-flash}")
     private String geminiModel;
 
     @Value("${app.openai.api-key:}")
@@ -69,36 +70,52 @@ public class LlmService {
         }
     }
 
+    private static final int GEMINI_RETRY_MAX = 2;
+    private static final long GEMINI_RETRY_DELAY_MS = 2000L;
+
     private String callGemini(String prompt) {
         String url = "https://generativelanguage.googleapis.com/v1beta/models/" + geminiModel + ":generateContent?key=" + geminiApiKey.trim();
-        try {
-            Map<String, Object> body = Map.of(
-                    "contents", List.of(Map.of("parts", List.of(Map.of("text", prompt)))),
-                    "generationConfig", Map.of("temperature", 0.3, "maxOutputTokens", 1024)
-            );
-            Map<String, Object> response = webClient.post()
-                    .uri(url)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(body)
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .block();
-            if (response == null) return null;
-            var candidates = (List<?>) response.get("candidates");
-            if (candidates == null || candidates.isEmpty()) return null;
-            var content = ((Map<?, ?>) candidates.get(0)).get("content");
-            if (content == null) return null;
-            var parts = (List<?>) ((Map<?, ?>) content).get("parts");
-            if (parts == null || parts.isEmpty()) return null;
-            var text = ((Map<?, ?>) parts.get(0)).get("text");
-            return text != null ? text.toString() : null;
-        } catch (WebClientResponseException e) {
-            log.warn("Gemini API error: {} {}", e.getStatusCode(), e.getResponseBodyAsString());
-            return null;
-        } catch (Exception e) {
-            log.warn("Gemini call failed", e);
-            return null;
+        Map<String, Object> body = Map.of(
+                "contents", List.of(Map.of("parts", List.of(Map.of("text", prompt)))),
+                "generationConfig", Map.of("temperature", 0.3, "maxOutputTokens", 1024)
+        );
+        for (int attempt = 1; attempt <= GEMINI_RETRY_MAX; attempt++) {
+            try {
+                Map<String, Object> response = webClient.post()
+                        .uri(url)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .bodyValue(body)
+                        .retrieve()
+                        .bodyToMono(Map.class)
+                        .block();
+                if (response == null) return null;
+                var candidates = (List<?>) response.get("candidates");
+                if (candidates == null || candidates.isEmpty()) return null;
+                var content = ((Map<?, ?>) candidates.get(0)).get("content");
+                if (content == null) return null;
+                var parts = (List<?>) ((Map<?, ?>) content).get("parts");
+                if (parts == null || parts.isEmpty()) return null;
+                var text = ((Map<?, ?>) parts.get(0)).get("text");
+                return text != null ? text.toString() : null;
+            } catch (WebClientResponseException e) {
+                boolean retryable = e.getStatusCode() != null && (e.getStatusCode().value() == 503 || e.getStatusCode().value() == 429);
+                log.warn("Gemini API error: {} {}", e.getStatusCode(), e.getResponseBodyAsString());
+                if (retryable && attempt < GEMINI_RETRY_MAX) {
+                    try {
+                        TimeUnit.MILLISECONDS.sleep(GEMINI_RETRY_DELAY_MS);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return null;
+                    }
+                } else {
+                    return null;
+                }
+            } catch (Exception e) {
+                log.warn("Gemini call failed", e);
+                return null;
+            }
         }
+        return null;
     }
 
     private String callOpenAI(String prompt) {
