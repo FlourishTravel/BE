@@ -382,9 +382,10 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
             slug = trim.substring("xem_gia:".length()).trim();
         }
         if (slug == null || slug.isBlank()) return null;
+        final String actionKey = action;
         return tourRepository.findBySlug(slug).map(tour -> {
             String reply = null;
-            if ("lich_trinh".equals(action)) {
+            if ("lich_trinh".equals(actionKey)) {
                 Hibernate.initialize(tour.getItineraries());
                 List<TourItinerary> list = tour.getItineraries() != null ? tour.getItineraries().stream()
                         .sorted(Comparator.comparing(TourItinerary::getDayNumber, Comparator.nullsFirst(Integer::compareTo)))
@@ -401,7 +402,7 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
                     sb.append("Xem chi tiết và đặt tour tại trang tour nhé.");
                     reply = sb.toString();
                 }
-            } else if ("dia_diem".equals(action)) {
+            } else if ("dia_diem".equals(actionKey)) {
                 Hibernate.initialize(tour.getLocations());
                 List<TourLocation> locs = tour.getLocations() != null ? tour.getLocations().stream()
                         .sorted(Comparator.comparing(TourLocation::getVisitOrder, Comparator.nullsFirst(Integer::compareTo)))
@@ -414,7 +415,7 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
                     sb.append("\nXem bản đồ và chi tiết trên trang tour.");
                     reply = sb.toString();
                 }
-            } else if ("gia".equals(action)) {
+            } else if ("gia".equals(actionKey)) {
                 long price = tour.getBasePrice() != null ? tour.getBasePrice().longValue() : 0L;
                 String priceStr = price > 0 ? String.format("%,d", price) + "₫" : "liên hệ";
                 reply = "**" + tour.getTitle() + "**: giá từ " + priceStr
