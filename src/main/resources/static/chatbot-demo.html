@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Demo Chatbot – FlourishTravel</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --bot-bubble: #334155;
+      --user-bubble: #0ea5e9;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --radius: 12px;
+      --font: 'Segoe UI', system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 12px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    header h1 { margin: 0; font-size: 1.1rem; font-weight: 600; }
+    header span { font-size: 0.8rem; color: var(--muted); }
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .msg { max-width: 85%; width: fit-content; }
+    .msg.user { align-self: flex-end; }
+    .msg.bot { align-self: flex-start; }
+    .bubble {
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.user .bubble { background: var(--user-bubble); }
+    .msg.bot .bubble { background: var(--bot-bubble); }
+    .msg .time { font-size: 0.7rem; color: var(--muted); margin-top: 4px; }
+    .tour-cards {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .tour-card {
+      width: 160px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 8px;
+      overflow: hidden;
+      text-decoration: none;
+      color: inherit;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .tour-card img {
+      width: 100%;
+      height: 90px;
+      object-fit: cover;
+      display: block;
+    }
+    .tour-card .info { padding: 8px; }
+    .tour-card .title { font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; }
+    .tour-card .meta { font-size: 0.75rem; color: var(--muted); }
+    .quick-replies {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .quick-reply {
+      padding: 6px 12px;
+      border-radius: 20px;
+      background: rgba(14, 165, 233, 0.25);
+      border: 1px solid rgba(14, 165, 233, 0.5);
+      color: #7dd3fc;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .quick-reply:hover { background: rgba(14, 165, 233, 0.4); }
+    .input-area {
+      padding: 12px 16px;
+      background: var(--surface);
+      border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+    #input {
+      flex: 1;
+      min-height: 40px;
+      max-height: 120px;
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      border: 1px solid rgba(255,255,255,0.1);
+      background: var(--bg);
+      color: var(--text);
+      font: inherit;
+      resize: none;
+    }
+    #input::placeholder { color: var(--muted); }
+    #send {
+      padding: 10px 18px;
+      border-radius: var(--radius);
+      border: none;
+      background: var(--user-bubble);
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #send:hover { filter: brightness(1.1); }
+    #send:disabled { opacity: 0.6; cursor: not-allowed; }
+    .typing { color: var(--muted); font-style: italic; }
+    .error { color: #f87171; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🤖 Trợ lý AI FlourishTravel</h1>
+    <span>Demo – thử: "Tour biển 3 ngày", "Tìm tour Đà Nẵng", "Tour Phan Thiết cuối tuần"</span>
+  </header>
+  <main id="messages"></main>
+  <div class="input-area">
+    <textarea id="input" rows="1" placeholder="Nhập tin nhắn..."></textarea>
+    <button id="send" type="button">Gửi</button>
+  </div>
+
+  <script>
+    (function () {
+      const API_BASE = window.location.origin + '/api';
+      const sessionId = 'demo-' + Math.random().toString(36).slice(2, 11);
+
+      const messagesEl = document.getElementById('messages');
+      const inputEl = document.getElementById('input');
+      const sendBtn = document.getElementById('send');
+
+      function now() {
+        const d = new Date();
+        return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+      }
+
+      function appendUser(text) {
+        const div = document.createElement('div');
+        div.className = 'msg user';
+        div.innerHTML = '<div class="bubble">' + escapeHtml(text) + '</div><div class="time">' + now() + '</div>';
+        messagesEl.appendChild(div);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      function appendBot(data) {
+        const div = document.createElement('div');
+        div.className = 'msg bot';
+        let html = '<div class="bubble">';
+        html += '<div>' + escapeHtml(data.reply || '') + '</div>';
+        if (data.tours && data.tours.length) {
+          html += '<div class="tour-cards">';
+          data.tours.forEach(function (t) {
+            const url = '/tours/' + (t.slug || t.id);
+            const img = t.imageUrl || 'https://placehold.co/160x90/1e293b/64748b?text=Tour';
+            html += '<a class="tour-card" href="' + escapeAttr(url) + '" target="_blank">';
+            html += '<img src="' + escapeAttr(img) + '" alt="">';
+            html += '<div class="info"><div class="title">' + escapeHtml(t.title || '') + '</div>';
+            html += '<div class="meta">' + (t.durationDays ? t.durationDays + ' ngày' : '') + (t.price ? ' · ' + formatPrice(t.price) : '') + '</div></div></a>';
+          });
+          html += '</div>';
+        }
+        if (data.quickReplies && data.quickReplies.length) {
+          html += '<div class="quick-replies">';
+          data.quickReplies.forEach(function (q) {
+            html += '<button type="button" class="quick-reply" data-payload="' + escapeAttr(q.payload || q.label || '') + '">' + escapeHtml(q.label || q.payload || '') + '</button>';
+          });
+          html += '</div>';
+        }
+        html += '</div><div class="time">' + now() + '</div>';
+        div.innerHTML = html;
+        messagesEl.appendChild(div);
+        div.querySelectorAll('.quick-reply').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            const payload = this.getAttribute('data-payload') || '';
+            if (payload) { inputEl.value = payload; sendMessage(); }
+          });
+        });
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      function appendTyping() {
+        const div = document.createElement('div');
+        div.className = 'msg bot';
+        div.id = 'typing-msg';
+        div.innerHTML = '<div class="bubble typing">Đang suy nghĩ...</div>';
+        messagesEl.appendChild(div);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      function removeTyping() {
+        const el = document.getElementById('typing-msg');
+        if (el) el.remove();
+      }
+
+      function appendError(err) {
+        const div = document.createElement('div');
+        div.className = 'msg bot';
+        div.innerHTML = '<div class="bubble"><span class="error">Lỗi: ' + escapeHtml(err) + '</span></div>';
+        messagesEl.appendChild(div);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      function escapeHtml(s) {
+        if (s == null) return '';
+        const el = document.createElement('div');
+        el.textContent = s;
+        return el.innerHTML;
+      }
+      function escapeAttr(s) {
+        if (s == null) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
+      function formatPrice(n) {
+        if (n == null) return '';
+        return new Intl.NumberFormat('vi-VN').format(n) + '₫';
+      }
+
+      function sendMessage() {
+        const content = (inputEl.value || '').trim();
+        if (!content) return;
+        inputEl.value = '';
+        appendUser(content);
+        sendBtn.disabled = true;
+        appendTyping();
+
+        fetch(API_BASE + '/chatbot/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: content, sessionId: sessionId })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            removeTyping();
+            if (res.success && res.data) {
+              appendBot(res.data);
+            } else {
+              appendError(res.message || 'Phản hồi không hợp lệ');
+            }
+          })
+          .catch(function (e) {
+            removeTyping();
+            appendError(e.message || 'Không kết nối được server. Chạy backend và mở trang từ http://localhost:8080/api/chatbot-demo.html');
+          })
+          .finally(function () { sendBtn.disabled = false; });
+      }
+
+      sendBtn.addEventListener('click', sendMessage);
+      inputEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+      });
+
+      appendBot({ reply: 'Chào bạn! Bạn muốn tìm tour hay cần tư vấn gì? Thử nhập "Tour biển 3 ngày" hoặc "Tìm tour Đà Nẵng".' });
+    })();
+  </script>
+</body>
+</html>

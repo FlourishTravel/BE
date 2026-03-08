@@ -1,0 +1,96 @@
+# Mặc định (không set profile): cần PostgreSQL đang chạy.
+# Chạy không cần PostgreSQL: mvn spring-boot:run "-Dspring-boot.run.profiles=dev"
+spring:
+  application:
+    name: flourish-travel-backend
+
+  datasource:
+    # Port 5433 thường dùng khi cài PostgreSQL (vd. PostgreSQL 18); 5432 mặc định. Đổi qua biến DB_PORT nếu cần.
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:flourishtravel}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:admin123}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+  jpa:
+    # update = tự tạo/cập nhật bảng khi chạy (chỉ cần tạo database flourishtravel 1 lần trong pgAdmin)
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        default_schema: public
+        jdbc:
+          time_zone: UTC
+    open-in-view: false
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api
+
+# JWT & Encryption
+app:
+  encryption:
+    pii-key: ${PII_ENCRYPTION_KEY:}
+  jwt:
+    secret: ${JWT_SECRET:your-256-bit-secret-key-change-in-production-min-32-chars}
+    access-token-validity-ms: 900000
+    refresh-token-validity-ms: 604800000
+
+  momo:
+    partner-code: ${MOMO_PARTNER_CODE:}
+    access-key: ${MOMO_ACCESS_KEY:}
+    secret-key: ${MOMO_SECRET_KEY:}
+    endpoint: ${MOMO_ENDPOINT:https://test-payment.momo.vn}
+    ipn-url: ${MOMO_IPN_URL:http://localhost:8080/api/payments/momo/ipn}
+    return-url: ${MOMO_RETURN_URL:http://localhost:5173/checkout/result}
+    lang: vi
+
+  openai:
+    api-key: ${OPENAI_API_KEY:}
+    model: ${OPENAI_MODEL:gpt-4o-mini}
+
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-1.5-flash}
+
+  google:
+    maps-api-key: ${GOOGLE_MAPS_API_KEY:}
+
+  frontend:
+    url: ${FRONTEND_URL:http://localhost:5173}
+  api-base-url: ${API_BASE_URL:http://localhost:8080/api}
+  upload:
+    dir: ${UPLOAD_DIR:uploads}
+
+# Swagger / OpenAPI
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+  show-actuator: false
+
+logging:
+  level:
+    root: INFO
+    com.flourishtravel: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: WARN

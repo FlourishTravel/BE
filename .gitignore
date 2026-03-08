@@ -1,0 +1,19 @@
+# Environment (chứa key, không commit)
+.env
+.env.local
+.env.*.local
+
+# Build
+target/
+*.jar
+*.war
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
