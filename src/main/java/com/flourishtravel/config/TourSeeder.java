@@ -3,7 +3,10 @@ package com.flourishtravel.config;
 import com.flourishtravel.domain.tour.entity.Category;
 import com.flourishtravel.domain.tour.entity.Tour;
 import com.flourishtravel.domain.tour.entity.TourImage;
+import com.flourishtravel.domain.tour.entity.TourItinerary;
+import com.flourishtravel.domain.tour.entity.TourLocation;
 import com.flourishtravel.domain.tour.entity.TourSession;
+import com.flourishtravel.domain.tour.entity.TourVideo;
 import com.flourishtravel.domain.tour.repository.CategoryRepository;
 import com.flourishtravel.domain.tour.repository.TourRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,10 +20,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Seed dữ liệu demo: category + tour + session + ảnh để chatbot và API tour có data.
- * Chỉ chạy khi chưa có tour nào trong DB.
+ * Seed dữ liệu demo: category + tour + session + ảnh + itinerary + location + video.
+ * - Khi chưa có tour: tạo đủ 16 tour đầy đủ dữ liệu.
+ * - Khi đã có tour: bổ sung itinerary/location/video cho tour cũ thiếu; thêm tour mới (slug chưa có) cho đủ 16.
  */
 @Component
 @RequiredArgsConstructor
@@ -31,16 +36,14 @@ public class TourSeeder {
     private final TourRepository tourRepository;
 
     private static final String PLACEHOLDER_IMAGE = "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400";
+    private static final String PLACEHOLDER_IMAGE_2 = "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=400";
+    private static final String PLACEHOLDER_VIDEO = "https://www.youtube.com/embed/dQw4w9WgXcQ";
+    private static final String PLACEHOLDER_THUMB = "https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg";
 
     @EventListener(ApplicationReadyEvent.class)
-    @Order(2)
+    @Order(4)
     @Transactional
     public void seedTours() {
-        if (tourRepository.count() > 0) {
-            log.debug("Tours already exist, skip seed");
-            return;
-        }
-
         Category catBeach = categoryRepository.findBySlug("tour-bien").orElseGet(() -> {
             Category c = Category.builder()
                     .name("Tour biển")
@@ -60,7 +63,7 @@ public class TourSeeder {
             return categoryRepository.save(c);
         });
 
-        List<Tour> tours = List.of(
+        List<Tour> tourDefs = List.of(
                 tour("Tour biển Đà Nẵng 3 ngày 2 đêm", "tour-bien-da-nang-3n", "Trải nghiệm biển Mỹ Khê, Bà Nà, Hội An.", new BigDecimal("3990000"), 3, 2, catBeach),
                 tour("Tour Phan Thiết – Mũi Né 2 ngày", "tour-phan-thiet-mui-ne-2n", "Biển Mũi Né, đồi cát bay, làng chài.", new BigDecimal("2490000"), 2, 1, catBeach),
                 tour("Tour Đà Lạt 3 ngày 2 đêm", "tour-da-lat-3n", "Thành phố ngàn hoa, thác Datanla, đồi chè.", new BigDecimal("3590000"), 3, 2, catExplore),
@@ -80,28 +83,85 @@ public class TourSeeder {
         );
 
         LocalDate start = LocalDate.now().plusDays(7);
-        for (Tour t : tours) {
-            Tour saved = tourRepository.save(t);
-            TourSession session = TourSession.builder()
+
+        if (tourRepository.count() == 0) {
+            for (Tour t : tourDefs) {
+                saveTourWithDetails(tourRepository.save(t), start);
+            }
+            log.info("Seeded {} demo tours with sessions, images, itineraries, locations and videos", tourDefs.size());
+        } else {
+            for (Tour existing : tourRepository.findAll()) {
+                backfillTour(existing, start);
+            }
+            int added = 0;
+            for (Tour t : tourDefs) {
+                if (tourRepository.findBySlug(t.getSlug()).isPresent()) continue;
+                Tour saved = tourRepository.save(t);
+                saveTourWithDetails(saved, start);
+                added++;
+            }
+            log.info("Backfilled existing tours and added {} missing tours (total target 16)", added);
+        }
+    }
+
+    private void saveTourWithDetails(Tour saved, LocalDate start) {
+        int days = saved.getDurationDays() != null ? saved.getDurationDays() : 2;
+
+        if (saved.getSessions().isEmpty()) {
+            saved.getSessions().add(TourSession.builder()
                     .tour(saved)
                     .startDate(start)
-                    .endDate(start.plusDays(saved.getDurationDays() != null ? saved.getDurationDays() : 2))
+                    .endDate(start.plusDays(days))
                     .maxParticipants(20)
                     .currentParticipants(0)
                     .status("scheduled")
-                    .build();
-            saved.getSessions().add(session);
-            TourImage img = TourImage.builder()
-                    .tour(saved)
-                    .imageUrl(PLACEHOLDER_IMAGE)
-                    .caption(saved.getTitle())
-                    .sortOrder(0)
-                    .build();
-            saved.getImages().add(img);
-            tourRepository.save(saved);
+                    .build());
         }
+        if (saved.getImages().size() < 2) {
+            if (saved.getImages().isEmpty()) {
+                saved.getImages().add(TourImage.builder().tour(saved).imageUrl(PLACEHOLDER_IMAGE).caption(saved.getTitle()).sortOrder(0).build());
+            }
+            saved.getImages().add(TourImage.builder().tour(saved).imageUrl(PLACEHOLDER_IMAGE_2).caption(saved.getTitle() + " - trải nghiệm").sortOrder(1).build());
+        }
+        if (saved.getItineraries().isEmpty()) {
+            for (int d = 1; d <= days; d++) {
+                saved.getItineraries().add(TourItinerary.builder()
+                        .tour(saved)
+                        .dayNumber(d)
+                        .title("Ngày " + d + ": " + (d == 1 ? "Khởi hành & điểm đến chính" : d == days ? "Trải nghiệm cuối & về" : "Khám phá"))
+                        .description("Lịch trình chi tiết ngày " + d + " của tour. Điểm tham quan, ăn uống, nghỉ ngơi theo chương trình.")
+                        .build());
+            }
+        }
+        if (saved.getLocations().isEmpty()) {
+            List<String> locNames = getLocationNamesForSlug(saved.getSlug());
+            for (int i = 0; i < locNames.size(); i++) {
+                String name = locNames.get(i);
+                saved.getLocations().add(TourLocation.builder()
+                        .tour(saved)
+                        .locationName(name)
+                        .latitude(locLat(name))
+                        .longitude(locLng(name))
+                        .visitOrder(i + 1)
+                        .dayNumber(Math.min(i + 1, days))
+                        .build());
+            }
+        }
+        if (saved.getVideos().isEmpty()) {
+            saved.getVideos().add(TourVideo.builder()
+                    .tour(saved)
+                    .videoUrl(PLACEHOLDER_VIDEO)
+                    .thumbnailUrl(PLACEHOLDER_THUMB)
+                    .title("Video giới thiệu " + saved.getTitle())
+                    .durationSeconds(120)
+                    .sortOrder(0)
+                    .build());
+        }
+        tourRepository.save(saved);
+    }
 
-        log.info("Seeded {} demo tours with sessions and images", tours.size());
+    private void backfillTour(Tour saved, LocalDate start) {
+        saveTourWithDetails(saved, start);
     }
 
     private static Tour tour(String title, String slug, String desc, BigDecimal price, int days, int nights, Category category) {
@@ -115,6 +175,70 @@ public class TourSeeder {
         t.setCategory(category);
         t.setSessions(new java.util.ArrayList<>());
         t.setImages(new java.util.ArrayList<>());
+        t.setItineraries(new java.util.ArrayList<>());
+        t.setLocations(new java.util.ArrayList<>());
+        t.setVideos(new java.util.ArrayList<>());
         return t;
+    }
+
+    private static final Map<String, List<String>> SLUG_LOCATIONS = Map.ofEntries(
+            Map.entry("tour-bien-da-nang-3n", List.of("Bãi biển Mỹ Khê", "Bà Nà Hills", "Phố cổ Hội An")),
+            Map.entry("tour-phan-thiet-mui-ne-2n", List.of("Đồi cát bay", "Làng chài Mũi Né", "Bãi biển Mũi Né")),
+            Map.entry("tour-da-lat-3n", List.of("Thác Datanla", "Đồi chè Cầu Đất", "Hồ Xuân Hương", "Chợ Đà Lạt")),
+            Map.entry("tour-nha-trang-4n", List.of("Vinpearl Nha Trang", "Vịnh Nha Trang", "Tháp Bà Ponagar", "Hòn Chồng")),
+            Map.entry("tour-ha-long-2n", List.of("Vịnh Hạ Long", "Hang Sửng Sốt", "Đảo Titop")),
+            Map.entry("tour-phu-quoc-3n", List.of("Bãi Sao", "Vinpearl Safari", "Làng chài Hàm Ninh", "Dinh Cậu")),
+            Map.entry("tour-can-tho-chau-doc-2n", List.of("Chợ nổi Cái Răng", "Miếu Bà Chúa Xứ", "Núi Sam")),
+            Map.entry("tour-sapa-2n", List.of("Fansipan", "Bản Cát Cát", "Thung lũng Mường Hoa")),
+            Map.entry("tour-hoi-an-cu-lao-cham-1n", List.of("Phố cổ Hội An", "Cù Lao Chàm")),
+            Map.entry("tour-vung-tau-2n", List.of("Bãi Sau", "Tượng Chúa Kitô", "Bạch Dinh")),
+            Map.entry("tour-ninh-binh-tam-coc-2n", List.of("Tam Cốc", "Chùa Bái Đính", "Tràng An")),
+            Map.entry("tour-hue-2n", List.of("Đại nội Huế", "Chùa Thiên Mụ", "Lăng Tự Đức")),
+            Map.entry("tour-mui-ne-3n", List.of("Đồi cát vàng", "Làng chài", "Bãi biển Mũi Né", "Suối Tiên")),
+            Map.entry("tour-da-nang-hoi-an-2n", List.of("Cầu Rồng Đà Nẵng", "Bà Nà Hills", "Phố cổ Hội An")),
+            Map.entry("tour-con-dao-3n", List.of("Bãi Ông Đụng", "Nhà tù Côn Đảo", "Bãi Đầm Trầu")),
+            Map.entry("tour-quy-nhon-2n", List.of("Bãi Xép", "Kỳ Co", "Eo Gió"))
+    );
+
+    private static List<String> getLocationNamesForSlug(String slug) {
+        return SLUG_LOCATIONS.getOrDefault(slug, List.of("Điểm tham quan 1", "Điểm tham quan 2"));
+    }
+
+    private static BigDecimal locLat(String name) {
+        if (name.contains("Mỹ Khê") || name.contains("Bà Nà") || name.contains("Đà Nẵng")) return new BigDecimal("16.054407");
+        if (name.contains("Hội An") || name.contains("Cù Lao")) return new BigDecimal("15.880058");
+        if (name.contains("Mũi Né") || name.contains("Phan Thiết")) return new BigDecimal("10.928888");
+        if (name.contains("Đà Lạt")) return new BigDecimal("11.940419");
+        if (name.contains("Nha Trang")) return new BigDecimal("12.238791");
+        if (name.contains("Hạ Long")) return new BigDecimal("20.910051");
+        if (name.contains("Phú Quốc")) return new BigDecimal("10.227025");
+        if (name.contains("Cần Thơ") || name.contains("Cái Răng")) return new BigDecimal("10.045162");
+        if (name.contains("Châu Đốc") || name.contains("Núi Sam")) return new BigDecimal("10.704987");
+        if (name.contains("Sapa") || name.contains("Fansipan")) return new BigDecimal("22.336381");
+        if (name.contains("Vũng Tàu")) return new BigDecimal("10.411098");
+        if (name.contains("Ninh Bình") || name.contains("Tam Cốc")) return new BigDecimal("20.214803");
+        if (name.contains("Huế")) return new BigDecimal("16.463712");
+        if (name.contains("Côn Đảo")) return new BigDecimal("8.682864");
+        if (name.contains("Quy Nhơn")) return new BigDecimal("13.769588");
+        return new BigDecimal("21.028511");
+    }
+
+    private static BigDecimal locLng(String name) {
+        if (name.contains("Mỹ Khê") || name.contains("Bà Nà") || name.contains("Đà Nẵng")) return new BigDecimal("108.202164");
+        if (name.contains("Hội An") || name.contains("Cù Lao")) return new BigDecimal("108.338047");
+        if (name.contains("Mũi Né") || name.contains("Phan Thiết")) return new BigDecimal("108.102083");
+        if (name.contains("Đà Lạt")) return new BigDecimal("108.458313");
+        if (name.contains("Nha Trang")) return new BigDecimal("109.196749");
+        if (name.contains("Hạ Long")) return new BigDecimal("107.183902");
+        if (name.contains("Phú Quốc")) return new BigDecimal("103.967483");
+        if (name.contains("Cần Thơ") || name.contains("Cái Răng")) return new BigDecimal("105.746857");
+        if (name.contains("Châu Đốc") || name.contains("Núi Sam")) return new BigDecimal("105.118331");
+        if (name.contains("Sapa") || name.contains("Fansipan")) return new BigDecimal("103.843611");
+        if (name.contains("Vũng Tàu")) return new BigDecimal("107.084251");
+        if (name.contains("Ninh Bình") || name.contains("Tam Cốc")) return new BigDecimal("105.921379");
+        if (name.contains("Huế")) return new BigDecimal("107.590866");
+        if (name.contains("Côn Đảo")) return new BigDecimal("106.608503");
+        if (name.contains("Quy Nhơn")) return new BigDecimal("109.223469");
+        return new BigDecimal("105.854444");
     }
 }

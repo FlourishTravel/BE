@@ -129,6 +129,16 @@
     }
     #send:hover { filter: brightness(1.1); }
     #send:disabled { opacity: 0.6; cursor: not-allowed; }
+    #mic {
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      border: 1px solid rgba(255,255,255,0.2);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+    }
+    #mic:hover { background: var(--bot-bubble); }
+    #mic.listening { background: #dc2626; color: #fff; }
     .typing { color: var(--muted); font-style: italic; }
     .error { color: #f87171; font-size: 0.9rem; }
   </style>
@@ -136,11 +146,12 @@
 <body>
   <header>
     <h1>🤖 Trợ lý AI FlourishTravel</h1>
-    <span>Demo – thử: "Tour biển 3 ngày", "Tìm tour Đà Nẵng", "Tour Phan Thiết cuối tuần"</span>
+    <span>Demo – thử: "Tour biển 3 ngày", "Chính sách hủy tour?", "5 ngày Đà Nẵng + Hội An" (có gửi state + giọng nói)</span>
   </header>
   <main id="messages"></main>
   <div class="input-area">
-    <textarea id="input" rows="1" placeholder="Nhập tin nhắn..."></textarea>
+    <textarea id="input" rows="1" placeholder="Nhập tin nhắn hoặc bấm mic..."></textarea>
+    <button id="mic" type="button" title="Nhập bằng giọng nói">🎤</button>
     <button id="send" type="button">Gửi</button>
   </div>
 
@@ -152,6 +163,8 @@
       const messagesEl = document.getElementById('messages');
       const inputEl = document.getElementById('input');
       const sendBtn = document.getElementById('send');
+      const micBtn = document.getElementById('mic');
+      let lastState = null;
 
       function now() {
         const d = new Date();
@@ -199,6 +212,7 @@
             if (payload) { inputEl.value = payload; sendMessage(); }
           });
         });
+        if (data.state) lastState = data.state;
         messagesEl.scrollTop = messagesEl.scrollHeight;
       }
 
@@ -247,10 +261,12 @@
         sendBtn.disabled = true;
         appendTyping();
 
+        const body = { content: content, sessionId: sessionId };
+        if (lastState) body.state = lastState;
         fetch(API_BASE + '/chatbot/message', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: content, sessionId: sessionId })
+          body: JSON.stringify(body)
         })
           .then(function (r) { return r.json(); })
           .then(function (res) {
@@ -273,7 +289,34 @@
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
       });
 
-      appendBot({ reply: 'Chào bạn! Bạn muốn tìm tour hay cần tư vấn gì? Thử nhập "Tour biển 3 ngày" hoặc "Tìm tour Đà Nẵng".' });
+      var recognitionRunning = false;
+      if (micBtn && (window.SpeechRecognition || window.webkitSpeechRecognition)) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const rec = new SpeechRecognition();
+        rec.lang = 'vi-VN';
+        rec.continuous = false;
+        rec.interimResults = false;
+        micBtn.addEventListener('click', function () {
+          if (recognitionRunning) { rec.stop(); return; }
+          recognitionRunning = true;
+          micBtn.classList.add('listening');
+          rec.start();
+        });
+        rec.onresult = function (e) {
+          var text = (e.results[0] && e.results[0][0]) ? e.results[0][0].transcript : '';
+          if (text) { inputEl.value = text; sendMessage(); }
+          recognitionRunning = false;
+          micBtn.classList.remove('listening');
+        };
+        rec.onend = rec.onerror = function () {
+          recognitionRunning = false;
+          micBtn.classList.remove('listening');
+        };
+      } else {
+        micBtn.style.display = 'none';
+      }
+
+      appendBot({ reply: 'Chào bạn! Bạn muốn tìm tour, hỏi chính sách hay lên lịch? Thử "Tour biển 3 ngày", "Chính sách hủy tour?" hoặc "5 ngày Đà Nẵng + Hội An". Bấm 🎤 để nói.' });
     })();
   </script>
 </body>

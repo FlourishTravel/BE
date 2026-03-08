@@ -1,19 +1,54 @@
-# Environment (chứa key, không commit)
+# Environment & secrets (không push key, biến môi trường)
 .env
 .env.local
 .env.*.local
+*.env
 
-# Build
+# Build (Maven / Java)
 target/
 *.jar
 *.war
+*.ear
+*.class
+*.log
+out/
+build/
 
 # IDE
 .idea/
 *.iml
+*.ipr
+*.iws
 .vscode/
 *.swp
 *.swo
+*~
+.project
+.classpath
+.settings/
+.factorypath
 
-# Logs
+# Logs & temp
 *.log
+logs/
+tmp/
+temp/
+*.tmp
+*.bak
+*.cache
+
+# Spring Boot local config (có thể chứa DB password, API key)
+application-local.yml
+application-local.yaml
+application-local.properties
+application-*-local.*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test / coverage (tùy chọn: bỏ comment nếu không muốn push report)
+# surefire-reports/
+# jacoco/
+# *.exec
