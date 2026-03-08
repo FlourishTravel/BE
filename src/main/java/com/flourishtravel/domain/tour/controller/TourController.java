@@ -1,12 +1,12 @@
 package com.flourishtravel.domain.tour.controller;
 
 import com.flourishtravel.common.dto.ApiResponse;
+import com.flourishtravel.domain.tour.dto.AvailabilityCheckDto;
 import com.flourishtravel.domain.tour.entity.Tour;
 import com.flourishtravel.domain.tour.service.TourService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -33,15 +33,9 @@ public class TourController {
             @RequestParam(required = false, defaultValue = "date_asc") String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size) {
-        Sort sortBy = switch (sort != null ? sort : "") {
-            case "price_asc" -> Sort.by("basePrice").ascending();
-            case "price_desc" -> Sort.by("basePrice").descending();
-            case "date_asc" -> Sort.by("createdAt").ascending();
-            case "popular" -> Sort.by("createdAt").descending();
-            default -> Sort.by("createdAt").ascending();
-        };
+        // Native query đã có ORDER BY t.created_at; không truyền Sort để tránh Spring nối "t.createdAt" (sai tên cột PostgreSQL)
         Page<Tour> tours = tourService.search(destination, minPrice, maxPrice, startDate, categoryId,
-                PageRequest.of(page, size, sortBy));
+                PageRequest.of(page, size));
         return ResponseEntity.ok(ApiResponse.ok(tours));
     }
 
@@ -64,5 +58,15 @@ public class TourController {
             @RequestParam(defaultValue = "4") int limit) {
         List<Tour> list = tourService.getSimilarTours(id, Math.min(limit, 20));
         return ResponseEntity.ok(ApiResponse.ok(list));
+    }
+
+    /** Kiểm tra còn chỗ tour theo địa điểm (cho chatbot / đặt vé). */
+    @GetMapping("/availability/check")
+    public ResponseEntity<ApiResponse<AvailabilityCheckDto>> checkAvailability(
+            @RequestParam(required = false) String destination,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate) {
+        return tourService.checkAvailability(destination, startDate)
+                .map(dto -> ResponseEntity.ok(ApiResponse.ok(dto)))
+                .orElseGet(() -> ResponseEntity.ok(ApiResponse.ok(null)));
     }
 }

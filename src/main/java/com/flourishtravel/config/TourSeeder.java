@@ -124,12 +124,20 @@ public class TourSeeder {
             saved.getImages().add(TourImage.builder().tour(saved).imageUrl(PLACEHOLDER_IMAGE_2).caption(saved.getTitle() + " - trải nghiệm").sortOrder(1).build());
         }
         if (saved.getItineraries().isEmpty()) {
+            List<String> locNames = getLocationNamesForSlug(saved.getSlug());
             for (int d = 1; d <= days; d++) {
+                List<String> dayLocs = splitLocationsByDay(locNames, days, d);
+                String dayTitle = d == 1 ? "Khởi hành & " + (dayLocs.isEmpty() ? "điểm đến chính" : String.join(", ", dayLocs))
+                        : d == days ? (dayLocs.isEmpty() ? "Trải nghiệm cuối & về" : String.join(", ", dayLocs) + " & về")
+                        : (dayLocs.isEmpty() ? "Khám phá" : String.join(", ", dayLocs));
+                String dayDesc = dayLocs.isEmpty()
+                        ? "Lịch trình chi tiết ngày " + d + ". Điểm tham quan, ăn uống, nghỉ ngơi theo chương trình."
+                        : "Điểm tham quan: " + String.join(", ", dayLocs) + ". Ăn uống, nghỉ ngơi theo chương trình.";
                 saved.getItineraries().add(TourItinerary.builder()
                         .tour(saved)
                         .dayNumber(d)
-                        .title("Ngày " + d + ": " + (d == 1 ? "Khởi hành & điểm đến chính" : d == days ? "Trải nghiệm cuối & về" : "Khám phá"))
-                        .description("Lịch trình chi tiết ngày " + d + " của tour. Điểm tham quan, ăn uống, nghỉ ngơi theo chương trình.")
+                        .title("Ngày " + d + ": " + dayTitle)
+                        .description(dayDesc)
                         .build());
             }
         }
@@ -202,6 +210,17 @@ public class TourSeeder {
 
     private static List<String> getLocationNamesForSlug(String slug) {
         return SLUG_LOCATIONS.getOrDefault(slug, List.of("Điểm tham quan 1", "Điểm tham quan 2"));
+    }
+
+    /** Chia danh sách địa điểm theo ngày (ngày 1, 2, 3...). */
+    private static List<String> splitLocationsByDay(List<String> all, int totalDays, int dayNumber) {
+        if (all == null || all.isEmpty() || totalDays <= 0 || dayNumber < 1 || dayNumber > totalDays) return List.of();
+        int size = all.size();
+        int perDay = Math.max(1, (size + totalDays - 1) / totalDays);
+        int from = (dayNumber - 1) * perDay;
+        int to = Math.min(from + perDay, size);
+        if (from >= size) return List.of();
+        return all.subList(from, to);
     }
 
     private static BigDecimal locLat(String name) {

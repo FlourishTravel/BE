@@ -1,0 +1,453 @@
+{
+  "chatbot_name": "FlourishTravel AI Assistant",
+  "language": "vi",
+  "global_instructions": "Bạn là trợ lý du lịch AI thông minh. Luôn giữ thái độ chuyên nghiệp, thân thiện. Ưu tiên giải quyết vấn đề nhanh gọn và biết nắm bắt cảm xúc của khách hàng. Khi user đang trong ngữ cảnh (context) như đã chọn tour hoặc đang đặt vé, ưu tiên trả lời theo nhánh đó.",
+  "intents": [
+    {
+      "intent_name": "personalized_recommendation",
+      "category": "Pre-booking | Gợi ý tour",
+      "training_phrases": [
+        "Tui có khoảng 5 triệu, đi đâu 3 ngày 2 đêm ở miền Trung được?",
+        "Mình muốn đi chỗ nào yên tĩnh, chữa lành, không quá xô bồ.",
+        "Có tour nào cho nhóm bạn thích trekking không?",
+        "Tour biển 3 ngày tầm 5 triệu",
+        "Tìm tour Đà Nẵng 2 ngày 1 đêm",
+        "Có tour nào đi Phú Quốc 4 ngày giá rẻ không?",
+        "Mình muốn đi nghỉ dưỡng biển với người yêu, budget 10 triệu",
+        "Tour nào phù hợp gia đình có con nhỏ?",
+        "Đi Nha Trang hay Phan Thiết đẹp hơn? Gợi ý giúp mình",
+        "Có lịch trình nào kết hợp Hội An + Đà Nẵng không?",
+        "Tìm tour miền Bắc mùa thu lá vàng",
+        "Tour 1 tuần đi Tây Bắc có không?"
+      ],
+      "entities_to_extract": ["budget", "duration", "region", "vibe", "travel_style", "destination"],
+      "system_action": {
+        "type": "database_query",
+        "api_endpoint": "/api/tours"
+      },
+      "response_template": "Chào bạn! Với ngân sách {budget} và thời gian {duration} tại {region}, FlourishTravel có một vài lịch trình cực kỳ phù hợp với phong cách {vibe} của bạn. Bạn muốn xem chi tiết tour nào dưới đây?",
+      "context_output": "awaiting_tour_selection"
+    },
+    {
+      "intent_name": "tour_comparison",
+      "category": "Pre-booking | So sánh tour",
+      "training_phrases": [
+        "So sánh gói standard và pro khác nhau chỗ nào?",
+        "Tour này đắt hơn bên kia tại sao?",
+        "Gói standard với gói cao cấp khác nhau thế nào?",
+        "Tại sao tour Đà Lạt của mình đắt hơn tour bên kia?",
+        "Có gì đặc biệt hơn so với tour cùng giá?"
+      ],
+      "entities_to_extract": ["tour_name", "comparison_target"],
+      "system_action": {
+        "type": "fetch_static_policy"
+      },
+      "response_template": "Dạ hai gói khác nhau chủ yếu ở hạng phòng và bữa ăn: gói Standard (khách sạn 3 sao, bữa sáng); gói Pro (khách sạn 4 sao trung tâm, bữa sáng + 1 bữa trưa/tối đặc sản). Tour FlourishTravel không phát sinh phụ phí ẩn và bảo hiểm mức cao. Bạn muốn mình gửi bảng so sánh chi tiết hay đặt luôn gói nào ạ?",
+      "context_output": "awaiting_comparison_choice"
+    },
+    {
+      "intent_name": "best_time_to_visit",
+      "category": "Pre-booking | Thời điểm đi",
+      "training_phrases": [
+        "Tháng nào đi Phú Quốc ít mưa?",
+        "Mùa nào đi Hà Giang đẹp nhất?",
+        "Tháng 10 đi Đà Lạt có lạnh không?",
+        "Đi Nha Trang tháng 8 có bão không?",
+        "Thời điểm nào đi miền Trung đẹp?",
+        "Mùa nào đi Sapa ngắm lúa chín?"
+      ],
+      "entities_to_extract": ["destination", "month", "concern"],
+      "system_action": {
+        "type": "fetch_static_policy"
+      },
+      "response_template": "Dạ với {destination}, thời điểm đẹp thường là {best_period}. Mình gửi bạn bảng thời tiết theo tháng để bạn chọn ngày khởi hành phù hợp nhé. Bạn đã có khoảng ngày dự kiến chưa ạ?",
+      "context_output": "awaiting_date_preference"
+    },
+    {
+      "intent_name": "family_friendly_tour",
+      "category": "Pre-booking | Gia đình / Độ tuổi",
+      "training_phrases": [
+        "Tour này có phù hợp trẻ em không?",
+        "Đi với con 5 tuổi có vất vả không?",
+        "Người già 60 tuổi đi tour này được không?",
+        "Có thực đơn cho người ăn chay không?",
+        "Trẻ em tính giá thế nào? Có giường riêng không?",
+        "Tour gia đình có con nhỏ nên chọn gói nào?"
+      ],
+      "entities_to_extract": ["guest_type", "age", "diet"],
+      "system_action": {
+        "type": "fetch_static_policy"
+      },
+      "response_template": "Dạ tour của FlourishTravel có nhiều lịch trình phù hợp gia đình: trẻ em dưới 6 tuổi thường giảm giá, có thể bố trí giường phụ. Với người ăn chay hoặc nhu cầu đặc biệt, bạn ghi chú khi đặt mình sẽ báo nhà hàng. Bạn muốn xem tour nào cụ thể để mình kiểm tra độ phù hợp ạ?",
+      "context_output": "awaiting_family_tour_choice"
+    },
+    {
+      "intent_name": "itinerary_detail",
+      "category": "Pre-booking | Lịch trình chi tiết",
+      "training_phrases": [
+        "Tour này ngày 2 đi đâu?",
+        "Lịch trình 3 ngày chi tiết thế nào?",
+        "tour Đà Nẵng Hội An đó lịch trình như thế nào",
+        "Tour đó lịch trình như thế nào?",
+        "Lịch trình tour như thế nào?",
+        "lịch trình như thế nào",
+        "lịch trình như thếo nào",
+        "Có thời gian tự do shopping không?",
+        "Mỗi ngày có mấy điểm tham quan?",
+        "Ngày 1 đi những đâu?"
+      ],
+      "entities_to_extract": ["tour_id", "day_number"],
+      "system_action": {
+        "type": "fetch_static_policy"
+      },
+      "response_template": "Dạ lịch trình tour {destination} chi tiết từng ngày (điểm tham quan, bữa ăn, nghỉ đêm) có trong trang chi tiết tour và file gửi sau khi đặt. Thường mỗi ngày có 2–3 điểm chính, buổi tối tự do. Bạn có thể xem trang tour hoặc hỏi 'Ngày 2 đi đâu?' để mình gợi ý thêm ạ.",
+      "context_output": "awaiting_itinerary_tour_id"
+    },
+    {
+      "intent_name": "multi_intent_booking_upsell",
+      "category": "Booking & Upselling | Đặt tour + Dịch vụ thêm",
+      "training_phrases": [
+        "Tour này có đi qua Hội An không và nếu mình muốn ở lại thêm 1 đêm thì tính phí thế nào?",
+        "Tour này có đi qua Hội An không, ở lại thêm 1 đêm tính phí thế nào?",
+        "ở lại thêm 1 đêm tính phí thế nào?",
+        "thêm 1 đêm tính phí thế nào?",
+        "thêm 1 đêm",
+        "vậy thêm 1 đêm thì sao?",
+        "giữ chỗ",
+        "Cho mình đặt 2 vé đi Đà Lạt cuối tuần này, có kèm xe đưa đón sân bay không?",
+        "Đặt 3 người đi Phú Quốc tháng sau, có vé show không?",
+        "Mình đặt tour này, thêm 1 đêm và xe đưa đón luôn",
+        "Giữ chỗ 4 vé tour Đà Nẵng 20/12, có SIM 4G cho đoàn không?"
+      ],
+      "entities_to_extract": ["destination", "date", "pax", "extra_services", "extension_days"],
+      "system_action": {
+        "type": "check_realtime_inventory",
+        "api_endpoint": "/api/tours/availability/check"
+      },
+      "response_template": "Dạ tour có lịch trình qua {destination}. Hiện tại hệ thống báo chỉ còn {remaining_slots} chỗ cho {date}. Phí gia hạn thêm {extension_days} đêm là [Price]. Mình đã thêm yêu cầu {extra_services} vào hệ thống, bạn có muốn mình giữ chỗ trước 15 phút không ạ?",
+      "context_output": "booking_in_progress"
+    },
+    {
+      "intent_name": "booking_hold_seat",
+      "category": "Booking & Upselling | Giữ chỗ / Đặt cọc",
+      "training_phrases": [
+        "Giữ chỗ tour này trước 30 phút được không?",
+        "Đặt cọc bao nhiêu để giữ chỗ?",
+        "Mình muốn giữ 2 chỗ tour Hội An tuần sau",
+        "Có giữ chỗ miễn phí không?",
+        "Đặt cọc có mất phí không?"
+      ],
+      "entities_to_extract": ["tour_id", "pax", "hold_duration"],
+      "system_action": {
+        "type": "fetch_static_policy"
+      },
+      "response_template": "Dạ bạn có thể giữ chỗ qua chat trong 15–30 phút (tùy tour). Đặt cọc thường 30% tổng giá tour, còn lại thanh toán trước ngày khởi hành. Bạn muốn giữ chỗ tour nào và mấy người ạ?",
+      "context_output": "awaiting_hold_confirmation"
+    },
+    {
+      "intent_name": "payment_methods",
+      "category": "Booking & Upselling | Thanh toán",
+      "training_phrases": [
+        "Thanh toán bằng cách nào? Chuyển khoản được không?",
+        "Có cho trả góp không?",
+        "Thẻ tín dụng có mất phí không?",
+        "Đặt cọc bao nhiêu? Còn lại trả khi nào?",
+        "Thanh toán qua ví Momo được không?"
+      ],
+      "entities_to_extract": ["payment_type"],
+      "system_action": {
+        "type": "fetch_static_policy"
+      },
+      "response_template": "Dạ FlourishTravel nhận chuyển khoản, thẻ tín dụng/ghi nợ và ví Momo. Đặt cọc 30%, số còn lại trả trước ngày khởi hành 7 ngày. Trả góp qua thẻ (0% lãi) áp dụng một số tour. Bạn muốn đặt tour nào để mình gửi link thanh toán ạ?",
+      "context_output": "awaiting_payment_choice"
+    },
+    {
+      "intent_name": "addon_services",
+      "category": "Booking & Upselling | Dịch vụ thêm",
+      "training_phrases": [
+        "Có xe đưa đón sân bay không? Giá bao nhiêu?",
+        "Tour có kèm vé show Ký Ức Hội An không?",
+        "Mua thêm SIM 4G cho đoàn được không?",
+        "Dịch vụ thêm gồm những gì?",
+        "Đặt thêm bữa tối đặc sản được không?"
+      ],
+      "entities_to_extract": ["addon_type", "destination"],
+      "system_action": {
+        "type": "fetch_static_policy"
+      },
+      "response_template": "Dạ FlourishTravel có các dịch vụ thêm: xe đưa đón sân bay, vé show (Ký Ức Hội An, v.v.), SIM 4G, bữa ăn nâng cấp. Giá từng mục mình gửi theo tour bạn chọn. Bạn đang xem tour nào ạ?",
+      "context_output": "awaiting_addon_choice"
+    },
+    {
+      "intent_name": "in_tour_crisis_handling",
+      "category": "In-tour Support | Sự cố khẩn cấp",
+      "training_phrases": [
+        "Phòng khách sạn bị hỏng điều hòa, tôi cần đổi phòng gấp!",
+        "Tôi không tìm thấy hướng dẫn viên ở điểm hẹn.",
+        "Trời mưa to quá không đi tham quan được thì công ty tính sao?",
+        "Điều hòa phòng tôi hỏng, đổi phòng ngay được không?",
+        "HDV không có ở điểm hẹn, tôi đang đứng đợi",
+        "Bão vào không đi được thì có hoàn tiền không?",
+        "Ngộ độc đồ ăn trong tour cần làm gì?",
+        "Mất ví trong chuyến đi, liên hệ ai?"
+      ],
+      "sentiment_analysis": "require_detection",
+      "sentiment_threshold": "negative",
+      "system_action": {
+        "type": "human_handoff_and_alert",
+        "trigger": "escalate_to_tour_group_chat",
+        "priority": "HIGH"
+      },
+      "response_template": "FlourishTravel rất xin lỗi vì sự cố bạn đang gặp phải. Hệ thống đã ghi nhận tình trạng {issue} và ngay lập tức gửi thông báo khẩn đến điều hành tour. Vui lòng giữ máy, chuyên viên hỗ trợ và HDV sẽ nhắn tin trong nhóm chat đoàn của bạn ngay bây giờ."
+    },
+    {
+      "intent_name": "in_tour_itinerary_today",
+      "category": "In-tour Support | Lịch trong ngày",
+      "training_phrases": [
+        "Hôm nay đoàn đi đâu? Giờ tập trung mấy giờ?",
+        "Lịch ngày hôm nay thế nào?",
+        "Sáng mai xuất phát lúc mấy giờ?",
+        "Điểm tập trung ngày 2 ở đâu?"
+      ],
+      "entities_to_extract": ["current_day", "meeting_point"],
+      "system_action": {
+        "type": "fetch_static_policy"
+      },
+      "response_template": "Dạ lịch trong ngày và điểm tập trung HDV đã gửi trong nhóm chat đoàn. Nếu bạn chưa thấy, vui lòng nhắn trong nhóm hoặc gọi hotline trên thẻ đoàn. Mình có thể gửi lại bản tóm tắt lịch trình tour nếu bạn cần ạ.",
+      "context_output": "in_tour_support"
+    },
+    {
+      "intent_name": "local_secrets_google_maps",
+      "category": "In-tour Support | Địa điểm ăn chơi gần đây",
+      "training_phrases": [
+        "Khách sạn cách trung tâm bao xa?",
+        "Xung quanh chỗ ở có quán ăn nào ngon của người địa phương không?",
+        "Tìm giúp mình quán cafe view đẹp gần đây.",
+        "Quán ốc ngon gần khách sạn?",
+        "Chỗ nào chụp ảnh đẹp gần đây?",
+        "Quán ăn sáng ngon quanh đây?"
+      ],
+      "entities_to_extract": ["poi_type", "current_location"],
+      "context_requirement": "must_have_active_booking_location",
+      "system_action": {
+        "type": "external_api_call",
+        "api_endpoint": "/api/chatbot/nearby-places"
+      },
+      "response_template": "Cách khách sạn của bạn khoảng {distance} có một quán {poi_type} tên là {place_name} được người dân địa phương đánh giá rất cao ({rating}). Bạn có muốn mình gửi bản đồ chỉ đường qua luôn không?"
+    },
+    {
+      "intent_name": "in_tour_lost_item",
+      "category": "In-tour Support | Mất đồ / Quên đồ",
+      "training_phrases": [
+        "Tôi quên đồ trên xe, làm sao lấy lại?",
+        "Mất hộ chiếu trong chuyến đi phải làm gì?",
+        "Để quên túi xách trên xe buýt tour",
+        "Trình báo công an ở đâu khi mất ví?"
+      ],
+      "entities_to_extract": ["item_type", "location_lost"],
+      "system_action": {
+        "type": "human_handoff_and_alert",
+        "trigger": "escalate_to_tour_group_chat",
+        "priority": "HIGH"
+      },
+      "response_template": "Dạ với trường hợp {issue}, bạn vui lòng báo ngay cho HDV hoặc điều hành tour qua nhóm chat. Đồ quên trên xe mình sẽ báo lái xe kiểm tra. Mất giấy tờ cần trình báo công an địa phương và liên hệ đại sứ quán nếu cần. Mình đã gửi thông báo hỗ trợ vào nhóm đoàn."
+    },
+    {
+      "intent_name": "policy_cancellation",
+      "category": "Policy & Payment | Hủy tour",
+      "training_phrases": [
+        "Nếu tôi bị ốm hủy trước 3 ngày thì mất phí bao nhiêu %?",
+        "Tôi muốn đổi tên người đi có được không?",
+        "Chính sách hủy tour thế nào?",
+        "Hủy tour mất phí bao nhiêu?",
+        "Ốm không đi được có hoàn tiền không?",
+        "Hủy trước 7 ngày có mất phí không?",
+        "Cancel tour có mất hết tiền không?"
+      ],
+      "system_action": {
+        "type": "fetch_static_policy"
+      },
+      "response_template": "Theo chính sách hiện tại, nếu bạn hủy trước {days_left} ngày, phí áp dụng sẽ là {penalty_percentage}%. Về việc đổi tên người đi, bạn hoàn toàn có thể thực hiện miễn phí trước ngày khởi hành 48 giờ. Mình gửi bạn link chi tiết quy định nhé.",
+      "context_output": "policy_cancellation_read"
+    },
+    {
+      "intent_name": "policy_refund",
+      "category": "Policy & Payment | Hoàn tiền",
+      "training_phrases": [
+        "Hoàn tiền khi nào nhận được?",
+        "Khi nào tôi nhận lại tiền sau khi hủy?",
+        "Refund mất bao lâu?",
+        "Tiền hoàn về tài khoản khi nào?",
+        "Đã hủy tour nhưng chưa thấy tiền hoàn"
+      ],
+      "entities_to_extract": ["refund_reason"],
+      "system_action": {
+        "type": "fetch_static_policy"
+      },
+      "response_template": "Dạ thông thường tiền hoàn được xử lý trong 7–14 ngày làm việc sau khi có quyết định hủy, tùy ngân hàng. Bạn kiểm tra lại tài khoản đã chuyển khi đặt. Nếu quá thời hạn chưa nhận được, bạn nhắn mã đặt tour để mình kiểm tra giúp ạ.",
+      "context_output": "policy_refund_read"
+    },
+    {
+      "intent_name": "policy_change_date",
+      "category": "Policy & Payment | Đổi ngày / Dời tour",
+      "training_phrases": [
+        "Tôi muốn đổi sang ngày khởi hành khác",
+        "Dời tour sang tháng sau được không?",
+        "Đổi ngày đi có mất phí không?",
+        "Đổi sang tour khác được không?",
+        "Đổi lịch đi có phạt thêm không?"
+      ],
+      "entities_to_extract": ["new_date", "tour_id"],
+      "system_action": {
+        "type": "fetch_static_policy"
+      },
+      "response_template": "Dạ bạn có thể đổi ngày khởi hành hoặc dời tour (tùy điều kiện còn chỗ). Thường đổi trước 7 ngày không phát sinh phí; đổi gần ngày có thể có phí. Bạn gửi mã đặt tour và ngày mong muốn, mình kiểm tra và báo lại ạ.",
+      "context_output": "awaiting_change_date_detail"
+    },
+    {
+      "intent_name": "post_trip_review",
+      "category": "Post-tour | Review / Voucher",
+      "training_phrases": [
+        "Chia sẻ ảnh chuyến đi nhận voucher thế nào?",
+        "Review tour xong có quà không?",
+        "Mình vừa đi tour xong muốn gửi feedback",
+        "Đăng ảnh lên đâu để nhận mã giảm lần sau?"
+      ],
+      "entities_to_extract": ["tour_id"],
+      "system_action": {
+        "type": "generate_lead_or_discount"
+      },
+      "response_template": "Dạ cảm ơn bạn đã đi tour cùng FlourishTravel! Bạn chia sẻ ảnh + review trên fanpage hoặc gửi qua form trên website sẽ nhận mã giảm 5% cho lần đặt tiếp. Bạn có muốn mình gửi link form và hướng dẫn không ạ?",
+      "context_output": "post_trip_engagement"
+    },
+    {
+      "intent_name": "post_trip_complaint",
+      "category": "Post-tour | Khiếu nại",
+      "training_phrases": [
+        "Tôi không hài lòng với thái độ hướng dẫn viên",
+        "Muốn phản ánh về chất lượng tour vừa đi",
+        "Khiếu nại dịch vụ tour vừa rồi",
+        "HDV không nhiệt tình, muốn gửi ý kiến"
+      ],
+      "sentiment_analysis": "require_detection",
+      "system_action": {
+        "type": "human_handoff_and_alert",
+        "trigger": "escalate_to_customer_care",
+        "priority": "MEDIUM"
+      },
+      "response_template": "FlourishTravel rất tiếc khi trải nghiệm của bạn chưa tốt. Mình đã chuyển phản ánh về {issue} đến bộ phận Chăm sóc khách hàng. Bạn sẽ được liên hệ trong 24h. Nếu cần gấp, vui lòng gọi hotline trên website. Bạn có muốn mình gửi số hotline qua tin nhắn không ạ?",
+      "context_output": "complaint_escalated"
+    },
+    {
+      "intent_name": "post_trip_next_tour",
+      "category": "Post-tour | Gợi ý tour tiếp",
+      "training_phrases": [
+        "Đi xong Đà Lạt rồi, gợi ý tour tiếp theo đi đâu?",
+        "Lần sau muốn đi biển, có tour nào hot không?",
+        "Sau Phú Quốc nên đi đâu?",
+        "Tour nào phù hợp đi sau chuyến Nha Trang?"
+      ],
+      "entities_to_extract": ["previous_destination", "preference"],
+      "system_action": {
+        "type": "database_query",
+        "api_endpoint": "/api/tours"
+      },
+      "response_template": "Dạ sau chuyến {previous_destination} bạn có thể cân nhắc {preference} — FlourishTravel có vài tour rất được lòng khách. Bạn xem gợi ý bên dưới, thích tour nào mình tư vấn chi tiết ạ!",
+      "context_output": "awaiting_tour_selection"
+    },
+    {
+      "intent_name": "competitor_price_complaint",
+      "category": "Sentiment & Conversion | Giá / So sánh đối thủ",
+      "training_phrases": [
+        "Sao bên khác bán rẻ hơn tận 1 triệu?",
+        "Giá này đắt quá, có giảm thêm không?",
+        "Bên kia tour tương tự rẻ hơn nhiều",
+        "Có mã giảm giá không? Đắt quá",
+        "Khách sạn xa trung tâm mà giá cao thế?"
+      ],
+      "sentiment_analysis": "frustrated",
+      "system_action": {
+        "type": "generate_lead_or_discount"
+      },
+      "response_template": "Mình hiểu băn khoăn của bạn về giá. Các tour của FlourishTravel bao gồm [USP: ví dụ khách sạn 4 sao trung tâm, không phát sinh phụ phí, bảo hiểm mức cao nhất]. Tuy nhiên, vì bạn đang nhắn tin trực tiếp tại đây, mình tặng bạn mã voucher 5% (CODE: CHAT5) áp dụng ngay hôm nay nhé!",
+      "context_output": "voucher_offered"
+    },
+    {
+      "intent_name": "trust_question",
+      "category": "Sentiment & Conversion | Uy tín",
+      "training_phrases": [
+        "Công ty hoạt động bao lâu rồi?",
+        "FlourishTravel có giấy phép kinh doanh không?",
+        "Đặt tour online có an toàn không?",
+        "Có ai đi tour bên mình chưa, review thế nào?"
+      ],
+      "system_action": {
+        "type": "fetch_static_policy"
+      },
+      "response_template": "Dạ FlourishTravel hoạt động với đầy đủ giấy phép lữ hành, đã phục vụ hàng nghìn khách với tỉ lệ hài lòng cao. Thanh toán qua cổng bảo mật, có hóa đơn và bảo hiểm tour. Bạn có thể xem review trên fanpage và website. Bạn muốn tư vấn tour cụ thể nào ạ?",
+      "context_output": "trust_answered"
+    },
+    {
+      "intent_name": "visa_passport",
+      "category": "Digital & Utilities | Visa / Hộ chiếu",
+      "training_phrases": [
+        "Đi Thái Lan cần visa không?",
+        "Hộ chiếu còn hạn dưới 6 tháng đi được không?",
+        "Làm visa Hàn Quốc mất bao lâu?",
+        "Tour nước ngoài có hỗ trợ làm visa không?"
+      ],
+      "entities_to_extract": ["destination", "nationality"],
+      "system_action": {
+        "type": "fetch_static_policy"
+      },
+      "response_template": "Dạ với {destination}, yêu cầu visa/hộ chiếu tùy quốc tịch. Hộ chiếu thường cần còn hạn ít nhất 6 tháng. Một số nước miễn visa cho công dân Việt Nam. Bạn cho mình biết điểm đến và quốc tịch, mình gửi bảng yêu cầu chi tiết ạ.",
+      "context_output": "visa_info_given"
+    },
+    {
+      "intent_name": "insurance_question",
+      "category": "Digital & Utilities | Bảo hiểm",
+      "training_phrases": [
+        "Tour có bảo hiểm du lịch không?",
+        "Bồi thường tối đa bao nhiêu nếu tai nạn?",
+        "Tai nạn ở nước ngoài liên hệ ai?",
+        "Bảo hiểm có gì khi đi tour?"
+      ],
+      "system_action": {
+        "type": "fetch_static_policy"
+      },
+      "response_template": "Dạ mọi tour FlourishTravel đều có bảo hiểm du lịch (mức bồi thường theo gói). Trường hợp tai nạn/khẩn cấp bạn liên hệ số hotline trên thẻ đoàn hoặc bộ phận điều hành 24/7. Bạn muốn xem điều khoản bảo hiểm chi tiết không ạ?",
+      "context_output": "insurance_info_given"
+    },
+    {
+      "intent_name": "weather_forecast",
+      "category": "Digital & Utilities | Thời tiết",
+      "training_phrases": [
+        "Dự báo thời tiết Đà Nẵng 3 ngày tới?",
+        "Cuối tuần này Phú Quốc có mưa không?",
+        "Thời tiết ngày khởi hành thế nào?"
+      ],
+      "entities_to_extract": ["destination", "date"],
+      "system_action": {
+        "type": "external_api_call",
+        "api_endpoint": "/api/chatbot/weather-forecast"
+      },
+      "response_template": "Dạ dự báo thời tiết {destination}: {weather_summary} Bạn nên mang theo ô/áo mưa phòng mưa nhẹ. Có cần mình gợi ý tour thay thế nếu thời tiết xấu không ạ?",
+      "context_output": "weather_info_given"
+    },
+    {
+      "intent_name": "currency_exchange",
+      "category": "Digital & Utilities | Đổi tiền",
+      "training_phrases": [
+        "Tỉ giá USD hôm nay thế nào?",
+        "100 USD đổi ra Baht được bao nhiêu?",
+        "Đi Thái đổi tiền ở đâu? Có nên đổi sẵn không?"
+      ],
+      "entities_to_extract": ["currency_from", "currency_to"],
+      "system_action": {
+        "type": "fetch_static_policy"
+      },
+      "response_template": "Dạ tỉ giá thay đổi theo ngày, bạn có thể tra trên Ngân hàng Nhà nước hoặc app ngân hàng. Đi Thái/Lào/Campuchia thường đổi VND sang USD rồi sang nội tệ tại sân bay hoặc đổi dần ở điểm đến. Mình gửi bạn link tỉ giá tham khảo nhé.",
+      "context_output": "currency_info_given"
+    }
+  ]
+}

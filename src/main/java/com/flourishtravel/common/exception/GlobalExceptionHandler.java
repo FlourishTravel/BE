@@ -9,6 +9,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -48,6 +49,13 @@ public class GlobalExceptionHandler {
             errors.put(field, message);
         });
         return ResponseEntity.badRequest().body(ApiResponse.error("Dữ liệu không hợp lệ", errors));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMessageNotReadable(HttpMessageNotReadableException e) {
+        log.warn("Request body JSON invalid: {}", e.getMostSpecificCause() != null ? e.getMostSpecificCause().getMessage() : e.getMessage());
+        String message = "Request body JSON không hợp lệ. Trường chuỗi (ví dụ content) không được chứa xuống dòng thật; nếu cần xuống dòng hãy dùng \\n.";
+        return ResponseEntity.badRequest().body(ApiResponse.error(message));
     }
 
     @ExceptionHandler(Exception.class)

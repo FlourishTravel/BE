@@ -18,23 +18,70 @@ public interface TourRepository extends JpaRepository<Tour, UUID> {
 
     Optional<Tour> findBySlug(String slug);
 
-    @Query("""
-        SELECT DISTINCT t FROM Tour t
-        JOIN t.sessions s
-        WHERE (:destination IS NULL OR LOWER(t.title) LIKE LOWER(CONCAT('%', :destination, '%')))
-        AND (:minPrice IS NULL OR t.basePrice >= :minPrice)
-        AND (:maxPrice IS NULL OR t.basePrice <= :maxPrice)
-        AND (:startDate IS NULL OR s.startDate >= :startDate)
-        AND (:categoryId IS NULL OR t.category.id = :categoryId)
-        AND s.status = 'scheduled'
-        AND s.currentParticipants < s.maxParticipants
-        """)
-    Page<Tour> search(@Param("destination") String destination,
+    @Query(
+        value = """
+        SELECT DISTINCT t.id, t.base_price, t.category_id, t.created_at, t.description,
+               t.duration_days, t.duration_nights, t.slug, t.title, t.updated_at
+        FROM tours t
+        INNER JOIN tour_sessions s ON s.tour_id = t.id
+        WHERE (CAST(:destinationPattern AS text) IS NULL OR LOWER(t.title) LIKE LOWER(CAST(:destinationPattern AS text)))
+          AND (:minPrice IS NULL OR t.base_price >= :minPrice)
+          AND (:maxPrice IS NULL OR t.base_price <= :maxPrice)
+          AND (:startDate IS NULL OR s.start_date >= :startDate)
+          AND (:categoryId IS NULL OR t.category_id = :categoryId)
+          AND s.status = 'scheduled'
+          AND s.current_participants < s.max_participants
+        ORDER BY t.created_at ASC
+        """,
+        countQuery = """
+        SELECT COUNT(DISTINCT t.id)
+        FROM tours t
+        INNER JOIN tour_sessions s ON s.tour_id = t.id
+        WHERE (CAST(:destinationPattern AS text) IS NULL OR LOWER(t.title) LIKE LOWER(CAST(:destinationPattern AS text)))
+          AND (:minPrice IS NULL OR t.base_price >= :minPrice)
+          AND (:maxPrice IS NULL OR t.base_price <= :maxPrice)
+          AND (:startDate IS NULL OR s.start_date >= :startDate)
+          AND (:categoryId IS NULL OR t.category_id = :categoryId)
+          AND s.status = 'scheduled'
+          AND s.current_participants < s.max_participants
+        """,
+        nativeQuery = true
+    )
+    Page<Tour> search(@Param("destinationPattern") String destinationPattern,
                       @Param("minPrice") BigDecimal minPrice,
                       @Param("maxPrice") BigDecimal maxPrice,
                       @Param("startDate") LocalDate startDate,
                       @Param("categoryId") UUID categoryId,
                       Pageable pageable);
+
+    /**
+     * Tìm tour theo địa điểm/giá (không lọc session). Dùng cho chatbot gợi ý khi có thể chưa có session scheduled.
+     */
+    @Query(
+        value = """
+        SELECT t.id, t.base_price, t.category_id, t.created_at, t.description,
+               t.duration_days, t.duration_nights, t.slug, t.title, t.updated_at
+        FROM tours t
+        WHERE (CAST(:destinationPattern AS text) IS NULL OR LOWER(t.title) LIKE LOWER(CAST(:destinationPattern AS text)))
+          AND (:minPrice IS NULL OR t.base_price >= :minPrice)
+          AND (:maxPrice IS NULL OR t.base_price <= :maxPrice)
+          AND (:categoryId IS NULL OR t.category_id = :categoryId)
+        ORDER BY t.created_at ASC
+        """,
+        countQuery = """
+        SELECT COUNT(t.id) FROM tours t
+        WHERE (CAST(:destinationPattern AS text) IS NULL OR LOWER(t.title) LIKE LOWER(CAST(:destinationPattern AS text)))
+          AND (:minPrice IS NULL OR t.base_price >= :minPrice)
+          AND (:maxPrice IS NULL OR t.base_price <= :maxPrice)
+          AND (:categoryId IS NULL OR t.category_id = :categoryId)
+        """,
+        nativeQuery = true
+    )
+    Page<Tour> searchForSuggestion(@Param("destinationPattern") String destinationPattern,
+                                   @Param("minPrice") BigDecimal minPrice,
+                                   @Param("maxPrice") BigDecimal maxPrice,
+                                   @Param("categoryId") UUID categoryId,
+                                   Pageable pageable);
 
     Page<Tour> findByCategory_IdAndIdNotOrderByCreatedAtDesc(UUID categoryId, UUID excludeId, Pageable pageable);
 

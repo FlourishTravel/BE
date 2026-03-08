@@ -38,6 +38,11 @@ spring:
       max-file-size: 10MB
       max-request-size: 10MB
 
+  # Cho phép chuỗi JSON chứa ký tự điều khiển (vd. xuống dòng) để request từ Swagger/ client không bị 500
+  jackson:
+    parser:
+      allow-unquoted-control-chars: true
+
 server:
   port: ${SERVER_PORT:8080}
   servlet:

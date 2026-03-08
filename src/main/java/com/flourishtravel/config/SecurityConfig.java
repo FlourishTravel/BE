@@ -38,6 +38,8 @@ public class SecurityConfig {
                 .requestMatchers("/tours", "/tours/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/categories").permitAll()
                 .requestMatchers("/chatbot/message").permitAll()
+                .requestMatchers("/chatbot/config", "/chatbot/config/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/chatbot/nearby-places", "/chatbot/weather-forecast").permitAll()
                 .requestMatchers("/payments/momo/ipn").permitAll()
                 .requestMatchers("/contact-requests").permitAll()
                 .requestMatchers("/uploads/**").permitAll()

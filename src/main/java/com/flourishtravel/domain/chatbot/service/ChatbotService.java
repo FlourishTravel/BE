@@ -2,15 +2,23 @@ package com.flourishtravel.domain.chatbot.service;
 
 import com.flourishtravel.domain.chatbot.dto.ChatbotRequest;
 import com.flourishtravel.domain.chatbot.dto.ChatbotResponse;
+import com.flourishtravel.domain.chatbot.entity.ChatbotIntent;
 import com.flourishtravel.domain.chatbot.entity.ChatbotTrainingPhrase;
 import com.flourishtravel.domain.chatbot.entity.PolicyFaq;
 import com.flourishtravel.domain.chatbot.entity.SearchLog;
 import com.flourishtravel.domain.chatbot.repository.ChatbotTrainingPhraseRepository;
 import com.flourishtravel.domain.chatbot.repository.PolicyFaqRepository;
 import com.flourishtravel.domain.chatbot.repository.SearchLogRepository;
+import com.flourishtravel.domain.chatbot.service.ChatbotConfigService.ChatbotIntentWithPhrases;
+import com.flourishtravel.domain.tour.dto.AvailabilityCheckDto;
 import com.flourishtravel.domain.tour.entity.Tour;
 import com.flourishtravel.domain.tour.entity.TourImage;
+import com.flourishtravel.domain.tour.entity.TourItinerary;
 import com.flourishtravel.domain.tour.repository.TourRepository;
+import org.hibernate.Hibernate;
+import com.flourishtravel.domain.tour.service.TourService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -19,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,6 +41,10 @@ public class ChatbotService {
     private final PolicyFaqRepository policyFaqRepository;
     private final ChatbotTrainingPhraseRepository trainingPhraseRepository;
     private final SearchLogRepository searchLogRepository;
+    private final ChatbotConfigService chatbotConfigService;
+    private final ObjectMapper objectMapper;
+    private final TourService tourService;
+    private final ChatbotDataService chatbotDataService;
 
     private static final String PROMPT_TEMPLATE = """
 Persona: Bạn là chuyên viên tư vấn du lịch của FlourishTravel – lịch sự, chuyên nghiệp, nhiệt tình nhưng không quá suồng sã. Trả lời ngắn gọn, rõ ràng; khi cần chuyển sang nhân viên thì hướng dẫn cụ thể (hotline, form Liên hệ). CHỈ tư vấn trong lĩnh vực tour du lịch/chính sách. Nếu user viết tiếng Anh/Trung/Hàn: trả lời CÙNG ngôn ngữ đó.
@@ -74,6 +88,13 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
 
             if (looksLikeNegativeSentiment(content)) {
                 return buildSentimentResponse();
+            }
+
+            // Ưu tiên match intent từ training phrases (config import); có state thì ưu tiên intent theo context câu trước
+            ChatbotIntentWithPhrases matched = matchIntentFromTrainingPhrases(content, request);
+            if (matched != null) {
+                ChatbotResponse intentResponse = buildResponseFromIntent(matched, content, request);
+                if (intentResponse != null) return intentResponse;
             }
 
             String contentForPolicy = normalizeForMatching(content);
@@ -232,6 +253,9 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
                 if (!related.isEmpty()) tours = related;
             }
         }
+        if (!tours.isEmpty() && tours.get(0).getSlug() != null) {
+            state.put("lastSuggestedTourSlug", tours.get(0).getSlug());
+        }
 
         return ChatbotResponse.builder()
                 .reply(reply)
@@ -242,9 +266,12 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
     }
 
     private List<ChatbotResponse.TourCard> searchToursWithDuration(String destination, BigDecimal minPrice, BigDecimal maxPrice, Integer durationDays, int limit) {
-        var page = tourRepository.search(
-                destination != null && !destination.isBlank() ? destination : null,
-                minPrice, maxPrice, null, null,
+        String destinationPattern = (destination != null && !destination.isBlank())
+                ? "%" + destination.trim() + "%"
+                : null;
+        var page = tourRepository.searchForSuggestion(
+                destinationPattern,
+                minPrice, maxPrice, null,
                 PageRequest.of(0, limit * 2));
         List<Tour> list = page.getContent();
         if (durationDays != null && durationDays > 0) {
@@ -517,14 +544,20 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
                     .build();
         }
         String keyword = extractSearchKeyword(content);
-        var page = tourRepository.search(
-                keyword,
-                null, null, null, null,
+        String destinationPattern = (keyword != null && !keyword.isBlank()) ? "%" + keyword.trim() + "%" : null;
+        var page = tourRepository.searchForSuggestion(
+                destinationPattern,
+                null, null, null,
                 PageRequest.of(0, 8));
         List<ChatbotResponse.TourCard> cards = page.getContent().stream().map(this::toTourCard).collect(Collectors.toList());
         String reply = cards.isEmpty()
                 ? "Hiện chưa có tour nào khớp với yêu cầu của bạn. Bạn thử gợi ý bên dưới hoặc để lại thông tin để mình tư vấn nhé."
                 : "Dựa trên yêu cầu của bạn, đây là một số tour phù hợp. Bạn có thể xem chi tiết hoặc thử tìm theo địa điểm/ số ngày khác nhé.";
+        Map<String, Object> state = new HashMap<>();
+        if (!cards.isEmpty() && cards.get(0).getSlug() != null) {
+            state.put("lastSuggestedTourSlug", cards.get(0).getSlug());
+            state.put("context", "awaiting_tour_selection");
+        }
         return ChatbotResponse.builder()
                 .reply(reply)
                 .tours(cards)
@@ -533,6 +566,7 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
                         ChatbotResponse.QuickReply.builder().label("Tour Đà Lạt").payload("Tour Đà Lạt").build(),
                         ChatbotResponse.QuickReply.builder().label("Tour Phan Thiết").payload("Tour Phan Thiết").build()
                 ))
+                .state(state.isEmpty() ? null : state)
                 .build();
     }
 
@@ -561,5 +595,349 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
         if (lower.contains("biển") || lower.contains("bãi") || lower.contains("tour biển")) return "biển";
         if (lower.contains("tour") && content.length() > 3) return "tour";
         return content.length() > 2 ? content : null;
+    }
+
+    /** Match user message với training phrases. Có state từ câu trước thì ưu tiên intent theo context (câu tiếp nối). */
+    private ChatbotIntentWithPhrases matchIntentFromTrainingPhrases(String content, ChatbotRequest request) {
+        if (content == null || content.isBlank()) return null;
+        String normalized = normalizeForMatching(content);
+        String lower = content.toLowerCase().trim();
+        List<ChatbotIntentWithPhrases> all = chatbotConfigService.getIntentsWithPhrases();
+
+        // Câu tiếp nối: state có context → ưu tiên intent theo nội dung câu hỏi
+        Map<String, Object> state = request.getState();
+        if (state != null && state.get("context") != null && content.length() <= 80) {
+            String ctx = String.valueOf(state.get("context"));
+            boolean followUpBooking = lower.contains("thêm") && (lower.contains("đêm") || lower.contains("ngày"))
+                    || lower.contains("phí") || lower.contains("giữ chỗ") || lower.contains("đặt ") || lower.contains("bao nhiêu")
+                    || lower.contains("tính phí") || lower.contains("giá") && lower.contains("thêm");
+            if (("awaiting_tour_selection".equals(ctx) || "booking_in_progress".equals(ctx)) && followUpBooking) {
+                for (ChatbotIntentWithPhrases iwp : all) {
+                    if ("multi_intent_booking_upsell".equals(iwp.intent().getIntentName()))
+                        return iwp;
+                }
+            }
+            // Đang chọn tour, user hỏi "lịch trình như thế nào" → ưu tiên intent lịch trình (tour vừa gợi ý)
+            boolean followUpItinerary = lower.contains("lịch trình") || lower.contains("lich trinh")
+                    || lower.contains("ngày 2 đi đâu") || lower.contains("ngày 1 đi");
+            if ("awaiting_tour_selection".equals(ctx) && followUpItinerary) {
+                for (ChatbotIntentWithPhrases iwp : all) {
+                    if ("itinerary_detail".equals(iwp.intent().getIntentName()))
+                        return iwp;
+                }
+            }
+        }
+
+        ChatbotIntentWithPhrases best = null;
+        int bestLen = 0;
+        for (ChatbotIntentWithPhrases iwp : all) {
+            for (String phrase : iwp.phrases()) {
+                if (phrase == null || phrase.isBlank()) continue;
+                String pNorm = normalizeForMatching(phrase);
+                if (pNorm.length() < 2) continue;
+                boolean match = normalized.contains(pNorm) || lower.contains(phrase.toLowerCase().trim());
+                if (match && phrase.length() > bestLen) {
+                    bestLen = phrase.length();
+                    best = iwp;
+                }
+            }
+        }
+        return best;
+    }
+
+    /** Tạo response từ intent đã match: điền template, gọi system_action (tour search...), trả state. */
+    private ChatbotResponse buildResponseFromIntent(ChatbotIntentWithPhrases iwp, String content, ChatbotRequest request) {
+        ChatbotIntent intent = iwp.intent();
+        String template = intent.getResponseTemplate();
+        if (template == null || template.isBlank()) template = "Mình đã ghi nhận yêu cầu của bạn. Bạn cần thêm thông tin gì không?";
+
+        Map<String, Object> slots = extractSlotsForIntent(content, intent, request);
+        // Template có {issue} nhưng intent không khai báo entity → lấy từ nội dung user
+        if (template != null && template.contains("{issue}") && (slots.get("issue") == null || "...".equals(String.valueOf(slots.get("issue"))))) {
+            String issueDesc = content.length() > 100 ? content.substring(0, 97).trim() + "…" : content;
+            slots.put("issue", issueDesc);
+        }
+
+        List<ChatbotResponse.TourCard> tours = List.of();
+        String systemActionJson = intent.getSystemAction();
+        if (systemActionJson != null && !systemActionJson.isBlank()) {
+            try {
+                Map<String, Object> action = objectMapper.readValue(systemActionJson, new TypeReference<>() {});
+                String type = action != null ? (String) action.get("type") : null;
+                String endpoint = action != null ? (String) action.get("api_endpoint") : null;
+                String dest = slots.get("destination") != null ? String.valueOf(slots.get("destination")) : null;
+                if (dest == null || dest.isBlank()) dest = extractSearchKeyword(content);
+
+                if ("database_query".equals(type) && endpoint != null && endpoint.contains("tour")) {
+                    BigDecimal min = slots.get("budget_min") instanceof Number n ? BigDecimal.valueOf(n.doubleValue() * 1_000_000) : null;
+                    BigDecimal max = slots.get("budget_max") instanceof Number n ? BigDecimal.valueOf(n.doubleValue() * 1_000_000) : null;
+                    Integer days = slots.get("duration_days") instanceof Number n ? n.intValue() : null;
+                    if (days == null && slots.get("duration") instanceof Number n) days = n.intValue();
+                    tours = searchToursWithDuration(dest, min, max, days, 6);
+                    saveSearchLog(request, content, dest, min, max, days, tours.size());
+                } else if ("check_realtime_inventory".equals(type) && endpoint != null && (endpoint.contains("availability") || endpoint.contains("bookings"))) {
+                    var avOpt = tourService.checkAvailability(dest, null);
+                    if (avOpt.isPresent()) {
+                        var av = avOpt.get();
+                        slots.put("remaining_slots", av.getRemainingSlots() != null ? av.getRemainingSlots() : "ít");
+                        slots.put("next_start_date", av.getNextStartDate() != null ? av.getNextStartDate().toString() : null);
+                        slots.put("date", av.getNextStartDate() != null ? av.getNextStartDate().toString() : null);
+                    } else {
+                        slots.put("remaining_slots", "ít");
+                    }
+                } else if ("external_api_call".equals(type) && endpoint != null) {
+                    if (endpoint.toLowerCase().contains("place") || endpoint.toLowerCase().contains("maps") || endpoint.toLowerCase().contains("nearby")) {
+                        var place = chatbotDataService.getNearbyPlace(dest, (String) slots.get("poi_type"));
+                        if (place != null) {
+                            slots.put("distance", place.getDistance());
+                            slots.put("poi_type", place.getType() != null ? place.getType() : slots.get("poi_type"));
+                            slots.put("rating", place.getRating() != null ? place.getRating() + " sao" : null);
+                            slots.put("place_name", place.getName());
+                        }
+                    } else if (endpoint.toLowerCase().contains("weather")) {
+                        var weather = chatbotDataService.getWeatherForecast(dest);
+                        if (weather != null) slots.put("weather_summary", weather.getSummary());
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Parse system_action failed: {}", e.getMessage());
+            }
+        }
+
+        String reply;
+        if ("itinerary_detail".equals(intent.getIntentName())) {
+            String itineraryReply = buildItineraryReply(request, slots, content);
+            if (itineraryReply != null && !itineraryReply.isBlank()) {
+                reply = itineraryReply;
+            } else {
+                fillDestinationFromLastTour(request, slots);
+                reply = fillTemplate(template, slots);
+            }
+        } else {
+            reply = fillTemplate(template, slots);
+        }
+
+        Map<String, Object> state = new HashMap<>();
+        state.put("intent", intent.getIntentName());
+        state.put("slots", slots);
+        if (intent.getContextOutput() != null && !intent.getContextOutput().isBlank()) {
+            state.put("context", intent.getContextOutput());
+        }
+        if (!tours.isEmpty() && tours.get(0).getSlug() != null) {
+            state.put("lastSuggestedTourSlug", tours.get(0).getSlug());
+        }
+
+        List<ChatbotResponse.QuickReply> qr = buildQuickRepliesForIntent(intent);
+
+        return ChatbotResponse.builder()
+                .reply(reply)
+                .tours(tours)
+                .quickReplies(qr)
+                .state(state)
+                .build();
+    }
+
+    /** Rút số ngày từ câu (vd. "ngày 2 đi đâu?" -> 2). */
+    private static Integer extractDayNumberFromContent(String content) {
+        if (content == null || content.isBlank()) return null;
+        Matcher m = Pattern.compile("ngày\\s*(\\d+)", Pattern.CASE_INSENSITIVE).matcher(content);
+        return m.find() ? Integer.parseInt(m.group(1)) : null;
+    }
+
+    /** Điền slot destination = tên tour từ lastSuggestedTourSlug để template không ra "tour tour". */
+    private void fillDestinationFromLastTour(ChatbotRequest request, Map<String, Object> slots) {
+        Map<String, Object> prevState = request.getState();
+        if (prevState == null) return;
+        Object slugObj = prevState.get("lastSuggestedTourSlug");
+        String slug = slugObj != null ? String.valueOf(slugObj).trim() : null;
+        if (slug == null || slug.isBlank()) return;
+        tourRepository.findBySlug(slug).ifPresent(t -> slots.put("destination", t.getTitle()));
+    }
+
+    /** Lấy lịch trình từng ngày của tour (theo lastSuggestedTourSlug). Nếu content có "ngày X" thì chỉ trả ngày đó. */
+    private String buildItineraryReply(ChatbotRequest request, Map<String, Object> slots, String content) {
+        Map<String, Object> prevState = request.getState();
+        if (prevState == null) return null;
+        Object slugObj = prevState.get("lastSuggestedTourSlug");
+        String slug = slugObj != null ? String.valueOf(slugObj).trim() : null;
+        if (slug == null || slug.isBlank()) return null;
+        Integer askDay = extractDayNumberFromContent(content);
+        return tourRepository.findBySlug(slug)
+                .map(tour -> {
+                    Hibernate.initialize(tour.getItineraries());
+                    List<TourItinerary> list = tour.getItineraries() != null ? tour.getItineraries().stream()
+                            .sorted(Comparator.comparing(TourItinerary::getDayNumber, Comparator.nullsFirst(Integer::compareTo)))
+                            .toList() : List.<TourItinerary>of();
+                    if (list.isEmpty()) return null;
+                    List<TourItinerary> toShow = askDay != null
+                            ? list.stream().filter(d -> askDay.equals(d.getDayNumber())).toList()
+                            : list;
+                    if (toShow.isEmpty() && askDay != null) {
+                        return "Tour **" + tour.getTitle() + "** có " + list.size() + " ngày. Bạn hỏi ngày 1 đến " + list.size() + " nhé.";
+                    }
+                    if (toShow.isEmpty()) return null;
+                    StringBuilder sb = new StringBuilder();
+                    if (askDay != null && toShow.size() == 1) {
+                        TourItinerary day = toShow.get(0);
+                        sb.append("**Ngày ").append(day.getDayNumber()).append("** của **").append(tour.getTitle()).append("**:\n\n");
+                        sb.append(day.getTitle() != null ? day.getTitle() : "").append("\n");
+                        if (day.getDescription() != null && !day.getDescription().isBlank()) {
+                            sb.append(day.getDescription().trim()).append("\n");
+                        }
+                    } else {
+                        sb.append("Lịch trình **").append(tour.getTitle()).append("**:\n\n");
+                        for (TourItinerary day : toShow) {
+                            sb.append("**Ngày ").append(day.getDayNumber()).append(":** ").append(day.getTitle() != null ? day.getTitle() : "").append("\n");
+                            if (day.getDescription() != null && !day.getDescription().isBlank()) {
+                                sb.append(day.getDescription().trim()).append("\n");
+                            }
+                            sb.append("\n");
+                        }
+                    }
+                    sb.append("Bạn có thể xem chi tiết và đặt tour trên trang tour nhé.");
+                    return sb.toString();
+                })
+                .orElse(null);
+    }
+
+    /** Quick replies theo từng intent để nút gợi ý sát với câu hỏi (sau khi trả lời được). */
+    private List<ChatbotResponse.QuickReply> buildQuickRepliesForIntent(ChatbotIntent intent) {
+        List<ChatbotResponse.QuickReply> qr = new ArrayList<>();
+        String name = intent.getIntentName();
+        if ("in_tour_crisis_handling".equals(name)) {
+            qr.add(ChatbotResponse.QuickReply.builder().label("Liên hệ hotline khẩn cấp").payload("Liên hệ nhân viên").build());
+            qr.add(ChatbotResponse.QuickReply.builder().label("Chính sách bồi thường").payload("Chính sách hủy tour").build());
+        } else if ("itinerary_detail".equals(name)) {
+            qr.add(ChatbotResponse.QuickReply.builder().label("Xem chi tiết tour").payload("Xem chi tiết tour").build());
+            qr.add(ChatbotResponse.QuickReply.builder().label("Ngày 2 đi đâu?").payload("Tour này ngày 2 đi đâu?").build());
+            qr.add(ChatbotResponse.QuickReply.builder().label("Tour khác").payload("Xem thêm tour").build());
+        } else if ("best_time_to_visit".equals(name)) {
+            qr.add(ChatbotResponse.QuickReply.builder().label("Xem tour theo tháng").payload("Xem thêm tour").build());
+            qr.add(ChatbotResponse.QuickReply.builder().label("Chính sách hủy/đổi").payload("Chính sách hủy tour").build());
+        } else if ("policy_cancellation".equals(name) || "policy_refund".equals(name) || "policy_change_date".equals(name)) {
+            qr.add(ChatbotResponse.QuickReply.builder().label("Chính sách đổi ngày").payload("Chính sách đổi ngày").build());
+            qr.add(ChatbotResponse.QuickReply.builder().label("Hoàn tiền").payload("Hoàn tiền").build());
+            qr.add(ChatbotResponse.QuickReply.builder().label("Tour biển 3 ngày").payload("Tour biển 3 ngày").build());
+        } else {
+            qr.add(ChatbotResponse.QuickReply.builder().label("Xem thêm tour").payload("Xem thêm tour").build());
+            qr.add(ChatbotResponse.QuickReply.builder().label("Chính sách hủy/đổi").payload("Chính sách hủy tour").build());
+        }
+        return qr;
+    }
+
+    private Map<String, Object> extractSlotsForIntent(String content, ChatbotIntent intent, ChatbotRequest request) {
+        Map<String, Object> slots = new HashMap<>();
+        if (request.getState() != null && request.getState().get("slots") instanceof Map<?, ?> prev) {
+            prev.forEach((k, v) -> {
+                if (v != null) slots.put(String.valueOf(k), v);
+            });
+        }
+        List<String> entityNames = parseEntitiesList(intent.getEntitiesToExtract());
+        if (entityNames.isEmpty()) return slots;
+        String prompt = "User nói: \"" + content.replace("\"", "'") + "\". Trích xuất các thông tin sau (chỉ trả JSON, không markdown): ";
+        prompt += String.join(", ", entityNames);
+        prompt += ". Trả lời ĐÚNG 1 JSON: {\"slots\":{" + entityNames.stream().map(e -> "\"" + e + "\": giá trị hoặc null").collect(Collectors.joining(", ")) + "}}";
+        Map<String, Object> llmJson = llmService.generateJson(prompt);
+        if (llmJson != null && llmJson.get("slots") instanceof Map<?, ?> m) {
+            m.forEach((k, v) -> {
+                if (v != null && !"null".equals(String.valueOf(v))) slots.put(String.valueOf(k), v);
+            });
+        }
+        extractSlotsFromKeywords(content, slots);
+        fillBestPeriodForIntent(intent, slots);
+        return slots;
+    }
+
+    /** Điền best_period cho intent best_time_to_visit theo địa điểm (tránh trả lời nhầm "Đà Nẵng" khi user hỏi Hà Giang/Phú Quốc). */
+    private void fillBestPeriodForIntent(ChatbotIntent intent, Map<String, Object> slots) {
+        if (!"best_time_to_visit".equals(intent.getIntentName())) return;
+        Object destObj = slots.get("destination");
+        String dest = destObj != null ? String.valueOf(destObj).trim() : null;
+        if (dest == null || dest.isBlank()) return;
+        String best = getBestPeriodByDestination(dest);
+        if (best != null) slots.put("best_period", best);
+    }
+
+    private static final Map<String, String> BEST_PERIOD_MAP = Map.ofEntries(
+            Map.entry("Hà Giang", "tháng 9–10 (mùa lúa chín) hoặc tháng 12–1 (mùa tam giác mạch)"),
+            Map.entry("Ha Giang", "tháng 9–10 (mùa lúa chín) hoặc tháng 12–1 (mùa tam giác mạch)"),
+            Map.entry("Phú Quốc", "tháng 11 đến tháng 4 (ít mưa, nắng đẹp)"),
+            Map.entry("Phu Quoc", "tháng 11 đến tháng 4 (ít mưa, nắng đẹp)"),
+            Map.entry("Đà Nẵng", "tháng 2–8 (ít mưa, biển đẹp)"),
+            Map.entry("Da Nang", "tháng 2–8 (ít mưa, biển đẹp)"),
+            Map.entry("Đà Lạt", "tháng 11–4 (khô, hoa dã quỳ; tháng 3–4 hoa phượng tím)"),
+            Map.entry("Da Lat", "tháng 11–4 (khô, hoa dã quỳ; tháng 3–4 hoa phượng tím)"),
+            Map.entry("Nha Trang", "tháng 1–8 (ít mưa)"),
+            Map.entry("Hội An", "tháng 2–8 (trời nắng, ít mưa)"),
+            Map.entry("Hoi An", "tháng 2–8 (trời nắng, ít mưa)"),
+            Map.entry("Sapa", "tháng 9–10 (lúa chín) hoặc tháng 12–2 (có tuyết/sương)"),
+            Map.entry("Sa Pa", "tháng 9–10 (lúa chín) hoặc tháng 12–2 (có tuyết/sương)"),
+            Map.entry("Ninh Bình", "tháng 4–6 (xanh, lúa) hoặc 9–10"),
+            Map.entry("Ninh Binh", "tháng 4–6 (xanh, lúa) hoặc 9–10"),
+            Map.entry("Phan Thiết", "tháng 11–4 (ít mưa)"),
+            Map.entry("Phan Thiet", "tháng 11–4 (ít mưa)"),
+            Map.entry("Hạ Long", "tháng 10–4 (mát, ít mưa)"),
+            Map.entry("Ha Long", "tháng 10–4 (mát, ít mưa)")
+    );
+
+    private static String getBestPeriodByDestination(String destination) {
+        if (destination == null) return null;
+        String d = destination.trim();
+        return BEST_PERIOD_MAP.get(d);
+    }
+
+    private void extractSlotsFromKeywords(String content, Map<String, Object> slots) {
+        if (content == null) return;
+        String lower = content.toLowerCase();
+        String kw = extractSearchKeyword(content);
+        if (kw != null && (slots.get("destination") == null || lower.contains(kw.toLowerCase())))
+            slots.put("destination", kw);
+        Pattern budgetPattern = Pattern.compile("(\\d+)\\s*(triệu|tr)");
+        Matcher budgetMatcher = budgetPattern.matcher(content);
+        if (budgetMatcher.find() && !slots.containsKey("budget")) {
+            try {
+                int num = Integer.parseInt(budgetMatcher.group(1));
+                slots.put("budget", num + " triệu");
+                slots.put("budget_min", num - 1);
+                slots.put("budget_max", num + 1);
+            } catch (NumberFormatException ignored) {}
+        }
+        Pattern daysPattern = Pattern.compile("(\\d+)\\s*ngày\\s*(\\d+)?\\s*đêm?");
+        Matcher daysMatcher = daysPattern.matcher(lower);
+        if (daysMatcher.find() && slots.get("duration_days") == null) {
+            try {
+                int d = Integer.parseInt(daysMatcher.group(1));
+                slots.put("duration_days", d);
+                slots.put("duration", d);
+            } catch (NumberFormatException ignored) {}
+        }
+        if (lower.contains("miền trung") || lower.contains("mien trung")) slots.putIfAbsent("region", "miền Trung");
+        if (lower.contains("miền bắc") || lower.contains("mien bac")) slots.putIfAbsent("region", "miền Bắc");
+        if (lower.contains("miền nam") || lower.contains("mien nam")) slots.putIfAbsent("region", "miền Nam");
+        if (lower.contains("yên tĩnh") || lower.contains("chữa lành")) slots.putIfAbsent("vibe", "yên tĩnh, chữa lành");
+        if (lower.contains("trekking")) slots.putIfAbsent("travel_style", "trekking");
+    }
+
+    private List<String> parseEntitiesList(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private static String fillTemplate(String template, Map<String, Object> slots) {
+        if (template == null) return "";
+        String out = template;
+        Pattern p = Pattern.compile("\\{([^}]+)}");
+        Matcher m = p.matcher(template);
+        while (m.find()) {
+            String key = m.group(1);
+            Object val = slots != null ? slots.get(key) : null;
+            String replacement = val != null ? val.toString() : "...";
+            out = out.replace("{" + key + "}", replacement);
+        }
+        return out;
     }
 }
