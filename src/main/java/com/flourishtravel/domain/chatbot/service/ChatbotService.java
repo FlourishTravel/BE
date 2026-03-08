@@ -705,6 +705,10 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
     private ChatbotResponse fallbackResponse(String content) {
         String policyReply = getPolicyReply(content);
         if (policyReply != null) {
+            // Khi không có LLM (production chưa cấu hình key): câu "tháng 3 nên đi đâu" vẫn kèm tour Đà Lạt/Phú Quốc/Đà Nẵng hoặc gợi ý khác
+            if (isBestTimeOrGeneralPlaceQuestion(content) && !isPlausibleDestinationName(extractSearchKeyword(content))) {
+                return buildGeneralBestTimeFallbackResponse(policyReply, content);
+            }
             return buildPolicyOnlyResponse(policyReply, looksLikeHumanHandoff(content));
         }
         if (!looksLikeTravelOrPolicy(content)) {
@@ -741,6 +745,41 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
                         ChatbotResponse.QuickReply.builder().label("Tour Đà Lạt").payload("Tour Đà Lạt").build(),
                         ChatbotResponse.QuickReply.builder().label("Tour Phan Thiết").payload("Tour Phan Thiết").build()
                 ))
+                .state(state.isEmpty() ? null : state)
+                .build();
+    }
+
+    /** Fallback khi không có LLM: câu "tháng 3 nên đi đâu" vẫn trả reply + tour Đà Lạt/Phú Quốc/Đà Nẵng hoặc gợi ý khác. */
+    private ChatbotResponse buildGeneralBestTimeFallbackResponse(String policyReply, String content) {
+        List<ChatbotResponse.QuickReply> qr = List.of(
+                ChatbotResponse.QuickReply.builder().label("Xem thêm tour").payload("Xem thêm tour").build(),
+                ChatbotResponse.QuickReply.builder().label("Chính sách hủy/đổi").payload("Chính sách hủy tour").build()
+        );
+        Set<UUID> seen = new HashSet<>();
+        List<Tour> suggested = new ArrayList<>();
+        for (String dest : new String[]{"Đà Lạt", "Phú Quốc", "Đà Nẵng"}) {
+            for (Tour t : searchTourEntities(dest, null, null, null, 2)) {
+                if (t.getId() != null && seen.add(t.getId())) suggested.add(t);
+                if (suggested.size() >= 6) break;
+            }
+            if (suggested.size() >= 6) break;
+        }
+        String reply = policyReply;
+        List<ChatbotResponse.TourCard> toursToShow;
+        if (!suggested.isEmpty()) {
+            toursToShow = suggested.stream().map(t -> toTourCard(t, true)).toList();
+        } else {
+            reply = policyReply + "\n\nHiện tại không có tour nào đến Đà Lạt, Phú Quốc trong tháng này. Bạn có thể tham khảo một số tour sau:";
+            toursToShow = searchToursWithDuration(null, null, null, null, 4);
+        }
+        Map<String, Object> state = new HashMap<>();
+        if (!toursToShow.isEmpty() && toursToShow.get(0).getSlug() != null) {
+            state.put("lastSuggestedTourSlug", toursToShow.get(0).getSlug());
+        }
+        return ChatbotResponse.builder()
+                .reply(reply)
+                .tours(toursToShow)
+                .quickReplies(qr)
                 .state(state.isEmpty() ? null : state)
                 .build();
     }
