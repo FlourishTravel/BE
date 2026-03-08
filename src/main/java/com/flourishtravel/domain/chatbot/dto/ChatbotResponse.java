@@ -30,6 +30,8 @@ public class ChatbotResponse {
         private Long price;
         private Integer durationDays;
         private String imageUrl;
+        /** Nút chú thích: Lịch trình, Địa điểm, Giá cả – bấm vào gửi payload để BE trả data từ DB */
+        private List<QuickReply> actions;
     }
 
     @Data

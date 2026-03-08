@@ -14,6 +14,7 @@ import com.flourishtravel.domain.tour.dto.AvailabilityCheckDto;
 import com.flourishtravel.domain.tour.entity.Tour;
 import com.flourishtravel.domain.tour.entity.TourImage;
 import com.flourishtravel.domain.tour.entity.TourItinerary;
+import com.flourishtravel.domain.tour.entity.TourLocation;
 import com.flourishtravel.domain.tour.repository.TourRepository;
 import org.hibernate.Hibernate;
 import com.flourishtravel.domain.tour.service.TourService;
@@ -90,6 +91,10 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
                 return buildSentimentResponse();
             }
 
+            // Chú thích tour: user bấm "Lịch trình" / "Địa điểm" / "Giá cả" trên card → trả data từ DB
+            ChatbotResponse tourDetailResponse = buildResponseForTourDetailAction(content);
+            if (tourDetailResponse != null) return tourDetailResponse;
+
             // Ưu tiên match intent từ training phrases (config import); có state thì ưu tiên intent theo context câu trước
             ChatbotIntentWithPhrases matched = matchIntentFromTrainingPhrases(content, request);
             if (matched != null) {
@@ -101,6 +106,11 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
             if (looksLikePolicyQuestion(contentForPolicy)) {
                 String policyReply = getPolicyReply(content);
                 if (policyReply != null) {
+                    // Câu hỏi thời điểm / nên đi đâu có địa điểm → tra DB tour, có thì hiện tour + chú thích, không thì báo và gợi ý tour khác
+                    if (isBestTimeOrGeneralPlaceQuestion(content)) {
+                        ChatbotResponse bestTimeResponse = buildBestTimeOrGeneralPlaceResponse(policyReply, content, request);
+                        if (bestTimeResponse != null) return bestTimeResponse;
+                    }
                     return buildPolicyOnlyResponse(policyReply, looksLikeHumanHandoff(content));
                 }
             }
@@ -265,7 +275,7 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
                 .build();
     }
 
-    private List<ChatbotResponse.TourCard> searchToursWithDuration(String destination, BigDecimal minPrice, BigDecimal maxPrice, Integer durationDays, int limit) {
+    private List<Tour> searchTourEntities(String destination, BigDecimal minPrice, BigDecimal maxPrice, Integer durationDays, int limit) {
         String destinationPattern = (destination != null && !destination.isBlank())
                 ? "%" + destination.trim() + "%"
                 : null;
@@ -286,7 +296,12 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
                         .toList();
             }
         }
-        return list.stream().limit(limit).map(this::toTourCard).collect(Collectors.toList());
+        return list.stream().limit(limit).toList();
+    }
+
+    private List<ChatbotResponse.TourCard> searchToursWithDuration(String destination, BigDecimal minPrice, BigDecimal maxPrice, Integer durationDays, int limit) {
+        List<Tour> list = searchTourEntities(destination, minPrice, maxPrice, durationDays, limit);
+        return list.stream().map(this::toTourCard).collect(Collectors.toList());
     }
 
     private static boolean looksLikePolicyQuestion(String content) {
@@ -346,6 +361,114 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
         return ChatbotResponse.builder()
                 .reply(policyReply)
                 .tours(List.of())
+                .quickReplies(qr)
+                .build();
+    }
+
+    /** User bấm chú thích trên card: "xem_lich_trinh:slug", "xem_dia_diem:slug", "xem_gia:slug" → trả data từ DB. */
+    private ChatbotResponse buildResponseForTourDetailAction(String content) {
+        if (content == null || content.length() < 10) return null;
+        String trim = content.trim();
+        String slug = null;
+        String action = null;
+        if (trim.startsWith("xem_lich_trinh:")) {
+            action = "lich_trinh";
+            slug = trim.substring("xem_lich_trinh:".length()).trim();
+        } else if (trim.startsWith("xem_dia_diem:")) {
+            action = "dia_diem";
+            slug = trim.substring("xem_dia_diem:".length()).trim();
+        } else if (trim.startsWith("xem_gia:")) {
+            action = "gia";
+            slug = trim.substring("xem_gia:".length()).trim();
+        }
+        if (slug == null || slug.isBlank()) return null;
+        return tourRepository.findBySlug(slug).map(tour -> {
+            String reply = null;
+            if ("lich_trinh".equals(action)) {
+                Hibernate.initialize(tour.getItineraries());
+                List<TourItinerary> list = tour.getItineraries() != null ? tour.getItineraries().stream()
+                        .sorted(Comparator.comparing(TourItinerary::getDayNumber, Comparator.nullsFirst(Integer::compareTo)))
+                        .toList() : List.<TourItinerary>of();
+                if (list.isEmpty()) reply = "Tour **" + tour.getTitle() + "** hiện chưa có lịch trình chi tiết. Bạn xem trang tour để cập nhật nhé.";
+                else {
+                    StringBuilder sb = new StringBuilder("Lịch trình **").append(tour.getTitle()).append("**:\n\n");
+                    for (TourItinerary day : list) {
+                        sb.append("**Ngày ").append(day.getDayNumber()).append(":** ").append(day.getTitle() != null ? day.getTitle() : "").append("\n");
+                        if (day.getDescription() != null && !day.getDescription().isBlank())
+                            sb.append(day.getDescription().trim()).append("\n");
+                        sb.append("\n");
+                    }
+                    sb.append("Xem chi tiết và đặt tour tại trang tour nhé.");
+                    reply = sb.toString();
+                }
+            } else if ("dia_diem".equals(action)) {
+                Hibernate.initialize(tour.getLocations());
+                List<TourLocation> locs = tour.getLocations() != null ? tour.getLocations().stream()
+                        .sorted(Comparator.comparing(TourLocation::getVisitOrder, Comparator.nullsFirst(Integer::compareTo)))
+                        .toList() : List.<TourLocation>of();
+                if (locs.isEmpty()) reply = "Tour **" + tour.getTitle() + "** ghé các điểm theo lịch trình từng ngày. Bạn xem mục Lịch trình hoặc trang chi tiết tour nhé.";
+                else {
+                    StringBuilder sb = new StringBuilder("Các địa điểm **").append(tour.getTitle()).append("** ghé thăm:\n\n");
+                    for (TourLocation loc : locs)
+                        sb.append("• ").append(loc.getLocationName() != null ? loc.getLocationName() : "").append("\n");
+                    sb.append("\nXem bản đồ và chi tiết trên trang tour.");
+                    reply = sb.toString();
+                }
+            } else if ("gia".equals(action)) {
+                long price = tour.getBasePrice() != null ? tour.getBasePrice().longValue() : 0L;
+                String priceStr = price > 0 ? String.format("%,d", price) + "₫" : "liên hệ";
+                reply = "**" + tour.getTitle() + "**: giá từ " + priceStr
+                        + (tour.getDurationDays() != null ? " (" + tour.getDurationDays() + " ngày)." : ".")
+                        + " Giá có thể thay đổi theo ngày khởi hành và option. Bạn xem trang tour hoặc để lại SĐT để nhận báo giá chính xác nhé.";
+            }
+            if (reply == null) return (ChatbotResponse) null;
+            List<ChatbotResponse.QuickReply> qr = List.of(
+                    ChatbotResponse.QuickReply.builder().label("Xem chi tiết tour").payload("Xem chi tiết tour").build(),
+                    ChatbotResponse.QuickReply.builder().label("Tour khác").payload("Xem thêm tour").build()
+            );
+            return ChatbotResponse.builder().reply(reply).quickReplies(qr).build();
+        }).orElse(null);
+    }
+
+    /** Câu hỏi dạng "tháng X đi Y đẹp không" / "nên đi đâu" – có địa điểm thì tra DB tour và gợi ý hoặc báo không có. */
+    private static boolean isBestTimeOrGeneralPlaceQuestion(String content) {
+        if (content == null || content.isBlank()) return false;
+        String lower = content.toLowerCase();
+        boolean hasTime = lower.contains("tháng ") || lower.contains("mùa nào") || lower.contains("thời điểm") || lower.contains("nên đi");
+        boolean hasPlace = lower.contains("đà lạt") || lower.contains("da lat") || lower.contains("đà nẵng") || lower.contains("da nang")
+                || lower.contains("hà giang") || lower.contains("ha giang") || lower.contains("phú quốc") || lower.contains("phu quoc")
+                || lower.contains("nha trang") || lower.contains("hội an") || lower.contains("hoi an") || lower.contains("sapa") || lower.contains("sa pa")
+                || lower.contains("phan thiết") || lower.contains("mui ne") || lower.contains("hạ long") || lower.contains("ha long")
+                || lower.contains("ninh bình") || lower.contains("ninh binh") || lower.contains("vũng tàu") || lower.contains("vung tau")
+                || lower.contains("huế") || lower.contains("hue") || lower.contains("đi đâu") || lower.contains("ở đâu");
+        return hasTime && (hasPlace || lower.contains("đẹp") || lower.contains("ít mưa") || lower.contains("mưa"));
+    }
+
+    /** Trả lời best_time/general: reply đúng chủ đề; nếu có tour ở địa điểm thì kèm tour + chú thích; không thì báo và gợi ý tour khác. */
+    private ChatbotResponse buildBestTimeOrGeneralPlaceResponse(String policyReply, String content, ChatbotRequest request) {
+        String destination = extractSearchKeyword(content);
+        if (destination == null || destination.isBlank() || "tour".equals(destination) || "biển".equals(destination))
+            return null;
+        List<ChatbotResponse.TourCard> toursAtDest = searchToursWithDuration(destination, null, null, null, 6);
+        List<ChatbotResponse.QuickReply> qr = new ArrayList<>();
+        qr.add(ChatbotResponse.QuickReply.builder().label("Xem thêm tour").payload("Xem thêm tour").build());
+        qr.add(ChatbotResponse.QuickReply.builder().label("Chính sách hủy/đổi").payload("Chính sách hủy tour").build());
+        String reply = policyReply;
+        List<ChatbotResponse.TourCard> toursToShow = new ArrayList<>();
+        if (toursAtDest.isEmpty()) {
+            reply = policyReply + "\n\nHiện tại không có tour nào ở " + destination + ". Bạn có thể tham khảo một số tour sau:";
+            toursToShow = searchToursWithDuration(null, null, null, null, 4);
+        } else {
+            List<Tour> tourEntities = searchTourEntities(destination, null, null, null, 6);
+            toursToShow = tourEntities.stream().map(t -> toTourCard(t, true)).toList();
+            Map<String, Object> state = new HashMap<>();
+            state.put("lastSuggestedTourSlug", toursToShow.isEmpty() ? null : toursToShow.get(0).getSlug());
+            state.put("intent", "best_time");
+            return ChatbotResponse.builder().reply(reply).tours(toursToShow).quickReplies(qr).state(state).build();
+        }
+        return ChatbotResponse.builder()
+                .reply(reply)
+                .tours(toursToShow)
                 .quickReplies(qr)
                 .build();
     }
@@ -499,10 +622,24 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
     }
 
     private ChatbotResponse.TourCard toTourCard(Tour t) {
+        return toTourCard(t, false);
+    }
+
+    /** Tour card có thêm nút Lịch trình, Địa điểm, Giá cả khi withActions=true (sau khi AI gợi ý địa điểm có tour). */
+    private ChatbotResponse.TourCard toTourCard(Tour t, boolean withActions) {
         String imageUrl = null;
         if (t.getImages() != null && !t.getImages().isEmpty()) {
             TourImage first = t.getImages().get(0);
             if (first != null) imageUrl = first.getImageUrl();
+        }
+        List<ChatbotResponse.QuickReply> actions = null;
+        if (withActions && t.getSlug() != null && !t.getSlug().isBlank()) {
+            String slug = t.getSlug();
+            actions = List.of(
+                    ChatbotResponse.QuickReply.builder().label("Lịch trình").payload("xem_lich_trinh:" + slug).build(),
+                    ChatbotResponse.QuickReply.builder().label("Địa điểm").payload("xem_dia_diem:" + slug).build(),
+                    ChatbotResponse.QuickReply.builder().label("Giá cả").payload("xem_gia:" + slug).build()
+            );
         }
         return ChatbotResponse.TourCard.builder()
                 .id(t.getId().toString())
@@ -511,6 +648,7 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
                 .price(t.getBasePrice() != null ? t.getBasePrice().longValue() : 0L)
                 .durationDays(t.getDurationDays())
                 .imageUrl(imageUrl)
+                .actions(actions)
                 .build();
     }
 
