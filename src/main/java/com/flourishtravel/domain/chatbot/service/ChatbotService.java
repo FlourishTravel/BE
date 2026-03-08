@@ -106,12 +106,17 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
             if (looksLikePolicyQuestion(contentForPolicy)) {
                 String policyReply = getPolicyReply(content);
                 if (policyReply != null) {
-                    // Câu hỏi thời điểm / nên đi đâu có địa điểm → tra DB tour, có thì hiện tour + chú thích, không thì báo và gợi ý tour khác
+                    // Câu "tháng X đi Y" có địa điểm cụ thể → tra DB tour, có/không đều trả kèm tour hoặc gợi ý
                     if (isBestTimeOrGeneralPlaceQuestion(content)) {
-                        ChatbotResponse bestTimeResponse = buildBestTimeOrGeneralPlaceResponse(policyReply, content, request);
-                        if (bestTimeResponse != null) return bestTimeResponse;
+                        String dest = extractSearchKeyword(content);
+                        if (isPlausibleDestinationName(dest)) {
+                            ChatbotResponse bestTimeResponse = buildBestTimeOrGeneralPlaceResponse(policyReply, content, request);
+                            if (bestTimeResponse != null) return bestTimeResponse;
+                        }
+                        // Câu chung "tháng 3 nên đi đâu" không có địa điểm → không trả policy, để API AI (LLM) trả lời
+                    } else {
+                        return buildPolicyOnlyResponse(policyReply, looksLikeHumanHandoff(content));
                     }
-                    return buildPolicyOnlyResponse(policyReply, looksLikeHumanHandoff(content));
                 }
             }
 
@@ -258,7 +263,25 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
             if (reply == null || reply.isBlank()) reply = "Dựa trên số ngày và điểm đến của bạn, đây là một số tour gợi ý. Bạn có thể kết hợp nhiều tour hoặc chọn một tour trọn gói.";
         } else if ("general_question".equals(intent) || "travel_tips".equals(intent)) {
             String keyword = extractSearchKeyword(content);
-            if (keyword != null) {
+            // Câu "tháng X nên đi đâu" do AI trả lời → tra tour Đà Lạt, Phú Quốc, Đà Nẵng; có thì hiện, không thì báo + gợi ý khác
+            if (content != null && content.toLowerCase().contains("tháng") && (content.toLowerCase().contains("nên đi") || content.toLowerCase().contains("đi đâu") || content.toLowerCase().contains("ở đâu"))
+                    && !isPlausibleDestinationName(keyword != null ? keyword : "")) {
+                Set<UUID> seen = new HashSet<>();
+                List<Tour> suggested = new ArrayList<>();
+                for (String dest : new String[]{"Đà Lạt", "Phú Quốc", "Đà Nẵng"}) {
+                    for (Tour t : searchTourEntities(dest, null, null, null, 2)) {
+                        if (t.getId() != null && seen.add(t.getId())) suggested.add(t);
+                        if (suggested.size() >= 6) break;
+                    }
+                    if (suggested.size() >= 6) break;
+                }
+                if (!suggested.isEmpty()) {
+                    tours = suggested.stream().map(t -> toTourCard(t, true)).toList();
+                } else {
+                    reply = reply + "\n\nHiện tại không có tour nào đến Đà Lạt, Phú Quốc trong tháng này. Bạn có thể tham khảo một số tour sau:";
+                    tours = searchToursWithDuration(null, null, null, null, 4);
+                }
+            } else if (keyword != null && isPlausibleDestinationName(keyword)) {
                 List<ChatbotResponse.TourCard> related = searchToursWithDuration(keyword, null, null, null, 2);
                 if (!related.isEmpty()) tours = related;
             }
@@ -431,6 +454,17 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
         }).orElse(null);
     }
 
+    /** Chuỗi có phải tên địa điểm thật (Đà Lạt, Phú Quốc...) hay là cả câu hỏi bị nhầm làm địa điểm. */
+    private static boolean isPlausibleDestinationName(String s) {
+        if (s == null || s.length() > 40) return false;
+        String lower = s.toLowerCase();
+        if (lower.contains("nên đi") || lower.contains("ở đâu") || lower.contains(" đi đâu ")
+                || lower.contains("du lịch") || lower.contains("việt nam") || lower.contains("viet nam"))
+            return false;
+        if (lower.matches(".*tháng\\s+\\d+.*")) return false; // "tháng 3 ..."
+        return true;
+    }
+
     /** Câu hỏi dạng "tháng X đi Y đẹp không" / "nên đi đâu" – có địa điểm thì tra DB tour và gợi ý hoặc báo không có. */
     private static boolean isBestTimeOrGeneralPlaceQuestion(String content) {
         if (content == null || content.isBlank()) return false;
@@ -445,10 +479,12 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
         return hasTime && (hasPlace || lower.contains("đẹp") || lower.contains("ít mưa") || lower.contains("mưa"));
     }
 
-    /** Trả lời best_time/general: reply đúng chủ đề; nếu có tour ở địa điểm thì kèm tour + chú thích; không thì báo và gợi ý tour khác. */
+    /** Trả lời best_time khi có địa điểm cụ thể: reply + tour tại địa điểm (có chú thích) hoặc báo không có + gợi ý tour khác. */
     private ChatbotResponse buildBestTimeOrGeneralPlaceResponse(String policyReply, String content, ChatbotRequest request) {
         String destination = extractSearchKeyword(content);
         if (destination == null || destination.isBlank() || "tour".equals(destination) || "biển".equals(destination))
+            return null;
+        if (!isPlausibleDestinationName(destination))
             return null;
         List<ChatbotResponse.TourCard> toursAtDest = searchToursWithDuration(destination, null, null, null, 6);
         List<ChatbotResponse.QuickReply> qr = new ArrayList<>();
