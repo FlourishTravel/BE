@@ -24,7 +24,7 @@ public class LlmService {
     @Value("${app.gemini.api-key:}")
     private String geminiApiKey;
 
-    @Value("${app.gemini.model:gemini-1.5-flash}")
+    @Value("${app.gemini.model:gemini-3-flash-preview}")
     private String geminiModel;
 
     @Value("${app.openai.api-key:}")
