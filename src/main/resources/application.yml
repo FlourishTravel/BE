@@ -73,7 +73,8 @@ app:
 
   gemini:
     api-key: ${GEMINI_API_KEY:}
-    model: ${GEMINI_MODEL:gemini-1.5-flash}
+    # gemini-3-flash-preview (3.0) hoặc gemini-2.0-flash nếu 3.0 lỗi
+    model: ${GEMINI_MODEL:gemini-3-flash-preview}
 
   google:
     maps-api-key: ${GOOGLE_MAPS_API_KEY:}

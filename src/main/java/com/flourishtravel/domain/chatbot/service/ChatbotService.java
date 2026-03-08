@@ -125,9 +125,10 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
             String hintForFormat = contextHint.replace("%", "%%");
             Map<String, Object> llmJson = llmService.generateJson(String.format(PROMPT_TEMPLATE, contentForFormat, hintForFormat));
             if (llmJson != null) {
+                log.debug("Chatbot: using LLM response for content length={}", content.length());
                 return buildResponseFromLlm(llmJson, content, request);
             }
-
+            log.info("Chatbot: LLM returned null, using fallback (check GEMINI_API_KEY / OpenAI key or LLM JSON parse)");
             return fallbackResponse(content);
         } catch (Exception e) {
             log.error("Chatbot processMessage failed", e);
