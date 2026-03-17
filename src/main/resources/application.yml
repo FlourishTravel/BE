@@ -76,6 +76,18 @@ app:
     # gemini-2.0-flash ổn định, ít 503; có thể đổi GEMINI_MODEL=gemini-3-flash-preview
     model: ${GEMINI_MODEL:gemini-2.0-flash}
 
+  coze:
+    api-key: ${COZE_API_KEY:}
+    base-url: ${COZE_BASE_URL:https://api.coze.com}
+    bot-id: ${COZE_BOT_ID:}
+
+  # AWS Bedrock (LLM fallback: dùng Access Key ID + Secret Access Key từ IAM)
+  bedrock:
+    region: ${BEDROCK_REGION:us-east-1}
+    access-key-id: ${BEDROCK_ACCESS_KEY_ID:}
+    secret-access-key: ${BEDROCK_SECRET_ACCESS_KEY:}
+    model-id: ${BEDROCK_MODEL_ID:anthropic.claude-3-haiku-20240307-v1:0}
+
   google:
     maps-api-key: ${GOOGLE_MAPS_API_KEY:}
 
