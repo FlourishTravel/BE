@@ -10,10 +10,6 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Tạo sẵn 3 role theo FLOWS: TRAVELER, TOUR_GUIDE, ADMIN.
- * SecurityConfig dùng hasRole("ADMIN"), hasAnyRole("ADMIN", "TOUR_GUIDE") → name trong DB nên viết hoa.
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j

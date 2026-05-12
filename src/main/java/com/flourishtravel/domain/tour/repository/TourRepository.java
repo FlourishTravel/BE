@@ -86,4 +86,22 @@ public interface TourRepository extends JpaRepository<Tour, UUID> {
     Page<Tour> findByCategory_IdAndIdNotOrderByCreatedAtDesc(UUID categoryId, UUID excludeId, Pageable pageable);
 
     Page<Tour> findByIdNotOrderByCreatedAtDesc(UUID excludeId, Pageable pageable);
+
+    /**
+     * Danh sách tour cho admin: không lọc theo session/availability.
+     * Hỗ trợ search theo title hoặc slug (case-insensitive, partial match).
+     *
+     * LƯU Ý: truyền tham số dưới dạng PATTERN đã có '%' (ví dụ "%bali%").
+     * Nếu không filter, truyền "%%" (match all). Không truyền null để tránh
+     * Postgres suy ra type bytea cho LOWER() (lower(bytea) does not exist).
+     */
+    @Query("""
+        SELECT t FROM Tour t
+        WHERE LOWER(t.title) LIKE :pattern
+           OR LOWER(t.slug)  LIKE :pattern
+        ORDER BY t.createdAt DESC
+        """)
+    Page<Tour> adminSearch(@Param("pattern") String pattern, Pageable pageable);
+
+    long countByCategory_Id(UUID categoryId);
 }

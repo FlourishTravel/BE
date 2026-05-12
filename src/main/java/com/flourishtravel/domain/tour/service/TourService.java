@@ -1,9 +1,23 @@
 package com.flourishtravel.domain.tour.service;
 
+import com.flourishtravel.common.exception.BadRequestException;
 import com.flourishtravel.common.exception.ResourceNotFoundException;
+import com.flourishtravel.domain.tour.dto.ActivityRequest;
 import com.flourishtravel.domain.tour.dto.AvailabilityCheckDto;
+import com.flourishtravel.domain.tour.dto.ItineraryRequest;
+import com.flourishtravel.domain.tour.dto.TourDetailDto;
+import com.flourishtravel.domain.tour.dto.TourRequest;
+import com.flourishtravel.domain.tour.dto.TourSummaryDto;
+import com.flourishtravel.domain.tour.entity.Category;
 import com.flourishtravel.domain.tour.entity.Tour;
+import com.flourishtravel.domain.tour.entity.TourActivity;
+import com.flourishtravel.domain.tour.entity.TourImage;
+import com.flourishtravel.domain.tour.entity.TourItinerary;
+import com.flourishtravel.domain.tour.entity.TourLocation;
 import com.flourishtravel.domain.tour.entity.TourSession;
+import com.flourishtravel.domain.tour.entity.TourVideo;
+import com.flourishtravel.domain.user.entity.User;
+import com.flourishtravel.domain.tour.repository.CategoryRepository;
 import com.flourishtravel.domain.tour.repository.TourRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -13,16 +27,25 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.text.Normalizer;
 import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
 public class TourService {
 
+    private static final Pattern NON_LATIN = Pattern.compile("[^\\w-]");
+    private static final Pattern WHITESPACE = Pattern.compile("[\\s]+");
+    private static final Pattern EDGE_DASHES = Pattern.compile("(^-+)|(-+$)");
+
     private final TourRepository tourRepository;
+    private final CategoryRepository categoryRepository;
 
     @Transactional(readOnly = true)
     public Page<Tour> search(String destination, BigDecimal minPrice, BigDecimal maxPrice,
@@ -85,5 +108,446 @@ public class TourService {
             }
         }
         return Optional.empty();
+    }
+
+    // ---------- Admin operations ----------
+
+    /** Danh sách tour cho admin (không lọc session) — trả về DTO tóm tắt. */
+    @Transactional(readOnly = true)
+    public Page<TourSummaryDto> adminList(String q, String status, Pageable pageable) {
+        // Truyền pattern không-null để tránh lỗi Postgres "lower(bytea) does not exist".
+        String term = (q == null) ? "" : q.trim().toLowerCase(Locale.ROOT);
+        String pattern = "%" + term + "%";
+        Page<Tour> page = tourRepository.adminSearch(pattern, pageable);
+        Page<TourSummaryDto> mapped = page.map(this::toSummary);
+        if (status == null || status.isBlank() || "all".equalsIgnoreCase(status)) {
+            return mapped;
+        }
+        List<TourSummaryDto> filtered = mapped.getContent().stream()
+                .filter(s -> status.equalsIgnoreCase(s.getStatus()))
+                .toList();
+        return new org.springframework.data.domain.PageImpl<>(filtered, pageable, filtered.size());
+    }
+
+    /** Chi tiết tour cho admin (full quan hệ). */
+    @Transactional(readOnly = true)
+    public TourDetailDto getAdminDetail(UUID id) {
+        Tour tour = getById(id);
+        return toDetail(tour);
+    }
+
+    @Transactional
+    public Tour create(TourRequest req) {
+        String slug = resolveSlug(req.getSlug(), req.getTitle());
+        ensureSlugAvailable(slug, null);
+
+        Tour tour = new Tour();
+        tour.setTitle(req.getTitle().trim());
+        tour.setSlug(slug);
+        tour.setDescription(trimToNull(req.getDescription()));
+        tour.setBasePrice(req.getBasePrice());
+        tour.setDurationDays(req.getDurationDays());
+        tour.setDurationNights(req.getDurationNights());
+        tour.setCategory(resolveCategory(req.getCategoryId()));
+
+        if (req.getThumbnailUrl() != null && !req.getThumbnailUrl().isBlank()) {
+            tour.getImages().add(TourImage.builder()
+                    .tour(tour)
+                    .imageUrl(req.getThumbnailUrl().trim())
+                    .caption(tour.getTitle())
+                    .sortOrder(0)
+                    .build());
+        }
+        return tourRepository.save(tour);
+    }
+
+    @Transactional
+    public Tour update(UUID id, TourRequest req) {
+        Tour tour = getById(id);
+        String slug = resolveSlug(req.getSlug(), req.getTitle());
+        ensureSlugAvailable(slug, id);
+
+        tour.setTitle(req.getTitle().trim());
+        tour.setSlug(slug);
+        tour.setDescription(trimToNull(req.getDescription()));
+        tour.setBasePrice(req.getBasePrice());
+        tour.setDurationDays(req.getDurationDays());
+        tour.setDurationNights(req.getDurationNights());
+        tour.setCategory(resolveCategory(req.getCategoryId()));
+        return tourRepository.save(tour);
+    }
+
+    @Transactional
+    public void delete(UUID id) {
+        Tour tour = getById(id);
+        try {
+            tourRepository.delete(tour);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            throw new BadRequestException("Không thể xoá tour vì đang có booking liên quan");
+        }
+    }
+
+    // ---------- Helpers ----------
+
+    private Category resolveCategory(UUID categoryId) {
+        if (categoryId == null) return null;
+        return categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new ResourceNotFoundException("Category", categoryId));
+    }
+
+    private void ensureSlugAvailable(String slug, UUID currentId) {
+        Optional<Tour> existing = tourRepository.findBySlug(slug);
+        if (existing.isPresent() && (currentId == null || !existing.get().getId().equals(currentId))) {
+            throw new BadRequestException("Slug '" + slug + "' đã tồn tại");
+        }
+    }
+
+    private String resolveSlug(String rawSlug, String name) {
+        if (rawSlug != null && !rawSlug.isBlank()) {
+            return rawSlug.trim().toLowerCase(Locale.ROOT);
+        }
+        return toSlug(name);
+    }
+
+    private String toSlug(String input) {
+        if (input == null) return "";
+        String normalized = Normalizer.normalize(input.trim(), Normalizer.Form.NFD)
+                .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
+                .replace('đ', 'd')
+                .replace('Đ', 'd');
+        String slug = WHITESPACE.matcher(normalized).replaceAll("-");
+        slug = NON_LATIN.matcher(slug).replaceAll("");
+        slug = EDGE_DASHES.matcher(slug).replaceAll("");
+        return slug.toLowerCase(Locale.ROOT);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) return null;
+        String t = value.trim();
+        return t.isEmpty() ? null : t;
+    }
+
+    private TourSummaryDto toSummary(Tour tour) {
+        TourSummaryDto.CategoryRef catRef = null;
+        if (tour.getCategory() != null) {
+            Category c = tour.getCategory();
+            catRef = TourSummaryDto.CategoryRef.builder()
+                    .id(c.getId())
+                    .name(c.getName())
+                    .slug(c.getSlug())
+                    .archived(c.getDeletedAt() != null)
+                    .build();
+        }
+
+        String thumb = null;
+        if (tour.getImages() != null && !tour.getImages().isEmpty()) {
+            thumb = tour.getImages().stream()
+                    .sorted(Comparator.comparing(
+                            TourImage::getSortOrder,
+                            Comparator.nullsLast(Comparator.naturalOrder())))
+                    .findFirst()
+                    .map(TourImage::getImageUrl)
+                    .orElse(null);
+        }
+
+        TourSummaryDto.SessionRef earliest = null;
+        int sessionsCount = 0;
+        String status = "draft";
+        if (tour.getSessions() != null && !tour.getSessions().isEmpty()) {
+            sessionsCount = tour.getSessions().size();
+            Optional<TourSession> earliestOpt = tour.getSessions().stream()
+                    .filter(s -> s.getStartDate() != null)
+                    .min(Comparator.comparing(TourSession::getStartDate));
+            if (earliestOpt.isPresent()) {
+                TourSession s = earliestOpt.get();
+                earliest = TourSummaryDto.SessionRef.builder()
+                        .id(s.getId())
+                        .startDate(s.getStartDate())
+                        .endDate(s.getEndDate())
+                        .maxParticipants(s.getMaxParticipants())
+                        .currentParticipants(s.getCurrentParticipants())
+                        .status(s.getStatus())
+                        .build();
+                status = computeStatus(tour.getSessions());
+            }
+        }
+
+        return TourSummaryDto.builder()
+                .id(tour.getId())
+                .title(tour.getTitle())
+                .slug(tour.getSlug())
+                .description(tour.getDescription())
+                .basePrice(tour.getBasePrice())
+                .durationDays(tour.getDurationDays())
+                .durationNights(tour.getDurationNights())
+                .thumbnailUrl(thumb)
+                .category(catRef)
+                .earliestSession(earliest)
+                .sessionsCount(sessionsCount)
+                .status(status)
+                .createdAt(tour.getCreatedAt())
+                .updatedAt(tour.getUpdatedAt())
+                .build();
+    }
+
+    private TourDetailDto toDetail(Tour tour) {
+        TourSummaryDto.CategoryRef catRef = null;
+        if (tour.getCategory() != null) {
+            Category c = tour.getCategory();
+            catRef = TourSummaryDto.CategoryRef.builder()
+                    .id(c.getId())
+                    .name(c.getName())
+                    .slug(c.getSlug())
+                    .archived(c.getDeletedAt() != null)
+                    .build();
+        }
+
+        List<TourDetailDto.ImageRef> images = tour.getImages() == null ? List.of() :
+                tour.getImages().stream()
+                        .sorted(Comparator.comparing(
+                                TourImage::getSortOrder,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                        .map(img -> TourDetailDto.ImageRef.builder()
+                                .id(img.getId())
+                                .imageUrl(img.getImageUrl())
+                                .caption(img.getCaption())
+                                .sortOrder(img.getSortOrder())
+                                .build())
+                        .toList();
+
+        List<TourDetailDto.VideoRef> videos = tour.getVideos() == null ? List.of() :
+                tour.getVideos().stream()
+                        .sorted(Comparator.comparing(
+                                TourVideo::getSortOrder,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                        .map(v -> TourDetailDto.VideoRef.builder()
+                                .id(v.getId())
+                                .videoUrl(v.getVideoUrl())
+                                .thumbnailUrl(v.getThumbnailUrl())
+                                .title(v.getTitle())
+                                .durationSeconds(v.getDurationSeconds())
+                                .sortOrder(v.getSortOrder())
+                                .build())
+                        .toList();
+
+        List<TourDetailDto.ItineraryRef> itineraries = tour.getItineraries() == null ? List.of() :
+                tour.getItineraries().stream()
+                        .sorted(Comparator.comparing(
+                                TourItinerary::getDayNumber,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                        .map(this::toItineraryRef)
+                        .toList();
+
+        List<TourDetailDto.LocationRef> locations = tour.getLocations() == null ? List.of() :
+                tour.getLocations().stream()
+                        .sorted(Comparator.comparing(
+                                TourLocation::getVisitOrder,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                        .map(loc -> TourDetailDto.LocationRef.builder()
+                                .id(loc.getId())
+                                .locationName(loc.getLocationName())
+                                .latitude(loc.getLatitude())
+                                .longitude(loc.getLongitude())
+                                .visitOrder(loc.getVisitOrder())
+                                .dayNumber(loc.getDayNumber())
+                                .build())
+                        .toList();
+
+        List<TourDetailDto.SessionDetail> sessions = tour.getSessions() == null ? List.of() :
+                tour.getSessions().stream()
+                        .sorted(Comparator.comparing(
+                                TourSession::getStartDate,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                        .map(s -> {
+                            TourDetailDto.GuideRef guideRef = null;
+                            User guide = s.getTourGuide();
+                            if (guide != null) {
+                                guideRef = TourDetailDto.GuideRef.builder()
+                                        .id(guide.getId())
+                                        .fullName(guide.getFullName())
+                                        .email(guide.getEmail())
+                                        .avatarUrl(guide.getAvatarUrl())
+                                        .build();
+                            }
+                            return TourDetailDto.SessionDetail.builder()
+                                    .id(s.getId())
+                                    .startDate(s.getStartDate())
+                                    .endDate(s.getEndDate())
+                                    .maxParticipants(s.getMaxParticipants())
+                                    .currentParticipants(s.getCurrentParticipants())
+                                    .status(s.getStatus())
+                                    .tourGuide(guideRef)
+                                    .build();
+                        })
+                        .toList();
+
+        String status = (tour.getSessions() == null || tour.getSessions().isEmpty())
+                ? "draft"
+                : computeStatus(tour.getSessions());
+
+        return TourDetailDto.builder()
+                .id(tour.getId())
+                .title(tour.getTitle())
+                .slug(tour.getSlug())
+                .description(tour.getDescription())
+                .basePrice(tour.getBasePrice())
+                .durationDays(tour.getDurationDays())
+                .durationNights(tour.getDurationNights())
+                .category(catRef)
+                .status(status)
+                .images(images)
+                .videos(videos)
+                .itineraries(itineraries)
+                .locations(locations)
+                .sessions(sessions)
+                .createdAt(tour.getCreatedAt())
+                .updatedAt(tour.getUpdatedAt())
+                .build();
+    }
+
+    private TourDetailDto.ItineraryRef toItineraryRef(TourItinerary it) {
+        List<TourDetailDto.ActivityRef> activityRefs = it.getActivities() == null ? List.of() :
+                it.getActivities().stream()
+                        .sorted(Comparator.comparing(
+                                TourActivity::getSortOrder,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                        .map(a -> TourDetailDto.ActivityRef.builder()
+                                .id(a.getId())
+                                .sortOrder(a.getSortOrder())
+                                .startTime(a.getStartTime())
+                                .endTime(a.getEndTime())
+                                .durationMinutes(a.getDurationMinutes())
+                                .title(a.getTitle())
+                                .description(a.getDescription())
+                                .activityType(a.getActivityType())
+                                .locationName(a.getLocationName())
+                                .latitude(a.getLatitude())
+                                .longitude(a.getLongitude())
+                                .imageUrl(a.getImageUrl())
+                                .costEstimate(a.getCostEstimate())
+                                .costIncluded(a.getCostIncluded())
+                                .tags(a.getTags())
+                                .build())
+                        .toList();
+
+        return TourDetailDto.ItineraryRef.builder()
+                .id(it.getId())
+                .dayNumber(it.getDayNumber())
+                .title(it.getTitle())
+                .description(it.getDescription())
+                .summary(it.getSummary())
+                .coverImageUrl(it.getCoverImageUrl())
+                .accommodation(it.getAccommodation())
+                .transport(it.getTransport())
+                .mealsIncluded(it.getMealsIncluded())
+                .highlights(it.getHighlights())
+                .activities(activityRefs)
+                .build();
+    }
+
+    // ---------- Itinerary admin operations ----------
+
+    /** Lấy danh sách lịch trình đầy đủ cho admin (cho trang Itinerary Builder). */
+    @Transactional(readOnly = true)
+    public List<TourDetailDto.ItineraryRef> getItinerary(UUID tourId) {
+        Tour tour = getById(tourId);
+        if (tour.getItineraries() == null || tour.getItineraries().isEmpty()) return List.of();
+        return tour.getItineraries().stream()
+                .sorted(Comparator.comparing(
+                        TourItinerary::getDayNumber,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(this::toItineraryRef)
+                .toList();
+    }
+
+    /**
+     * Bulk replace toàn bộ itineraries + activities của tour theo payload từ Itinerary Builder.
+     * Vì cascade ALL + orphanRemoval đã set ở Tour và Itinerary nên clear() + add() sẽ tự xoá các bản ghi cũ.
+     */
+    @Transactional
+    public List<TourDetailDto.ItineraryRef> saveItinerary(UUID tourId, List<ItineraryRequest> days) {
+        Tour tour = getById(tourId);
+
+        tour.getItineraries().clear();
+        // flush để Hibernate xoá hết các row con trước khi insert mới, tránh xung đột unique
+        tourRepository.saveAndFlush(tour);
+
+        if (days != null) {
+            for (ItineraryRequest d : days) {
+                TourItinerary it = TourItinerary.builder()
+                        .tour(tour)
+                        .dayNumber(d.getDayNumber())
+                        .title(safeTrim(d.getTitle()))
+                        .description(trimToNull(d.getDescription()))
+                        .summary(trimToNull(d.getSummary()))
+                        .coverImageUrl(trimToNull(d.getCoverImageUrl()))
+                        .accommodation(trimToNull(d.getAccommodation()))
+                        .transport(trimToNull(d.getTransport()))
+                        .mealsIncluded(trimToNull(d.getMealsIncluded()))
+                        .highlights(trimToNull(d.getHighlights()))
+                        .activities(new java.util.ArrayList<>())
+                        .build();
+
+                if (d.getActivities() != null) {
+                    int idx = 0;
+                    for (ActivityRequest a : d.getActivities()) {
+                        TourActivity act = TourActivity.builder()
+                                .itinerary(it)
+                                .sortOrder(a.getSortOrder() != null ? a.getSortOrder() : idx)
+                                .startTime(a.getStartTime())
+                                .endTime(a.getEndTime())
+                                .durationMinutes(a.getDurationMinutes())
+                                .title(trimToNull(a.getTitle()))
+                                .description(trimToNull(a.getDescription()))
+                                .activityType(trimToNull(a.getActivityType()))
+                                .locationName(trimToNull(a.getLocationName()))
+                                .latitude(a.getLatitude())
+                                .longitude(a.getLongitude())
+                                .imageUrl(trimToNull(a.getImageUrl()))
+                                .costEstimate(a.getCostEstimate())
+                                .costIncluded(a.getCostIncluded() != null ? a.getCostIncluded() : Boolean.TRUE)
+                                .tags(trimToNull(a.getTags()))
+                                .build();
+                        it.getActivities().add(act);
+                        idx++;
+                    }
+                }
+
+                tour.getItineraries().add(it);
+            }
+        }
+        Tour saved = tourRepository.save(tour);
+        return getItinerary(saved.getId());
+    }
+
+    private String safeTrim(String s) {
+        return s == null ? null : s.trim();
+    }
+
+    /**
+     * Suy luận status hiển thị cho admin:
+     *   - full     : có ít nhất 1 session scheduled nhưng tất cả scheduled đều hết chỗ
+     *   - upcoming : tất cả scheduled còn chỗ và start_date >= today + 30 ngày
+     *   - active   : trường hợp còn lại có scheduled
+     *   - draft    : không có session
+     */
+    private String computeStatus(List<TourSession> sessions) {
+        LocalDate today = LocalDate.now();
+        List<TourSession> scheduled = sessions.stream()
+                .filter(s -> "scheduled".equalsIgnoreCase(s.getStatus()))
+                .toList();
+        if (scheduled.isEmpty()) return "draft";
+
+        boolean allFull = scheduled.stream().allMatch(s ->
+                s.getMaxParticipants() != null
+                && s.getCurrentParticipants() != null
+                && s.getCurrentParticipants() >= s.getMaxParticipants());
+        if (allFull) return "full";
+
+        boolean allUpcoming = scheduled.stream().allMatch(s ->
+                s.getStartDate() != null && s.getStartDate().isAfter(today.plusDays(30)));
+        if (allUpcoming) return "upcoming";
+
+        return "active";
     }
 }

@@ -24,8 +24,8 @@ import java.util.Map;
 
 /**
  * Seed dữ liệu demo: category + tour + session + ảnh + itinerary + location + video.
- * - Khi chưa có tour: tạo đủ 16 tour đầy đủ dữ liệu.
- * - Khi đã có tour: bổ sung itinerary/location/video cho tour cũ thiếu; thêm tour mới (slug chưa có) cho đủ 16.
+ * - Khi chưa có tour: tạo đủ danh sách tour demo (trong nước + Thái Lan) đầy đủ dữ liệu.
+ * - Khi đã có tour: bổ sung itinerary/location/video cho tour cũ thiếu; thêm tour mới (slug chưa có) theo danh sách seed.
  */
 @Component
 @RequiredArgsConstructor
@@ -62,6 +62,15 @@ public class TourSeeder {
                     .build();
             return categoryRepository.save(c);
         });
+        Category catThailand = categoryRepository.findBySlug("thai-lan").orElseGet(() -> {
+            Category c = Category.builder()
+                    .name("Thái Lan")
+                    .slug("thai-lan")
+                    .description("Các tour du lịch Thái Lan")
+                    .sortOrder(3)
+                    .build();
+            return categoryRepository.save(c);
+        });
 
         List<Tour> tourDefs = List.of(
                 tour("Tour biển Đà Nẵng 3 ngày 2 đêm", "tour-bien-da-nang-3n", "Trải nghiệm biển Mỹ Khê, Bà Nà, Hội An.", new BigDecimal("3990000"), 3, 2, catBeach),
@@ -79,7 +88,12 @@ public class TourSeeder {
                 tour("Tour Mũi Né 3 ngày 2 đêm", "tour-mui-ne-3n", "Đồi cát, làng chài, biển Mũi Né.", new BigDecimal("3290000"), 3, 2, catBeach),
                 tour("Tour Đà Nẵng – Hội An 2 ngày", "tour-da-nang-hoi-an-2n", "Cầu Rồng, Bà Nà, phố cổ Hội An.", new BigDecimal("2690000"), 2, 1, catExplore),
                 tour("Tour Côn Đảo 3 ngày 2 đêm", "tour-con-dao-3n", "Biển Côn Đảo, di tích lịch sử, rùa đẻ trứng.", new BigDecimal("6990000"), 3, 2, catBeach),
-                tour("Tour Quy Nhơn 2 ngày 1 đêm", "tour-quy-nhon-2n", "Bãi Xép, Kỳ Co, Eo Gió.", new BigDecimal("2290000"), 2, 1, catBeach)
+                tour("Tour Quy Nhơn 2 ngày 1 đêm", "tour-quy-nhon-2n", "Bãi Xép, Kỳ Co, Eo Gió.", new BigDecimal("2290000"), 2, 1, catBeach),
+                tour("Tour Bangkok – Pattaya 4 ngày 3 đêm", "tour-bangkok-pattaya-4n", "Hoàng cung Bangkok, chùa Wat Arun, chợ nổi Damnoen Saduak, biển Pattaya.", new BigDecimal("12990000"), 4, 3, catThailand),
+                tour("Tour Phuket – Vịnh Phang Nga 5 ngày 4 đêm", "tour-phuket-phang-nga-5n", "Patong, đảo Phi Phi, vịnh Phang Nga, đảo James Bond.", new BigDecimal("15990000"), 5, 4, catThailand),
+                tour("Tour Chiang Mai – Chiang Rai 4 ngày 3 đêm", "tour-chiang-mai-chiang-rai-4n", "Doi Suthep, cổ đô Chiang Mai, chùa Trắng Wat Rong Khun, Tam giác Vàng.", new BigDecimal("11990000"), 4, 3, catThailand),
+                tour("Tour Koh Samui 3 ngày 2 đêm", "tour-koh-samui-3n", "Bãi Chaweng, quần đảo Ang Thong, tượng Phật lớn Koh Samui.", new BigDecimal("10990000"), 3, 2, catThailand),
+                tour("Tour Bangkok – Ayutthaya 3 ngày 2 đêm", "tour-bangkok-ayutthaya-3n", "Grand Palace, cố đô Ayutthaya (UNESCO), cung điện Bang Pa-In.", new BigDecimal("9990000"), 3, 2, catThailand)
         );
 
         LocalDate start = LocalDate.now().plusDays(7);
@@ -100,7 +114,7 @@ public class TourSeeder {
                 saveTourWithDetails(saved, start);
                 added++;
             }
-            log.info("Backfilled existing tours and added {} missing tours (total target 16)", added);
+            log.info("Backfilled existing tours and added {} missing tours from seed list", added);
         }
     }
 
@@ -205,7 +219,12 @@ public class TourSeeder {
             Map.entry("tour-mui-ne-3n", List.of("Đồi cát vàng", "Làng chài", "Bãi biển Mũi Né", "Suối Tiên")),
             Map.entry("tour-da-nang-hoi-an-2n", List.of("Cầu Rồng Đà Nẵng", "Bà Nà Hills", "Phố cổ Hội An")),
             Map.entry("tour-con-dao-3n", List.of("Bãi Ông Đụng", "Nhà tù Côn Đảo", "Bãi Đầm Trầu")),
-            Map.entry("tour-quy-nhon-2n", List.of("Bãi Xép", "Kỳ Co", "Eo Gió"))
+            Map.entry("tour-quy-nhon-2n", List.of("Bãi Xép", "Kỳ Co", "Eo Gió")),
+            Map.entry("tour-bangkok-pattaya-4n", List.of("Grand Palace Bangkok", "Chùa Wat Arun", "Chợ nổi Damnoen Saduak", "Bãi biển Pattaya")),
+            Map.entry("tour-phuket-phang-nga-5n", List.of("Bãi Patong Phuket", "Đảo Phi Phi", "Vịnh Phang Nga", "Đảo James Bond", "Chùa Phật lớn Phuket")),
+            Map.entry("tour-chiang-mai-chiang-rai-4n", List.of("Chùa Doi Suthep Chiang Mai", "Phố cổ Chiang Mai", "Chùa Trắng Wat Rong Khun Chiang Rai", "Tam giác Vàng")),
+            Map.entry("tour-koh-samui-3n", List.of("Bãi Chaweng Koh Samui", "Vườn quốc gia biển Ang Thong", "Tượng Phật lớn Koh Samui")),
+            Map.entry("tour-bangkok-ayutthaya-3n", List.of("Grand Palace Bangkok", "Công viên lịch sử Ayutthaya", "Cung điện Bang Pa-In"))
     );
 
     private static List<String> getLocationNamesForSlug(String slug) {
@@ -239,6 +258,16 @@ public class TourSeeder {
         if (name.contains("Huế")) return new BigDecimal("16.463712");
         if (name.contains("Côn Đảo")) return new BigDecimal("8.682864");
         if (name.contains("Quy Nhơn")) return new BigDecimal("13.769588");
+        if (name.contains("Bangkok") || name.contains("Grand Palace")) return new BigDecimal("13.756331");
+        if (name.contains("Damnoen")) return new BigDecimal("13.519847");
+        if (name.contains("Pattaya")) return new BigDecimal("12.923556");
+        if (name.contains("Phuket") || name.contains("Patong")) return new BigDecimal("7.880448");
+        if (name.contains("Phi Phi")) return new BigDecimal("7.740697");
+        if (name.contains("Phang Nga") || name.contains("James Bond")) return new BigDecimal("8.275994");
+        if (name.contains("Chiang Mai") || name.contains("Doi Suthep")) return new BigDecimal("18.788278");
+        if (name.contains("Chiang Rai") || name.contains("Wat Rong Khun") || name.contains("Tam giác Vàng")) return new BigDecimal("19.910479");
+        if (name.contains("Samui") || name.contains("Chaweng") || name.contains("Ang Thong")) return new BigDecimal("9.512017");
+        if (name.contains("Ayutthaya") || name.contains("Bang Pa-In")) return new BigDecimal("14.369141");
         return new BigDecimal("21.028511");
     }
 
@@ -258,6 +287,16 @@ public class TourSeeder {
         if (name.contains("Huế")) return new BigDecimal("107.590866");
         if (name.contains("Côn Đảo")) return new BigDecimal("106.608503");
         if (name.contains("Quy Nhơn")) return new BigDecimal("109.223469");
+        if (name.contains("Bangkok") || name.contains("Grand Palace")) return new BigDecimal("100.501765");
+        if (name.contains("Damnoen")) return new BigDecimal("99.935371");
+        if (name.contains("Pattaya")) return new BigDecimal("100.882455");
+        if (name.contains("Phuket") || name.contains("Patong")) return new BigDecimal("98.392315");
+        if (name.contains("Phi Phi")) return new BigDecimal("98.778419");
+        if (name.contains("Phang Nga") || name.contains("James Bond")) return new BigDecimal("98.501228");
+        if (name.contains("Chiang Mai") || name.contains("Doi Suthep")) return new BigDecimal("98.985301");
+        if (name.contains("Chiang Rai") || name.contains("Wat Rong Khun") || name.contains("Tam giác Vàng")) return new BigDecimal("99.840576");
+        if (name.contains("Samui") || name.contains("Chaweng") || name.contains("Ang Thong")) return new BigDecimal("100.013593");
+        if (name.contains("Ayutthaya") || name.contains("Bang Pa-In")) return new BigDecimal("100.587663");
         return new BigDecimal("105.854444");
     }
 }

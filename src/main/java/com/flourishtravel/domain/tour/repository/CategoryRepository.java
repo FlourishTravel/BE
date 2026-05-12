@@ -14,4 +14,16 @@ public interface CategoryRepository extends JpaRepository<Category, UUID> {
     Optional<Category> findBySlug(String slug);
 
     List<Category> findAllByOrderBySortOrderAsc();
+
+    /** Chỉ các danh mục đang hoạt động (chưa soft-delete). */
+    List<Category> findAllByDeletedAtIsNullOrderBySortOrderAsc();
+
+    /** Chỉ các danh mục đã lưu trữ. */
+    List<Category> findAllByDeletedAtIsNotNullOrderByDeletedAtDesc();
+
+    /** Tìm theo slug trong số đang hoạt động (dùng cho check trùng). */
+    Optional<Category> findBySlugAndDeletedAtIsNull(String slug);
+
+    /** Lấy theo id chỉ khi đang hoạt động. */
+    Optional<Category> findByIdAndDeletedAtIsNull(UUID id);
 }

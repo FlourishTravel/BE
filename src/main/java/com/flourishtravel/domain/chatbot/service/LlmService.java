@@ -36,7 +36,7 @@ public class LlmService {
     @Value("${app.gemini.api-key:}")
     private String geminiApiKey;
 
-    @Value("${app.gemini.model:gemini-2.0-flash}")
+    @Value("${app.gemini.model:gemini-3-flash-preview}")
     private String geminiModel;
 
     @Value("${app.coze.api-key:}")
@@ -295,6 +295,19 @@ public class LlmService {
 
             if (response == null) return null;
 
+            // Coze returns { code: 0, msg: "...", data: {...} } when successful.
+            Object codeObj = response.get("code");
+            Long code = null;
+            if (codeObj instanceof Number n) code = n.longValue();
+            else if (codeObj instanceof String s) {
+                try { code = Long.parseLong(s.trim()); } catch (Exception ignored) { /* noop */ }
+            }
+            if (code != null && code != 0L) {
+                Object msgObj = response.get("msg");
+                log.warn("Coze API non-success code {}: {}", code, msgObj != null ? String.valueOf(msgObj) : "(no msg)");
+                return null;
+            }
+
             // Try multiple shapes to be resilient across versions
             Object dataObj = response.get("data");
             if (dataObj instanceof Map<?, ?> data) {
@@ -308,9 +321,6 @@ public class LlmService {
             Object messagesObj = response.get("messages");
             String text = extractCozeTextFromMessages(messagesObj);
             if (text != null) return text;
-
-            Object msgObj = response.get("msg");
-            if (msgObj != null) return String.valueOf(msgObj);
 
             return null;
         } catch (WebClientResponseException e) {
@@ -343,6 +353,12 @@ public class LlmService {
         StringBuilder sb = new StringBuilder();
         for (Object item : list) {
             if (!(item instanceof Map<?, ?> m)) continue;
+            // Only keep actual assistant answers; ignore user questions & intermediate tool messages.
+            Object role = m.get("role");
+            Object type = m.get("type");
+            if (role != null && !"assistant".equalsIgnoreCase(String.valueOf(role))) continue;
+            if (type != null && !"answer".equalsIgnoreCase(String.valueOf(type))) continue;
+
             Object content = m.get("content");
             if (content != null) sb.append(String.valueOf(content));
         }

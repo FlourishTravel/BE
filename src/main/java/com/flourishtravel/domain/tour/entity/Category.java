@@ -4,6 +4,8 @@ import com.flourishtravel.common.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.Instant;
+
 @Entity
 @Table(name = "categories", indexes = @Index(columnList = "slug", unique = true))
 @Getter
@@ -24,4 +26,11 @@ public class Category extends BaseEntity {
 
     @Column(name = "sort_order")
     private Integer sortOrder;
+
+    /**
+     * Soft-delete marker. NULL = đang hoạt động; khác NULL = đã lưu trữ.
+     * Giữ FK với tour không bị vỡ và admin có thể khôi phục bất kỳ lúc nào.
+     */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 }

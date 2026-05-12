@@ -1,5 +1,5 @@
-# Mặc định (không set profile): cần PostgreSQL đang chạy.
-# Chạy không cần PostgreSQL: mvn spring-boot:run "-Dspring-boot.run.profiles=dev"
+# Chạy local: mvn spring-boot:run (pom.xml đã bật profile dev = H2, không Redis).
+# JAR / production: không dùng profile dev trừ khi set tay — cần PostgreSQL + Redis như cấu hình dưới.
 spring:
   application:
     name: flourish-travel-backend
@@ -80,6 +80,15 @@ app:
     api-key: ${COZE_API_KEY:}
     base-url: ${COZE_BASE_URL:https://api.coze.com}
     bot-id: ${COZE_BOT_ID:}
+
+  n8n:
+    # Webhook URL của n8n workflow (Production URL từ node Webhook trong n8n)
+    # Format: https://khanhtn45.app.n8n.cloud/webhook/<path>
+    webhook-url: ${N8N_WEBHOOK_URL:}
+    # Timeout tính bằng giây cho mỗi request đến n8n
+    timeout-seconds: ${N8N_TIMEOUT_SECONDS:15}
+    # true = dùng n8n làm chatbot chính; false = dùng logic cũ (Gemini/OpenAI)
+    enabled: ${N8N_ENABLED:true}
 
   # AWS Bedrock (LLM fallback: dùng Access Key ID + Secret Access Key từ IAM)
   bedrock:

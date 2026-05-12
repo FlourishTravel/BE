@@ -35,7 +35,7 @@ public class SecurityConfig {
                 .requestMatchers("/chatbot-demo.html").permitAll()
                 .requestMatchers("/h2-console/**").permitAll()
                 .requestMatchers("/auth/**").permitAll()
-                .requestMatchers("/tours", "/tours/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/tours", "/tours/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/categories").permitAll()
                 .requestMatchers("/chatbot/message").permitAll()
                 .requestMatchers("/chatbot/config", "/chatbot/config/**").permitAll()
