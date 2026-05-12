@@ -1,5 +1,6 @@
 package com.flourishtravel.domain.tour.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -141,6 +142,7 @@ public class TourDetailDto {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class GuideRef {
         private UUID id;
         private String fullName;

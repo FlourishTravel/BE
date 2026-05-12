@@ -15,4 +15,6 @@ public interface SessionCheckinRepository extends JpaRepository<SessionCheckin, 
     List<SessionCheckin> findBySession(TourSession session);
 
     boolean existsBySessionAndUserAndCheckInType(TourSession session, User user, String checkInType);
+
+    long countDistinctBySession(TourSession session);
 }

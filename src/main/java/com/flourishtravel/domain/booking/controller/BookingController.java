@@ -1,8 +1,13 @@
 package com.flourishtravel.domain.booking.controller;
 
 import com.flourishtravel.common.dto.ApiResponse;
+import com.flourishtravel.domain.booking.dto.CreateBookingResponse;
 import com.flourishtravel.domain.booking.dto.GuestInputDto;
-import com.flourishtravel.domain.booking.entity.Booking;
+import com.flourishtravel.domain.booking.dto.MomoPayUrlResponse;
+import com.flourishtravel.domain.booking.dto.MomoSyncFromReturnRequest;
+import com.flourishtravel.domain.booking.dto.UserBookingDetailDto;
+import com.flourishtravel.domain.booking.dto.UserBookingSummaryDto;
+import com.flourishtravel.domain.booking.dto.ValidateSessionRequest;
 import com.flourishtravel.domain.booking.service.BookingService;
 import com.flourishtravel.domain.payment.entity.Refund;
 import com.flourishtravel.security.UserPrincipal;
@@ -26,27 +31,40 @@ public class BookingController {
     private final BookingService bookingService;
 
     @GetMapping("/me")
-    public ResponseEntity<ApiResponse<List<Booking>>> getMyBookings(@AuthenticationPrincipal UserPrincipal principal) {
+    public ResponseEntity<ApiResponse<List<UserBookingSummaryDto>>> getMyBookings(@AuthenticationPrincipal UserPrincipal principal) {
         if (principal == null) {
             return ResponseEntity.status(401).build();
         }
-        List<Booking> list = bookingService.getMyBookings(principal.getId());
+        List<UserBookingSummaryDto> list = bookingService.listMyBookingSummaries(principal.getId());
         return ResponseEntity.ok(ApiResponse.ok(list));
     }
 
+    @PostMapping("/validate-session")
+    public ResponseEntity<ApiResponse<BookingService.ValidateSessionResult>> validateSession(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody ValidateSessionRequest request) {
+        UUID userId = principal != null ? principal.getId() : null;
+        BookingService.ValidateSessionResult result = bookingService.validateSessionForBooking(
+                request.getTourId(),
+                request.getSessionId(),
+                request.getGuestCount(),
+                userId);
+        return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<Booking>> getById(
+    public ResponseEntity<ApiResponse<UserBookingDetailDto>> getMyBookingDetail(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID id) {
         if (principal == null) {
             return ResponseEntity.status(401).build();
         }
-        Booking b = bookingService.getById(id, principal.getId());
-        return ResponseEntity.ok(ApiResponse.ok(b));
+        UserBookingDetailDto dto = bookingService.getMyBookingDetail(id, principal.getId());
+        return ResponseEntity.ok(ApiResponse.ok(dto));
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<BookingService.CreateBookingResult>> create(
+    public ResponseEntity<ApiResponse<CreateBookingResponse>> create(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody CreateBookingRequest request) {
         if (principal == null) {
@@ -64,7 +82,7 @@ public class BookingController {
                     })
                     .toList();
         }
-        BookingService.CreateBookingResult result = bookingService.create(
+        CreateBookingResponse result = bookingService.create(
                 principal.getId(),
                 request.getSessionId(),
                 request.getGuestCount(),
@@ -75,8 +93,31 @@ public class BookingController {
                 request.getGuestNames(),
                 guestDtos,
                 request.getEmergencyContactName(),
-                request.getEmergencyContactPhone());
+                request.getEmergencyContactPhone(),
+                request.getPaymentMethod());
         return ResponseEntity.ok(ApiResponse.ok("Tạo đơn thành công", result));
+    }
+
+    @PostMapping("/{id}/momo-pay-url")
+    public ResponseEntity<ApiResponse<MomoPayUrlResponse>> momoPayUrl(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID id) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        MomoPayUrlResponse body = bookingService.resumeMomoPaymentUrl(id, principal.getId());
+        return ResponseEntity.ok(ApiResponse.ok(body));
+    }
+
+    @PostMapping("/momo/sync-from-return")
+    public ResponseEntity<ApiResponse<Void>> syncMomoFromReturn(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody MomoSyncFromReturnRequest body) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        bookingService.syncMomoPaymentAfterReturn(principal.getId(), body.getOrderId());
+        return ResponseEntity.ok(ApiResponse.ok("Đã cập nhật trạng thái thanh toán", null));
     }
 
     @PostMapping("/{id}/cancel")
@@ -92,11 +133,14 @@ public class BookingController {
 
     @PostMapping("/validate-promo")
     public ResponseEntity<ApiResponse<BookingService.ValidatePromoResult>> validatePromo(
+            @AuthenticationPrincipal UserPrincipal principal,
             @RequestBody ValidatePromoRequest request) {
+        UUID userId = principal != null ? principal.getId() : null;
         BookingService.ValidatePromoResult result = bookingService.validatePromo(
                 request.getCode(),
                 request.getSessionId(),
-                request.getGuestCount() != null ? request.getGuestCount() : 1);
+                request.getGuestCount() != null ? request.getGuestCount() : 1,
+                userId);
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
@@ -132,6 +176,8 @@ public class BookingController {
         private String emergencyContactName;
         /** Liên hệ khẩn cấp – SĐT người thân. */
         private String emergencyContactPhone;
+        /** ewallet | bank | card — ewallet dùng MoMo (sandbox/prod theo cấu hình). */
+        private String paymentMethod;
     }
 
     @Data

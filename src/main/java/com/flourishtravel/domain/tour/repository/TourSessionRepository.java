@@ -20,6 +20,25 @@ public interface TourSessionRepository extends JpaRepository<TourSession, UUID> 
 
     List<TourSession> findByTourGuide_IdAndStartDateBetweenOrderByStartDateAsc(UUID guideId, LocalDate from, LocalDate to);
 
+    /** Số session HDV còn phía trước (từ ngày from trở đi, trạng thái scheduled). */
+    @Query("""
+        SELECT COUNT(s) FROM TourSession s
+        WHERE s.tourGuide.id = :guideId
+          AND s.startDate >= :from
+          AND s.status = 'scheduled'
+        """)
+    long countUpcomingForGuide(@Param("guideId") UUID guideId, @Param("from") LocalDate from);
+
+    @Query("""
+        SELECT COUNT(s) FROM TourSession s
+        WHERE s.tourGuide.id = :guideId
+          AND s.startDate BETWEEN :from AND :to
+          AND s.status = 'scheduled'
+        """)
+    long countScheduledForGuideBetween(@Param("guideId") UUID guideId,
+                                       @Param("from") LocalDate from,
+                                       @Param("to") LocalDate to);
+
     /**
      * Lấy session khởi hành trong khoảng [from, to] (theo start_date), kèm tour + guide
      * để FE Tour Operations hiển thị calendar/list không bị N+1.

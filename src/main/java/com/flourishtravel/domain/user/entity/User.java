@@ -70,6 +70,26 @@ public class User extends BaseEntity {
     @Builder.Default
     private Boolean isActive = true;
 
+    /** Mã nhân viên hiển thị (vd: EMP-A1B2C3D4), sinh khi tạo account nội bộ. */
+    @Column(name = "employee_code", unique = true, length = 24)
+    private String employeeCode;
+
+    /** Chức danh hiển thị: Sales Tour, Điều hành, Kế toán, Super Admin... */
+    @Column(name = "job_title", length = 120)
+    private String jobTitle;
+
+    /** Bộ phận (mã ngắn): SALES | OPERATIONS | FINANCE | ADMIN — hoặc GUIDE cho HDV. */
+    @Column(length = 40)
+    private String department;
+
+    /**
+     * Trạng thái làm việc HR: active | on_leave | inactive (nghỉ việc).
+     * inactive đồng bộ với không cho đăng nhập khi service cập nhật isActive=false.
+     */
+    @Column(name = "employment_status", nullable = false, length = 20)
+    @Builder.Default
+    private String employmentStatus = "active";
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<UserProvider> providers = new ArrayList<>();

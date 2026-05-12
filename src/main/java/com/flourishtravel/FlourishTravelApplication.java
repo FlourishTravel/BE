@@ -1,5 +1,6 @@
 package com.flourishtravel;
 
+import com.flourishtravel.config.DotEnvBootstrap;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
@@ -13,6 +14,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class FlourishTravelApplication {
 
     public static void main(String[] args) {
+        DotEnvBootstrap.load();
         SpringApplication.run(FlourishTravelApplication.class, args);
     }
 }

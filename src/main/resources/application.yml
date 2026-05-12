@@ -15,6 +15,8 @@ spring:
       minimum-idle: 2
 
   jpa:
+    # Tránh lỗi "Unable to determine Dialect" khi JDBC metadata chưa lấy được lúc khởi tạo
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     # update = tự tạo/cập nhật bảng khi chạy (chỉ cần tạo database flourishtravel 1 lần trong pgAdmin)
     hibernate:
       ddl-auto: update
@@ -58,13 +60,16 @@ app:
     access-token-validity-ms: 900000
     refresh-token-validity-ms: 604800000
 
+  # Sandbox mặc định (credentials mẫu MoMo công khai). Production: set biến môi trường hoặc .env.
   momo:
-    partner-code: ${MOMO_PARTNER_CODE:}
-    access-key: ${MOMO_ACCESS_KEY:}
-    secret-key: ${MOMO_SECRET_KEY:}
+    partner-code: ${MOMO_PARTNER_CODE:MOMO}
+    access-key: ${MOMO_ACCESS_KEY:F8BBA842ECF85}
+    secret-key: ${MOMO_SECRET_KEY:K951B6PE1waDMi640xX08PD3vg6EkVlz}
     endpoint: ${MOMO_ENDPOINT:https://test-payment.momo.vn}
     ipn-url: ${MOMO_IPN_URL:http://localhost:8080/api/payments/momo/ipn}
     return-url: ${MOMO_RETURN_URL:http://localhost:5173/checkout/result}
+    partner-name: ${MOMO_PARTNER_NAME:FlourishTravel}
+    store-id: ${MOMO_STORE_ID:MomoTestStore}
     lang: vi
 
   openai:
@@ -100,11 +105,21 @@ app:
   google:
     maps-api-key: ${GOOGLE_MAPS_API_KEY:}
 
+  # Có hoặc không dấu / cuối đều được (BE chuẩn hóa khi ghép /checkout/...).
   frontend:
     url: ${FRONTEND_URL:http://localhost:5173}
   api-base-url: ${API_BASE_URL:http://localhost:8080/api}
   upload:
+    # local = lưu disk + phục vụ /uploads/** ; s3 = PutObject lên bucket, trả về URL S3/CDN
+    storage: ${UPLOAD_STORAGE:local}
     dir: ${UPLOAD_DIR:uploads}
+  s3:
+    bucket: ${S3_BUCKET:amz-ftl}
+    region: ${S3_REGION:${AWS_REGION:ap-southeast-2}}
+    public-url-prefix: ${S3_PUBLIC_URL_PREFIX:https://amz-ftl.s3.ap-southeast-2.amazonaws.com}
+    # Tuỳ chọn: chỉ dùng cho S3 upload — đặt trong BE/.env (không để default chứa secret trong repo)
+    upload-access-key-id: ${S3_UPLOAD_ACCESS_KEY_ID:}
+    upload-secret-access-key: ${S3_UPLOAD_SECRET_ACCESS_KEY:}
 
 # Swagger / OpenAPI
 springdoc:

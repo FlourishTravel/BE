@@ -3,6 +3,7 @@ package com.flourishtravel.domain.tour.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.flourishtravel.common.entity.BaseEntity;
 import jakarta.persistence.*;
+import org.hibernate.annotations.BatchSize;
 import lombok.*;
 
 import java.util.ArrayList;
@@ -57,6 +58,7 @@ public class TourItinerary extends BaseEntity {
 
     @OneToMany(mappedBy = "itinerary", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sortOrder ASC")
+    @BatchSize(size = 32)
     @Builder.Default
     @JsonIgnore
     private List<TourActivity> activities = new ArrayList<>();

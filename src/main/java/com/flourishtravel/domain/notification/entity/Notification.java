@@ -4,6 +4,8 @@ import com.flourishtravel.common.entity.BaseEntity;
 import com.flourishtravel.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "notifications", indexes = {
@@ -31,7 +33,9 @@ public class Notification extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String body;
 
-    @Column(columnDefinition = "JSONB")
+    /** PostgreSQL jsonb — cần @JdbcTypeCode để không bind nhầm varchar. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
     private String data;
 
     @Column(name = "is_read", nullable = false)

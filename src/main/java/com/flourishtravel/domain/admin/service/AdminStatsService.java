@@ -27,7 +27,10 @@ public class AdminStatsService {
         long totalBookings = bookingRepository.count();
         long paidBookings = bookingRepository.countByStatus("paid");
         BigDecimal revenueTotal = paymentRepository.findAll().stream()
-                .filter(p -> "success".equalsIgnoreCase(p.getStatus()))
+                .filter(p -> {
+                    String s = p.getStatus();
+                    return "paid".equalsIgnoreCase(s) || "success".equalsIgnoreCase(s);
+                })
                 .map(p -> p.getAmount() != null ? p.getAmount() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return AdminStatsResponse.builder()

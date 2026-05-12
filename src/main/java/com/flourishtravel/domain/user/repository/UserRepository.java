@@ -59,4 +59,33 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     long countByRole_NameAndCreatedAtBetween(String roleName, Instant from, Instant to);
 
     long countByRole_Name(String roleName);
+
+    /**
+     * Danh sách nhân sự nội bộ (không gồm TRAVELER).
+     * pattern: "%term%" — không null (dùng "%%" khi không tìm).
+     */
+    @Query("""
+        SELECT u FROM User u
+        WHERE u.role.name IN ('ADMIN', 'TOUR_GUIDE', 'STAFF')
+          AND (:employmentStatus IS NULL OR LOWER(COALESCE(u.employmentStatus, 'active')) = :employmentStatus)
+          AND (:roleName IS NULL OR u.role.name = :roleName)
+          AND (:department IS NULL OR LOWER(TRIM(COALESCE(u.department, ''))) = :department)
+          AND (
+                LOWER(COALESCE(u.fullName, '')) LIKE :pattern
+             OR LOWER(COALESCE(u.email, ''))    LIKE :pattern
+             OR LOWER(COALESCE(u.phone, ''))    LIKE :pattern
+             OR LOWER(COALESCE(u.employeeCode, '')) LIKE :pattern
+             OR LOWER(COALESCE(u.jobTitle, '')) LIKE :pattern
+          )
+        ORDER BY u.fullName ASC
+        """)
+    Page<User> adminSearchStaff(@Param("employmentStatus") String employmentStatus,
+                                @Param("roleName") String roleName,
+                                @Param("department") String department,
+                                @Param("pattern") String pattern,
+                                Pageable pageable);
+
+    /** Số tài khoản ADMIN còn đăng nhập được — dùng để không vô hiệu hoá admin cuối cùng. */
+    @Query("SELECT COUNT(u) FROM User u WHERE u.role.name = 'ADMIN' AND u.isActive = true")
+    long countActiveAdmins();
 }

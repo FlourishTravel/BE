@@ -96,10 +96,23 @@
             <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
 
+        <!-- Nạp file .env (thư mục chạy hoặc BE/.env) trước khi Spring resolve ${MOMO_*}. -->
+        <dependency>
+            <groupId>io.github.cdimascio</groupId>
+            <artifactId>dotenv-java</artifactId>
+            <version>3.0.0</version>
+        </dependency>
+
         <!-- AWS Bedrock Runtime (chatbot LLM fallback) -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>bedrockruntime</artifactId>
+            <version>2.34.0</version>
+        </dependency>
+        <!-- S3 upload (URL trả về cho FE) — bật khi app.upload.storage=s3 -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
             <version>2.34.0</version>
         </dependency>
 
@@ -147,12 +160,7 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <!-- Chạy local: mvn spring-boot:run → profile dev (H2, không Redis) -->
-                <configuration>
-                    <profiles>
-                        <profile>dev</profile>
-                    </profiles>
-                </configuration>
+                <!-- Chạy local: mvn spring-boot:run → dùng cấu hình mặc định (PostgreSQL). -->
             </plugin>
         </plugins>
     </build>

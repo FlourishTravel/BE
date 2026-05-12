@@ -56,6 +56,31 @@ public class TourService {
         return tourRepository.search(destinationPattern, minPrice, maxPrice, startDate, categoryId, pageable);
     }
 
+    /**
+     * Catalog công khai: cùng bộ lọc với {@link #search} (chỉ tour còn chỗ theo query native),
+     * trả DTO đủ ảnh / danh mục / session cho trang "Tour trải nghiệm".
+     */
+    @Transactional(readOnly = true)
+    public Page<TourSummaryDto> publicCatalog(String destination, BigDecimal minPrice, BigDecimal maxPrice,
+                                              LocalDate startDate, UUID categoryId, Pageable pageable) {
+        return search(destination, minPrice, maxPrice, startDate, categoryId, pageable).map(this::toSummary);
+    }
+
+    @Transactional(readOnly = true)
+    public TourDetailDto getPublicDetail(UUID id) {
+        return toDetail(getById(id), true);
+    }
+
+    @Transactional(readOnly = true)
+    public TourDetailDto getPublicDetailBySlug(String slug) {
+        return toDetail(getBySlug(slug), true);
+    }
+
+    @Transactional(readOnly = true)
+    public List<TourSummaryDto> getSimilarSummaries(UUID tourId, int limit) {
+        return getSimilarTours(tourId, limit).stream().map(this::toSummary).toList();
+    }
+
     @Transactional(readOnly = true)
     public Tour getById(UUID id) {
         return tourRepository.findById(id)
@@ -133,7 +158,7 @@ public class TourService {
     @Transactional(readOnly = true)
     public TourDetailDto getAdminDetail(UUID id) {
         Tour tour = getById(id);
-        return toDetail(tour);
+        return toDetail(tour, false);
     }
 
     @Transactional
@@ -290,7 +315,7 @@ public class TourService {
                 .build();
     }
 
-    private TourDetailDto toDetail(Tour tour) {
+    private TourDetailDto toDetail(Tour tour, boolean redactGuideContact) {
         TourSummaryDto.CategoryRef catRef = null;
         if (tour.getCategory() != null) {
             Category c = tour.getCategory();
@@ -362,12 +387,14 @@ public class TourService {
                             TourDetailDto.GuideRef guideRef = null;
                             User guide = s.getTourGuide();
                             if (guide != null) {
-                                guideRef = TourDetailDto.GuideRef.builder()
+                                TourDetailDto.GuideRef.GuideRefBuilder gb = TourDetailDto.GuideRef.builder()
                                         .id(guide.getId())
                                         .fullName(guide.getFullName())
-                                        .email(guide.getEmail())
-                                        .avatarUrl(guide.getAvatarUrl())
-                                        .build();
+                                        .avatarUrl(guide.getAvatarUrl());
+                                if (!redactGuideContact) {
+                                    gb.email(guide.getEmail());
+                                }
+                                guideRef = gb.build();
                             }
                             return TourDetailDto.SessionDetail.builder()
                                     .id(s.getId())

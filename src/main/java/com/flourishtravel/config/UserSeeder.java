@@ -13,6 +13,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Locale;
+
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -38,9 +40,15 @@ public class UserSeeder {
                 .passwordHash(passwordEncoder.encode("Admin@123"))
                 .fullName("Admin FlourishTravel")
                 .phone("0901234567")
+                .jobTitle("Super Admin")
+                .department("ADMIN")
+                .employmentStatus("active")
                 .role(adminRole)
                 .isActive(true)
+                .marketingOptIn(false)
                 .build();
+        admin = userRepository.save(admin);
+        admin.setEmployeeCode("EMP-" + admin.getId().toString().replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT));
         userRepository.save(admin);
 
         User traveler = User.builder()

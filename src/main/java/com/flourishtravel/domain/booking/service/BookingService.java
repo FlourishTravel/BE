@@ -2,7 +2,15 @@ package com.flourishtravel.domain.booking.service;
 
 import com.flourishtravel.common.exception.BadRequestException;
 import com.flourishtravel.common.exception.ResourceNotFoundException;
+import com.flourishtravel.common.util.UrlUtils;
+import com.flourishtravel.domain.booking.dto.CreateBookingResponse;
 import com.flourishtravel.domain.booking.dto.GuestInputDto;
+import com.flourishtravel.domain.booking.dto.MomoPayUrlResponse;
+import com.flourishtravel.domain.booking.dto.UserBookingDetailDto;
+import com.flourishtravel.domain.booking.dto.UserBookingGuestLineDto;
+import com.flourishtravel.domain.booking.dto.UserBookingPaymentLineDto;
+import com.flourishtravel.domain.booking.dto.UserBookingRefundLineDto;
+import com.flourishtravel.domain.booking.dto.UserBookingSummaryDto;
 import com.flourishtravel.domain.booking.entity.Booking;
 import com.flourishtravel.domain.booking.entity.BookingGuest;
 import com.flourishtravel.domain.booking.entity.Promotion;
@@ -11,26 +19,35 @@ import com.flourishtravel.domain.booking.repository.BookingRepository;
 import com.flourishtravel.domain.booking.repository.PromotionRepository;
 import com.flourishtravel.domain.payment.entity.Payment;
 import com.flourishtravel.domain.payment.repository.PaymentRepository;
+import com.flourishtravel.domain.payment.service.MomoPaymentCompletionService;
+import com.flourishtravel.domain.payment.service.MomoPaymentService;
+import com.flourishtravel.domain.payment.service.MomoPaymentService.MomoGatewayQueryResult;
 import com.flourishtravel.domain.payment.entity.Refund;
 import com.flourishtravel.domain.payment.repository.RefundRepository;
+import com.flourishtravel.domain.tour.entity.Tour;
+import com.flourishtravel.domain.tour.entity.TourImage;
 import com.flourishtravel.domain.tour.entity.TourSession;
 import com.flourishtravel.domain.tour.repository.TourSessionRepository;
 import com.flourishtravel.domain.user.entity.User;
 import com.flourishtravel.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
-import java.util.ArrayList;
+import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class BookingService {
 
     private final BookingRepository bookingRepository;
@@ -40,14 +57,79 @@ public class BookingService {
     private final PaymentRepository paymentRepository;
     private final RefundRepository refundRepository;
     private final BookingGuestRepository bookingGuestRepository;
+    private final MomoPaymentService momoPaymentService;
+    private final MomoPaymentCompletionService momoPaymentCompletionService;
 
     @Value("${app.frontend.url:http://localhost:5173}")
     private String frontendUrl;
 
+    /**
+     * Danh sách chuyến đi / đơn đã đặt của khách — payload an toàn cho API công khai (app user).
+     */
     @Transactional(readOnly = true)
-    public List<Booking> getMyBookings(UUID userId) {
-        User user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
-        return bookingRepository.findByUserOrderByCreatedAtDesc(user);
+    public List<UserBookingSummaryDto> listMyBookingSummaries(UUID userId) {
+        userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        List<Booking> list = bookingRepository.findWithSummaryGraphByUserId(userId);
+        return list.stream().map(this::toUserBookingSummaryDto).toList();
+    }
+
+    private UserBookingSummaryDto toUserBookingSummaryDto(Booking b) {
+        TourSession session = b.getSession();
+        Tour tour = session != null ? session.getTour() : null;
+        var category = tour != null ? tour.getCategory() : null;
+
+        Payment latest = latestPayment(b);
+        String payStatus = latest != null ? latest.getStatus() : null;
+        String orderId = latest != null ? latest.getOrderId() : null;
+
+        boolean refundPending = b.getRefunds() != null && b.getRefunds().stream()
+                .anyMatch(r -> r.getStatus() != null && "pending".equalsIgnoreCase(r.getStatus()));
+
+        String customerEmail = b.getUser() != null ? b.getUser().getEmail() : null;
+
+        return UserBookingSummaryDto.builder()
+                .bookingId(b.getId())
+                .bookingStatus(b.getStatus())
+                .guestCount(b.getGuestCount())
+                .totalAmount(b.getTotalAmount())
+                .discountAmount(b.getDiscountAmount())
+                .bookedAt(b.getCreatedAt())
+                .sessionId(session != null ? session.getId() : null)
+                .sessionStartDate(session != null ? session.getStartDate() : null)
+                .sessionEndDate(session != null ? session.getEndDate() : null)
+                .sessionStatus(session != null ? session.getStatus() : null)
+                .tourId(tour != null ? tour.getId() : null)
+                .tourTitle(tour != null ? tour.getTitle() : null)
+                .tourSlug(tour != null ? tour.getSlug() : null)
+                .tourThumbnailUrl(firstTourThumbnail(tour))
+                .tourDurationDays(tour != null ? tour.getDurationDays() : null)
+                .tourDurationNights(tour != null ? tour.getDurationNights() : null)
+                .categoryName(category != null ? category.getName() : null)
+                .customerEmail(customerEmail)
+                .paymentStatus(payStatus)
+                .paymentOrderId(orderId)
+                .refundPending(refundPending)
+                .build();
+    }
+
+    private static Payment latestPayment(Booking b) {
+        if (b.getPayments() == null || b.getPayments().isEmpty()) {
+            return null;
+        }
+        return b.getPayments().stream()
+                .max(Comparator.comparing(Payment::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())))
+                .orElse(null);
+    }
+
+    private static String firstTourThumbnail(Tour tour) {
+        if (tour == null || tour.getImages() == null || tour.getImages().isEmpty()) {
+            return null;
+        }
+        return tour.getImages().stream()
+                .sorted(Comparator.comparing(TourImage::getSortOrder, Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(TourImage::getImageUrl)
+                .findFirst()
+                .orElse(null);
     }
 
     @Transactional(readOnly = true)
@@ -59,12 +141,130 @@ public class BookingService {
         return b;
     }
 
+    /**
+     * Chi tiết đơn cho app khách — DTO đầy đủ, không trả entity JPA.
+     */
+    @Transactional(readOnly = true)
+    public UserBookingDetailDto getMyBookingDetail(UUID bookingId, UUID userId) {
+        Booking b = bookingRepository.findDetailForUser(bookingId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Booking", bookingId));
+        return toUserBookingDetailDto(b);
+    }
+
+    private UserBookingDetailDto toUserBookingDetailDto(Booking b) {
+        TourSession session = b.getSession();
+        Tour tour = session != null ? session.getTour() : null;
+        var category = tour != null ? tour.getCategory() : null;
+
+        Payment latest = latestPayment(b);
+        String payStatus = latest != null ? latest.getStatus() : null;
+        String orderId = latest != null ? latest.getOrderId() : null;
+
+        boolean refundPending = b.getRefunds() != null && b.getRefunds().stream()
+                .anyMatch(r -> r.getStatus() != null && "pending".equalsIgnoreCase(r.getStatus()));
+
+        String customerEmail = b.getUser() != null ? b.getUser().getEmail() : null;
+        String customerPhone = b.getUser() != null ? b.getUser().getPhone() : null;
+
+        String guideName = session != null && session.getTourGuide() != null
+                ? session.getTourGuide().getFullName()
+                : null;
+
+        String promotionCode = b.getPromotion() != null ? b.getPromotion().getCode() : null;
+
+        String continuePaymentUrl = null;
+        if (b.getStatus() != null && "pending".equalsIgnoreCase(b.getStatus()) && latest != null
+                && latest.getOrderId() != null
+                && latest.getStatus() != null && "pending".equalsIgnoreCase(latest.getStatus())) {
+            continuePaymentUrl = UrlUtils.joinBaseAndPath(frontendUrl, "/checkout/result?bookingId=" + b.getId() + "&momo=1");
+        }
+
+        List<UserBookingGuestLineDto> guestLines = b.getBookingGuests() == null ? List.of() :
+                b.getBookingGuests().stream()
+                        .sorted(Comparator.comparing(BookingGuest::getSortOrder, Comparator.nullsLast(Comparator.naturalOrder())))
+                        .map(g -> UserBookingGuestLineDto.builder()
+                                .guestId(g.getId())
+                                .fullName(g.getFullName())
+                                .maskedIdNumber(g.getMaskedIdNumber())
+                                .dateOfBirth(g.getDateOfBirth())
+                                .sortOrder(g.getSortOrder())
+                                .build())
+                        .toList();
+
+        List<UserBookingPaymentLineDto> payLines = b.getPayments() == null ? List.of() :
+                b.getPayments().stream()
+                        .sorted(Comparator.comparing(Payment::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                        .map(p -> UserBookingPaymentLineDto.builder()
+                                .paymentId(p.getId())
+                                .orderId(p.getOrderId())
+                                .amount(p.getAmount())
+                                .status(p.getStatus())
+                                .provider(p.getProvider())
+                                .createdAt(p.getCreatedAt())
+                                .build())
+                        .toList();
+
+        List<UserBookingRefundLineDto> refundLines = b.getRefunds() == null ? List.of() :
+                b.getRefunds().stream()
+                        .sorted(Comparator.comparing(Refund::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                        .map(r -> UserBookingRefundLineDto.builder()
+                                .refundId(r.getId())
+                                .amount(r.getAmount())
+                                .status(r.getStatus())
+                                .reason(r.getReason())
+                                .createdAt(r.getCreatedAt())
+                                .build())
+                        .toList();
+
+        return UserBookingDetailDto.builder()
+                .bookingId(b.getId())
+                .bookingStatus(b.getStatus())
+                .guestCount(b.getGuestCount())
+                .totalAmount(b.getTotalAmount())
+                .discountAmount(b.getDiscountAmount())
+                .bookedAt(b.getCreatedAt())
+                .updatedAt(b.getUpdatedAt())
+                .sessionId(session != null ? session.getId() : null)
+                .sessionStartDate(session != null ? session.getStartDate() : null)
+                .sessionEndDate(session != null ? session.getEndDate() : null)
+                .sessionStatus(session != null ? session.getStatus() : null)
+                .sessionMaxParticipants(session != null ? session.getMaxParticipants() : null)
+                .sessionCurrentParticipants(session != null ? session.getCurrentParticipants() : null)
+                .tourId(tour != null ? tour.getId() : null)
+                .tourTitle(tour != null ? tour.getTitle() : null)
+                .tourSlug(tour != null ? tour.getSlug() : null)
+                .tourThumbnailUrl(firstTourThumbnail(tour))
+                .tourDurationDays(tour != null ? tour.getDurationDays() : null)
+                .tourDurationNights(tour != null ? tour.getDurationNights() : null)
+                .categoryName(category != null ? category.getName() : null)
+                .customerEmail(customerEmail)
+                .customerPhone(customerPhone)
+                .paymentStatus(payStatus)
+                .paymentOrderId(orderId)
+                .refundPending(refundPending)
+                .promotionCode(promotionCode)
+                .specialRequests(b.getSpecialRequests())
+                .contactPhone(b.getContactPhone())
+                .pickupAddress(b.getPickupAddress())
+                .guestNames(b.getGuestNames())
+                .emergencyContactName(b.getEmergencyContactName())
+                .emergencyContactPhone(b.getEmergencyContactPhone())
+                .guideName(guideName)
+                .continuePaymentUrl(continuePaymentUrl)
+                .guests(guestLines)
+                .payments(payLines)
+                .refunds(refundLines)
+                .build();
+    }
+
     @Transactional
-    public CreateBookingResult create(UUID userId, UUID sessionId, int guestCount, String specialRequests,
-                                     String promotionCode, String contactPhone, String pickupAddress, List<String> guestNames,
-                                     List<GuestInputDto> guests, String emergencyContactName, String emergencyContactPhone) {
+    public CreateBookingResponse create(UUID userId, UUID sessionId, int guestCount, String specialRequests,
+                                        String promotionCode, String contactPhone, String pickupAddress, List<String> guestNames,
+                                        List<GuestInputDto> guests, String emergencyContactName, String emergencyContactPhone,
+                                        String paymentMethod) {
         User user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
         TourSession session = sessionRepository.findById(sessionId).orElseThrow(() -> new ResourceNotFoundException("Session", sessionId));
+        assertNoOverlappingActiveTrip(userId, session);
         if (!"scheduled".equals(session.getStatus())) {
             throw new BadRequestException("Lịch này không còn mở đặt");
         }
@@ -153,16 +353,98 @@ public class BookingService {
         }
 
         String orderId = "FT-" + booking.getId().toString().substring(0, 8);
+        String requestId = UUID.randomUUID().toString();
+        long amountVnd = booking.getTotalAmount().setScale(0, RoundingMode.HALF_UP).longValue();
+
         Payment payment = Payment.builder()
                 .booking(booking)
                 .orderId(orderId)
+                .requestId(requestId)
                 .amount(booking.getTotalAmount())
                 .status("pending")
+                .provider("momo")
                 .build();
         paymentRepository.save(payment);
 
-        String paymentUrl = frontendUrl + "/checkout/pay?orderId=" + orderId + "&bookingId=" + booking.getId();
-        return new CreateBookingResult(booking, paymentUrl, 15 * 60);
+        String pm = paymentMethod == null || paymentMethod.isBlank() ? "ewallet" : paymentMethod.trim().toLowerCase();
+        String paymentUrl = resolveCheckoutPaymentUrl(booking.getId(), orderId, amountVnd, requestId, pm);
+        return CreateBookingResponse.builder()
+                .bookingId(booking.getId())
+                .orderId(orderId)
+                .paymentUrl(paymentUrl)
+                .expiresInSeconds(15 * 60)
+                .build();
+    }
+
+    /**
+     * Lấy lại link thanh toán MoMo cho đơn đang pending (ví dụ sau khi mở link "Thanh toán ngay").
+     */
+    @Transactional
+    public MomoPayUrlResponse resumeMomoPaymentUrl(UUID bookingId, UUID userId) {
+        Booking b = getById(bookingId, userId);
+        if (!"pending".equalsIgnoreCase(b.getStatus())) {
+            throw new BadRequestException("Đơn không còn chờ thanh toán");
+        }
+        Payment p = latestPayment(b);
+        if (p == null || p.getOrderId() == null || p.getOrderId().isBlank()) {
+            throw new BadRequestException("Không tìm thấy giao dịch thanh toán");
+        }
+        if (p.getStatus() != null && !"pending".equalsIgnoreCase(p.getStatus())) {
+            throw new BadRequestException("Giao dịch không còn ở trạng thái chờ thanh toán");
+        }
+        if (!momoPaymentService.isConfigured()) {
+            throw new BadRequestException("Chưa cấu hình MoMo (MOMO_PARTNER_CODE, MOMO_ACCESS_KEY, MOMO_SECRET_KEY)");
+        }
+        String requestId = UUID.randomUUID().toString();
+        p.setRequestId(requestId);
+        paymentRepository.save(p);
+        long amountVnd = p.getAmount().setScale(0, RoundingMode.HALF_UP).longValue();
+        String payUrl = momoPaymentService.createPaymentUrl(
+                p.getOrderId(), amountVnd, "FlourishTravel " + p.getOrderId(), requestId);
+        return MomoPayUrlResponse.builder().paymentUrl(payUrl).build();
+    }
+
+    /**
+     * Sau khi MoMo redirect về (resultCode=0 trên URL): tra cứu server MoMo rồi cập nhật booking/payment.
+     * Bắt buộc khi IPN không gọi được tới BE (localhost, firewall).
+     */
+    @Transactional
+    public void syncMomoPaymentAfterReturn(UUID userId, String orderId) {
+        if (orderId == null || orderId.isBlank()) {
+            throw new BadRequestException("Thiếu orderId");
+        }
+        String oid = orderId.trim();
+        Payment p = paymentRepository.findByOrderId(oid)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment", oid));
+        Booking b = p.getBooking();
+        if (!b.getUser().getId().equals(userId)) {
+            throw new ResourceNotFoundException("Payment", oid);
+        }
+        if ("paid".equalsIgnoreCase(b.getStatus())) {
+            return;
+        }
+        if (!momoPaymentService.isConfigured()) {
+            throw new BadRequestException("Chưa cấu hình MoMo trên server");
+        }
+        MomoGatewayQueryResult q = momoPaymentService.queryTransactionStatus(oid);
+        if (q.resultCode() != 0) {
+            log.info("MoMo query orderId={} resultCode={} message={}", oid, q.resultCode(), q.message());
+            throw new BadRequestException(
+                    "MoMo chưa xác nhận thanh toán thành công"
+                            + (q.message() != null && !q.message().isBlank() ? ": " + q.message() : " (mã " + q.resultCode() + ")"));
+        }
+        momoPaymentCompletionService.applyPaidByOrderId(oid, q.transId());
+    }
+
+    private String resolveCheckoutPaymentUrl(UUID bookingId, String orderId, long amountVnd, String requestId, String paymentMethod) {
+        if ("ewallet".equals(paymentMethod)) {
+            if (momoPaymentService.isConfigured()) {
+                return momoPaymentService.createPaymentUrl(orderId, amountVnd, "FlourishTravel " + orderId, requestId);
+            }
+            log.warn("MoMo credentials missing — redirecting to /checkout/result without gateway");
+            return UrlUtils.joinBaseAndPath(frontendUrl, "/checkout/result?bookingId=" + bookingId + "&pending=1");
+        }
+        return UrlUtils.joinBaseAndPath(frontendUrl, "/checkout/result?bookingId=" + bookingId + "&method=" + paymentMethod);
     }
 
     @Transactional
@@ -178,14 +460,39 @@ public class BookingService {
         sessionRepository.save(session);
     }
 
+    /**
+     * Không cho đặt thêm tour có ngày chồng lên chuyến đã đặt mà chuyến đó chưa kết thúc (theo ngày).
+     */
+    private void assertNoOverlappingActiveTrip(UUID userId, TourSession newSession) {
+        LocalDate today = LocalDate.now();
+        LocalDate ns = newSession.getStartDate();
+        LocalDate ne = newSession.getEndDate();
+        if (ns == null || ne == null) {
+            return;
+        }
+        long n = bookingRepository.countActiveBookingsOverlappingDateRange(userId, today, ns, ne);
+        if (n > 0) {
+            throw new BadRequestException(
+                    "Bạn đang có chuyến đi chưa kết thúc trùng ngày với lịch này. "
+                            + "Vui lòng chọn tour hoặc ngày khác, hoặc hoàn tất / hủy đơn chuyến hiện tại trước.");
+        }
+    }
+
     @Transactional(readOnly = true)
-    public ValidatePromoResult validatePromo(String code, UUID sessionId, int guestCount) {
+    public ValidatePromoResult validatePromo(String code, UUID sessionId, int guestCount, UUID userIdOrNull) {
         if (code == null || code.isBlank()) {
             return new ValidatePromoResult(false, BigDecimal.ZERO, "Mã không được để trống");
         }
         TourSession session = sessionRepository.findById(sessionId).orElse(null);
         if (session == null) {
             return new ValidatePromoResult(false, BigDecimal.ZERO, "Session không tồn tại");
+        }
+        if (userIdOrNull != null) {
+            try {
+                assertNoOverlappingActiveTrip(userIdOrNull, session);
+            } catch (BadRequestException ex) {
+                return new ValidatePromoResult(false, BigDecimal.ZERO, ex.getMessage());
+            }
         }
         BigDecimal unitPrice = session.getTour().getBasePrice() != null ? session.getTour().getBasePrice() : BigDecimal.ZERO;
         BigDecimal totalAmount = unitPrice.multiply(BigDecimal.valueOf(guestCount));
@@ -220,6 +527,44 @@ public class BookingService {
         return refundRepository.save(refund);
     }
 
-    public record CreateBookingResult(Booking booking, String paymentUrl, int expiresInSeconds) {}
     public record ValidatePromoResult(boolean valid, BigDecimal discountAmount, String message) {}
+
+    /**
+     * Kiểm tra trước khi chuyển sang checkout: lịch mở, đủ chỗ; nếu có user thì kiểm tra trùng lịch.
+     */
+    @Transactional(readOnly = true)
+    public ValidateSessionResult validateSessionForBooking(UUID tourIdOrNull, UUID sessionId, int guestCount, UUID userIdOrNull) {
+        if (sessionId == null) {
+            return new ValidateSessionResult(false, "Thiếu lịch khởi hành");
+        }
+        if (guestCount < 1) {
+            return new ValidateSessionResult(false, "Số khách không hợp lệ");
+        }
+        TourSession session = sessionRepository.findById(sessionId).orElse(null);
+        if (session == null) {
+            return new ValidateSessionResult(false, "Lịch khởi hành không tồn tại");
+        }
+        if (tourIdOrNull != null && session.getTour() != null && !tourIdOrNull.equals(session.getTour().getId())) {
+            return new ValidateSessionResult(false, "Lịch không thuộc tour này");
+        }
+        if (!"scheduled".equalsIgnoreCase(session.getStatus())) {
+            return new ValidateSessionResult(false, "Lịch này không còn mở đặt");
+        }
+        int maxP = session.getMaxParticipants() != null ? session.getMaxParticipants() : 0;
+        int cur = session.getCurrentParticipants() != null ? session.getCurrentParticipants() : 0;
+        int available = maxP - cur;
+        if (guestCount > available) {
+            return new ValidateSessionResult(false, "Không đủ chỗ (còn " + Math.max(0, available) + " khách)");
+        }
+        if (userIdOrNull != null) {
+            try {
+                assertNoOverlappingActiveTrip(userIdOrNull, session);
+            } catch (BadRequestException ex) {
+                return new ValidateSessionResult(false, ex.getMessage());
+            }
+        }
+        return new ValidateSessionResult(true, "OK");
+    }
+
+    public record ValidateSessionResult(boolean valid, String message) {}
 }

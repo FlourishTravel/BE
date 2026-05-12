@@ -23,6 +23,7 @@ public class RoleSeeder {
     public void seedRoles() {
         seed("TRAVELER", "Khách hàng – đặt tour, xem chuyến đi, chat");
         seed("TOUR_GUIDE", "Hướng dẫn viên – lịch công tác, quản đoàn, check-in, ghim tin");
+        seed("STAFF", "Nhân viên nội bộ – sales, điều hành, kế toán (không phải HDV)");
         seed("ADMIN", "Quản trị viên – dashboard, CRUD tour/session/user, giao dịch, hoàn tiền");
         log.debug("Roles seeded");
     }

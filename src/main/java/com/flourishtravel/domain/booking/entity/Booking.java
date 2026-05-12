@@ -5,6 +5,7 @@ import com.flourishtravel.domain.tour.entity.TourSession;
 import com.flourishtravel.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.BatchSize;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -67,10 +68,12 @@ public class Booking extends BaseEntity {
     @Column(name = "discount_amount", precision = 15, scale = 2)
     private BigDecimal discountAmount;
 
+    @BatchSize(size = 32)
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<com.flourishtravel.domain.payment.entity.Payment> payments = new ArrayList<>();
 
+    @BatchSize(size = 32)
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<com.flourishtravel.domain.payment.entity.Refund> refunds = new ArrayList<>();

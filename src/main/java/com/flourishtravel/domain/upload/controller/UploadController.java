@@ -1,34 +1,49 @@
 package com.flourishtravel.domain.upload.controller;
 
 import com.flourishtravel.common.dto.ApiResponse;
+import com.flourishtravel.domain.upload.service.UploadStorageService;
 import com.flourishtravel.security.UserPrincipal;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/upload")
 @Slf4j
+@RequiredArgsConstructor
+@Tag(name = "Upload", description = "Tải ảnh hoặc video, nhận URL công khai")
 public class UploadController {
 
-    @Value("${app.upload.dir:uploads}")
-    private String uploadDir;
+    private final UploadStorageService uploadStorageService;
 
-    @Value("${app.api-base-url:http://localhost:8080/api}")
-    private String apiBaseUrl;
-
-    @PostMapping
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+            summary = "Upload ảnh / video",
+            description = "multipart field `file`. Trả về URL (local `/uploads/...` hoặc S3/CDN nếu bật). Nhấn **Authorize** và dán JWT trước khi thử.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
     public ResponseEntity<ApiResponse<String>> upload(
-            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(
+                    description = "Chọn tệp ảnh (image/*) hoặc video (video/*)",
+                    required = true,
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_OCTET_STREAM_VALUE,
+                            schema = @Schema(type = "string", format = "binary")
+                    )
+            )
             @RequestParam("file") MultipartFile file) {
         if (principal == null) {
             return ResponseEntity.status(401).build();
@@ -41,14 +56,7 @@ public class UploadController {
             return ResponseEntity.badRequest().body(ApiResponse.error("Chỉ chấp nhận ảnh hoặc video"));
         }
         try {
-            Path dir = Paths.get(uploadDir).toAbsolutePath().normalize();
-            Files.createDirectories(dir);
-            String ext = contentType.split("/")[1];
-            if (ext.equals("jpeg")) ext = "jpg";
-            String filename = UUID.randomUUID().toString() + "." + ext;
-            Path target = dir.resolve(filename);
-            Files.copy(file.getInputStream(), target);
-            String url = apiBaseUrl + "/uploads/" + filename;
+            String url = uploadStorageService.store(file);
             return ResponseEntity.ok(ApiResponse.ok("Tải lên thành công", url));
         } catch (IOException e) {
             log.error("Upload failed", e);

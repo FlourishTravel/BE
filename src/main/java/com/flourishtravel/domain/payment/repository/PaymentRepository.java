@@ -40,10 +40,10 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
         LEFT JOIN b.user u
         LEFT JOIN b.session s
         LEFT JOIN s.tour t
-        WHERE (:status IS NULL OR LOWER(p.status) = LOWER(:status))
-          AND (:provider IS NULL OR LOWER(p.provider) = LOWER(:provider))
-          AND (:from IS NULL OR p.createdAt >= :from)
-          AND (:to IS NULL OR p.createdAt <= :to)
+        WHERE (:status IS NULL OR p.status = :status)
+          AND (:provider IS NULL OR p.provider = :provider)
+          AND p.createdAt >= :from
+          AND p.createdAt <= :to
           AND (
                 LOWER(COALESCE(u.fullName, '')) LIKE :pattern
              OR LOWER(COALESCE(u.email, ''))    LIKE :pattern

@@ -62,6 +62,7 @@ public class AdminBookingService {
     private final PaymentRepository paymentRepository;
     private final RefundRepository refundRepository;
     private final UserRepository userRepository;
+    private final SessionParticipantSyncService sessionParticipantSyncService;
 
     // ---------- Queries ----------
 
@@ -174,6 +175,9 @@ public class AdminBookingService {
 
         b.setStatus(target);
         Booking saved = bookingRepository.save(b);
+        if ("paid".equals(target)) {
+            sessionParticipantSyncService.syncPaidBooking(saved.getId());
+        }
         log.info("[AdminBooking] {} status: {} -> {} (note={})", saved.getId(), current, target, req.getNote());
         return toDetail(saved);
     }
@@ -214,6 +218,7 @@ public class AdminBookingService {
         if (newPaid.compareTo(b.getTotalAmount()) >= 0 && "pending".equals(b.getStatus())) {
             b.setStatus("paid");
             bookingRepository.save(b);
+            sessionParticipantSyncService.syncPaidBooking(b.getId());
         }
         return adminDetail(b.getId());
     }

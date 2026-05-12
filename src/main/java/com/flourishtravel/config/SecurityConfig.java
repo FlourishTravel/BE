@@ -32,7 +32,7 @@ public class SecurityConfig {
             .exceptionHandling(e -> e.authenticationEntryPoint(jwtEntryPoint))
             .authorizeHttpRequests(a -> a
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                .requestMatchers("/chatbot-demo.html").permitAll()
+                .requestMatchers("/chatbot-demo.html", "/upload-test.html").permitAll()
                 .requestMatchers("/h2-console/**").permitAll()
                 .requestMatchers("/auth/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/tours", "/tours/**").permitAll()
@@ -41,6 +41,7 @@ public class SecurityConfig {
                 .requestMatchers("/chatbot/config", "/chatbot/config/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/chatbot/nearby-places", "/chatbot/weather-forecast").permitAll()
                 .requestMatchers("/payments/momo/ipn").permitAll()
+                .requestMatchers(HttpMethod.POST, "/bookings/validate-session").permitAll()
                 .requestMatchers("/contact-requests").permitAll()
                 .requestMatchers("/uploads/**").permitAll()
                 .requestMatchers("/ws/**").authenticated()

@@ -1,10 +1,14 @@
 package com.flourishtravel.domain.guide.controller;
 
 import com.flourishtravel.common.dto.ApiResponse;
-import com.flourishtravel.domain.booking.entity.SessionCheckin;
+import com.flourishtravel.domain.guide.dto.GuideSessionDetailDto;
+import com.flourishtravel.domain.guide.dto.GuideSessionGuestsDto;
+import com.flourishtravel.domain.guide.dto.GuideSessionMemberDto;
+import com.flourishtravel.domain.guide.dto.GuideSessionSummaryDto;
+import com.flourishtravel.domain.guide.dto.ParticipantActivityAttendanceResultDto;
+import com.flourishtravel.domain.guide.dto.SessionCheckinResultDto;
+import com.flourishtravel.domain.guide.dto.SessionParticipantResultDto;
 import com.flourishtravel.domain.guide.service.GuideService;
-import com.flourishtravel.domain.tour.entity.TourSession;
-import com.flourishtravel.domain.user.entity.User;
 import com.flourishtravel.security.UserPrincipal;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +29,7 @@ public class GuideController {
     private final GuideService guideService;
 
     @GetMapping("/sessions")
-    public ResponseEntity<ApiResponse<List<TourSession>>> getMySessions(
+    public ResponseEntity<ApiResponse<List<GuideSessionSummaryDto>>> getMySessions(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer year,
@@ -33,45 +37,110 @@ public class GuideController {
         if (principal == null) {
             return ResponseEntity.status(401).build();
         }
-        List<TourSession> sessions = guideService.getMySessions(principal.getId(), year, month, week);
+        List<GuideSessionSummaryDto> sessions = guideService.getMySessions(principal.getId(), year, month, week);
         return ResponseEntity.ok(ApiResponse.ok(sessions));
     }
 
     @GetMapping("/sessions/{id}")
-    public ResponseEntity<ApiResponse<TourSession>> getSession(
+    public ResponseEntity<ApiResponse<GuideSessionDetailDto>> getSession(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID id) {
         if (principal == null) {
             return ResponseEntity.status(401).build();
         }
-        TourSession session = guideService.getSessionById(id, principal.getId());
+        GuideSessionDetailDto session = guideService.getSessionById(id, principal.getId());
         return ResponseEntity.ok(ApiResponse.ok(session));
     }
 
     @GetMapping("/sessions/{sessionId}/members")
-    public ResponseEntity<ApiResponse<List<User>>> getSessionMembers(
+    public ResponseEntity<ApiResponse<List<GuideSessionMemberDto>>> getSessionMembers(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID sessionId) {
         if (principal == null) {
             return ResponseEntity.status(401).build();
         }
-        List<User> members = guideService.getSessionMembers(sessionId, principal.getId());
+        List<GuideSessionMemberDto> members = guideService.getSessionMembers(sessionId, principal.getId());
         return ResponseEntity.ok(ApiResponse.ok(members));
     }
 
+    /** Booking đã thanh toán + khách kèm đơn, điểm đón, khẩn cấp — cho trang Quản lý khách HDV. */
+    @GetMapping("/sessions/{sessionId}/guests")
+    public ResponseEntity<ApiResponse<GuideSessionGuestsDto>> getSessionGuests(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID sessionId) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        GuideSessionGuestsDto data = guideService.getSessionGuestsBookings(sessionId, principal.getId());
+        return ResponseEntity.ok(ApiResponse.ok(data));
+    }
+
     @PostMapping("/checkins")
-    public ResponseEntity<ApiResponse<SessionCheckin>> checkin(
+    public ResponseEntity<ApiResponse<SessionCheckinResultDto>> checkin(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestBody GuideCheckinRequest request) {
         if (principal == null) {
             return ResponseEntity.status(401).build();
         }
-        SessionCheckin checkin = guideService.checkin(
+        SessionCheckinResultDto checkin = guideService.checkin(
                 principal.getId(),
                 request.getSessionId(),
                 request.getUserId(),
                 request.getCheckInType());
         return ResponseEntity.ok(ApiResponse.ok("Đã check-in", checkin));
+    }
+
+    @PostMapping("/sessions/{sessionId}/participants/{participantId}/check-in")
+    public ResponseEntity<ApiResponse<SessionParticipantResultDto>> checkInParticipant(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID sessionId,
+            @PathVariable UUID participantId) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        SessionParticipantResultDto p = guideService.checkInParticipant(principal.getId(), sessionId, participantId);
+        return ResponseEntity.ok(ApiResponse.ok("Đã điểm danh", p));
+    }
+
+    @PostMapping("/sessions/{sessionId}/participants/{participantId}/check-out")
+    public ResponseEntity<ApiResponse<SessionParticipantResultDto>> checkOutParticipant(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID sessionId,
+            @PathVariable UUID participantId) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        SessionParticipantResultDto p = guideService.checkOutParticipant(principal.getId(), sessionId, participantId);
+        return ResponseEntity.ok(ApiResponse.ok("Đã check-out", p));
+    }
+
+    /** Điểm danh tại một hoạt động / địa điểm trong lịch trình tour. */
+    @PostMapping("/sessions/{sessionId}/participants/{participantId}/activities/{activityId}/check-in")
+    public ResponseEntity<ApiResponse<ParticipantActivityAttendanceResultDto>> checkInParticipantAtActivity(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID sessionId,
+            @PathVariable UUID participantId,
+            @PathVariable UUID activityId) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        ParticipantActivityAttendanceResultDto row = guideService.checkInParticipantAtActivity(
+                principal.getId(), sessionId, participantId, activityId);
+        return ResponseEntity.ok(ApiResponse.ok("Đã điểm danh tại điểm", row));
+    }
+
+    @PostMapping("/sessions/{sessionId}/participants/{participantId}/activities/{activityId}/check-out")
+    public ResponseEntity<ApiResponse<ParticipantActivityAttendanceResultDto>> checkOutParticipantAtActivity(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID sessionId,
+            @PathVariable UUID participantId,
+            @PathVariable UUID activityId) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        ParticipantActivityAttendanceResultDto row = guideService.checkOutParticipantAtActivity(
+                principal.getId(), sessionId, participantId, activityId);
+        return ResponseEntity.ok(ApiResponse.ok("Đã check-out tại điểm", row));
     }
 
     @Data

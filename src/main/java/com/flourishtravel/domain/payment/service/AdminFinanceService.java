@@ -58,6 +58,8 @@ public class AdminFinanceService {
     private static final DateTimeFormatter MONTH_LABEL = DateTimeFormatter.ofPattern("MM/yyyy");
     private static final int CHART_MONTHS = 6;
     private static final int TOP_TOURS_LIMIT = 5;
+    private static final Instant QUERY_MIN_INSTANT = Instant.parse("1900-01-01T00:00:00Z");
+    private static final Instant QUERY_MAX_INSTANT = Instant.parse("9999-12-31T23:59:59.999Z");
 
     private final PaymentRepository paymentRepository;
     private final RefundRepository refundRepository;
@@ -176,9 +178,11 @@ public class AdminFinanceService {
                                                     Instant from, Instant to, Pageable pageable) {
         String term = (q == null) ? "" : q.trim().toLowerCase(Locale.ROOT);
         String pattern = "%" + term + "%";
-        String normStatus = blankToNull(status);
-        String normProvider = blankToNull(provider);
+        String normStatus = normalizeLower(status);
+        String normProvider = normalizeLower(provider);
         String normKind = blankToNull(kind);
+        Instant fromBound = from == null ? QUERY_MIN_INSTANT : from;
+        Instant toBound = to == null ? QUERY_MAX_INSTANT : to;
 
         // Tìm theo "mã giao dịch" (PMT-/RFD-) bằng cách so prefix UUID nếu user gõ PMT-XXXXXXXX.
         boolean codeMatch = false;
@@ -192,7 +196,7 @@ public class AdminFinanceService {
 
         // PAYMENTS
         if (normKind == null || "payment".equalsIgnoreCase(normKind)) {
-            Page<Payment> payments = paymentRepository.adminSearch(normStatus, normProvider, pattern, from, to,
+            Page<Payment> payments = paymentRepository.adminSearch(normStatus, normProvider, pattern, fromBound, toBound,
                     PageRequest.of(0, Integer.MAX_VALUE));
             for (Payment p : payments.getContent()) {
                 if (codeMatch && !p.getId().toString().replace("-", "").toLowerCase(Locale.ROOT).startsWith(idPrefix)) {
@@ -206,7 +210,7 @@ public class AdminFinanceService {
         if (normKind == null || "refund".equalsIgnoreCase(normKind)) {
             if (normProvider == null) {
                 String refundStatus = normalizeRefundStatus(normStatus);
-                Page<Refund> refunds = refundRepository.adminSearch(refundStatus, pattern, from, to,
+                Page<Refund> refunds = refundRepository.adminSearch(refundStatus, pattern, fromBound, toBound,
                         PageRequest.of(0, Integer.MAX_VALUE));
                 for (Refund r : refunds.getContent()) {
                     if (codeMatch && !r.getId().toString().replace("-", "").toLowerCase(Locale.ROOT).startsWith(idPrefix)) {
@@ -533,5 +537,10 @@ public class AdminFinanceService {
 
     private static String blankToNull(String s) {
         return (s == null || s.isBlank() || "all".equalsIgnoreCase(s)) ? null : s.trim();
+    }
+
+    private static String normalizeLower(String s) {
+        String value = blankToNull(s);
+        return value == null ? null : value.toLowerCase(Locale.ROOT);
     }
 }

@@ -2,7 +2,10 @@ package com.flourishtravel.config;
 
 import com.flourishtravel.domain.booking.entity.Booking;
 import com.flourishtravel.domain.booking.entity.BookingGuest;
+import com.flourishtravel.domain.booking.entity.SessionParticipant;
 import com.flourishtravel.domain.booking.repository.BookingRepository;
+import com.flourishtravel.domain.booking.repository.SessionParticipantRepository;
+import com.flourishtravel.domain.booking.service.SessionParticipantSyncService;
 import com.flourishtravel.domain.payment.entity.Payment;
 import com.flourishtravel.domain.payment.entity.Refund;
 import com.flourishtravel.domain.payment.repository.PaymentRepository;
@@ -30,6 +33,7 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Random;
 import java.util.UUID;
 
@@ -41,8 +45,11 @@ import java.util.UUID;
  *   - Payments tương ứng (paid / partial / refunded)
  *   - 2 refund pending (KH yêu cầu hoàn tiền)
  *   - Gán HDV cho một số session để dùng cho trang Tour Operations
+ *   - Đồng bộ session_participants từ booking paid khi bảng còn trống (backfill + demo điểm danh)
  *
- * Idempotent: nếu đã có > 5 booking thì bỏ qua (đã seed).
+ * Idempotent: nếu đã có > 5 booking thì bỏ qua seed booking hàng loạt; luôn bổ sung đơn cho {@code traveler@example.com}
+ * nếu user đó chưa có booking (để trang "Chuyến đi của tôi" có dữ liệu khi đăng nhập Traveler@123).
+ * Participants chỉ seed khi chưa có dòng nào.
  *
  * Mật khẩu mặc định cho mọi tài khoản seed: "Demo@123".
  */
@@ -56,6 +63,8 @@ public class DemoDataSeeder {
     private final TourRepository tourRepository;
     private final TourSessionRepository tourSessionRepository;
     private final BookingRepository bookingRepository;
+    private final SessionParticipantRepository sessionParticipantRepository;
+    private final SessionParticipantSyncService sessionParticipantSyncService;
     private final PaymentRepository paymentRepository;
     private final RefundRepository refundRepository;
     private final PasswordEncoder passwordEncoder;
@@ -70,6 +79,8 @@ public class DemoDataSeeder {
                 .orElseThrow(() -> new IllegalStateException("Role TOUR_GUIDE not found. Run RoleSeeder first."));
         Role travelerRole = roleRepository.findByName("TRAVELER")
                 .orElseThrow(() -> new IllegalStateException("Role TRAVELER not found."));
+        Role staffRole = roleRepository.findByName("STAFF")
+                .orElseThrow(() -> new IllegalStateException("Role STAFF not found."));
 
         List<Tour> tours = tourRepository.findAll();
         if (tours.isEmpty()) {
@@ -79,6 +90,9 @@ public class DemoDataSeeder {
 
         // 1) Tour guides — luôn idempotent, bỏ qua HDV đã có email.
         List<User> guides = seedTourGuides(guideRole);
+
+        // 1b) Nhân viên nội bộ (sales / điều hành / kế toán) — demo tab phòng ban trên admin.
+        seedInternalStaff(staffRole);
 
         // 2) Customers — luôn idempotent, bỏ qua KH đã có email.
         List<User> customers = seedCustomers(travelerRole);
@@ -94,8 +108,56 @@ public class DemoDataSeeder {
             seedBookings(customers, tours);
         }
 
-        log.info("Demo data seeded: {} guides, {} customers, {} bookings total (login: <email> / {})",
-                guides.size(), customers.size(), bookingRepository.count(), DEFAULT_PASSWORD);
+        ensureDefaultTravelerHasDemoBookings();
+
+        seedSessionParticipantsIfEmpty();
+
+        log.info("Demo data seeded: {} guides, {} customers, {} bookings, {} session participants (login: <email> / {})",
+                guides.size(), customers.size(), bookingRepository.count(),
+                sessionParticipantRepository.count(), DEFAULT_PASSWORD);
+    }
+
+    /**
+     * Khi bảng session_participants trống: đồng bộ từ mọi booking paid (giống luồng production),
+     * rồi gán check-in/out demo để HDV thấy trạng thái hỗn hợp.
+     */
+    private void seedSessionParticipantsIfEmpty() {
+        long existing = sessionParticipantRepository.count();
+        if (existing > 0) {
+            log.info("session_participants already present ({}). Skip participant sync seed.", existing);
+            return;
+        }
+
+        List<Booking> paid = bookingRepository.findAllByStatusIgnoreCase("paid");
+        if (paid.isEmpty()) {
+            log.warn("No paid bookings found. Skip session_participants seed.");
+            return;
+        }
+
+        for (Booking b : paid) {
+            sessionParticipantSyncService.syncPaidBooking(b.getId());
+        }
+        log.info("Synced session_participants from {} paid booking(s).", paid.size());
+        enrichDemoParticipantAttendance();
+    }
+
+    private void enrichDemoParticipantAttendance() {
+        List<SessionParticipant> rows = sessionParticipantRepository.findAll();
+        if (rows.isEmpty()) {
+            return;
+        }
+        Random rnd = new Random(42);
+        Instant base = Instant.now();
+        for (SessionParticipant p : rows) {
+            if (rnd.nextDouble() < 0.65) {
+                p.setCheckInAt(base.minus(rnd.nextInt(180), ChronoUnit.MINUTES));
+                if (rnd.nextDouble() < 0.4 && p.getCheckInAt() != null) {
+                    p.setCheckOutAt(p.getCheckInAt().plus(30 + rnd.nextInt(360), ChronoUnit.MINUTES));
+                }
+            }
+            sessionParticipantRepository.save(p);
+        }
+        log.info("Applied demo check-in/out to {} session participant row(s).", rows.size());
     }
 
     // ---------------- Tour Guides ----------------
@@ -143,16 +205,58 @@ public class DemoDataSeeder {
                     .dateOfBirth(d.dob)
                     .address(d.address)
                     .nationality("Việt Nam")
+                    .jobTitle("Hướng dẫn viên")
+                    .department("GUIDE")
+                    .employmentStatus("active")
                     .role(guideRole)
                     .isActive(true)
                     .marketingOptIn(false)
                     .lastLoginAt(Instant.now().minus(rand(1, 7), ChronoUnit.DAYS))
                     .adminNote("HDV — đã được duyệt hồ sơ. Liên hệ qua email công ty.")
                     .build();
+            u = userRepository.save(u);
+            u.setEmployeeCode(employeeCodeFromId(u.getId()));
             result.add(userRepository.save(u));
         }
         log.info("Seeded {} tour guides", result.size());
         return result;
+    }
+
+    /** Nhân viên STAFF (sales / điều hành / kế toán) — bỏ qua nếu email đã tồn tại. */
+    private void seedInternalStaff(Role staffRole) {
+        record StaffDef(String fullName, String email, String phone, String dept, String jobTitle, String employmentStatus) { }
+
+        List<StaffDef> defs = List.of(
+                new StaffDef("Nguyễn Trần Minh", "sales.demo@flourishtravel.com", "0933111222", "SALES", "Sales Tour", "active"),
+                new StaffDef("Trần Hương Ly", "ops.demo@flourishtravel.com", "0933222333", "OPERATIONS", "Điều hành tour", "active"),
+                new StaffDef("Phạm Thanh Mai", "finance.demo@flourishtravel.com", "0933333444", "FINANCE", "Kế toán", "on_leave")
+        );
+
+        int added = 0;
+        for (StaffDef d : defs) {
+            if (userRepository.findByEmail(d.email()).isPresent()) {
+                continue;
+            }
+            User u = User.builder()
+                    .email(d.email())
+                    .passwordHash(passwordEncoder.encode(DEFAULT_PASSWORD))
+                    .fullName(d.fullName())
+                    .phone(d.phone())
+                    .jobTitle(d.jobTitle())
+                    .department(d.dept())
+                    .employmentStatus(d.employmentStatus().toLowerCase(Locale.ROOT))
+                    .role(staffRole)
+                    .isActive(true)
+                    .marketingOptIn(false)
+                    .lastLoginAt(Instant.now().minus(rand(1, 14), ChronoUnit.DAYS))
+                    .adminNote("Tài khoản demo nội bộ — trang Quản lý nhân viên.")
+                    .build();
+            u = userRepository.save(u);
+            u.setEmployeeCode(employeeCodeFromId(u.getId()));
+            userRepository.save(u);
+            added++;
+        }
+        log.info("Seeded {} internal STAFF users (demo; skipped if email exists)", added);
     }
 
     // ---------------- Customers ----------------
@@ -296,41 +400,7 @@ public class DemoDataSeeder {
 
                 String status = pickStatus(rnd, tier, i, wantPast);
                 int guests = 1 + rnd.nextInt(4);
-                BigDecimal price = s.getTour().getBasePrice() != null ? s.getTour().getBasePrice() : new BigDecimal("2000000");
-                BigDecimal total = price.multiply(BigDecimal.valueOf(guests));
-
-                Booking b = Booking.builder()
-                        .user(cust)
-                        .session(s)
-                        .totalAmount(total)
-                        .guestCount(guests)
-                        .status(status)
-                        .contactPhone(cust.getPhone())
-                        .pickupAddress(cust.getAddress())
-                        .guestNames(buildGuestNames(cust, guests))
-                        .emergencyContactName("Người thân của " + firstName(cust.getFullName()))
-                        .emergencyContactPhone("09" + (10000000 + rnd.nextInt(90000000)))
-                        .specialRequests(rnd.nextDouble() < 0.4
-                                ? "Yêu cầu ghế cửa sổ, ăn chay cho 1 khách"
-                                : null)
-                        .build();
-                b = bookingRepository.save(b);
-
-                // BookingGuests
-                attachGuests(b, cust, guests);
-
-                // Payments
-                attachPaymentsForStatus(b, status, total, rnd);
-
-                // Refunds (10% chance for paid/confirmed/cancelled with paid)
-                maybeAttachRefund(b, status, rnd);
-
-                // Cập nhật current_participants nếu booking không cancelled
-                if (!"cancelled".equals(status)) {
-                    s.setCurrentParticipants(Math.min(s.getMaxParticipants(),
-                            (s.getCurrentParticipants() == null ? 0 : s.getCurrentParticipants()) + guests));
-                    tourSessionRepository.save(s);
-                }
+                seedOneSyntheticBooking(cust, s, status, guests, rnd);
             }
         }
 
@@ -341,6 +411,79 @@ public class DemoDataSeeder {
                 userRepository.save(c);
             }
         }
+    }
+
+    /**
+     * Một đơn demo đầy đủ (khách, thanh toán/refund tùy status, cập nhật chỗ session).
+     */
+    private void seedOneSyntheticBooking(User cust, TourSession s, String status, int guests, Random rnd) {
+        BigDecimal price = s.getTour().getBasePrice() != null ? s.getTour().getBasePrice() : new BigDecimal("2000000");
+        BigDecimal total = price.multiply(BigDecimal.valueOf(guests));
+
+        Booking b = Booking.builder()
+                .user(cust)
+                .session(s)
+                .totalAmount(total)
+                .guestCount(guests)
+                .status(status)
+                .contactPhone(cust.getPhone())
+                .pickupAddress(cust.getAddress())
+                .guestNames(buildGuestNames(cust, guests))
+                .emergencyContactName("Người thân của " + firstName(cust.getFullName()))
+                .emergencyContactPhone("09" + (10000000 + rnd.nextInt(90000000)))
+                .specialRequests(rnd.nextDouble() < 0.4
+                        ? "Yêu cầu ghế cửa sổ, ăn chay cho 1 khách"
+                        : null)
+                .build();
+        b = bookingRepository.save(b);
+
+        attachGuests(b, cust, guests);
+        attachPaymentsForStatus(b, status, total, rnd);
+        maybeAttachRefund(b, status, rnd);
+
+        if (!"cancelled".equals(status)) {
+            s.setCurrentParticipants(Math.min(s.getMaxParticipants(),
+                    (s.getCurrentParticipants() == null ? 0 : s.getCurrentParticipants()) + guests));
+            tourSessionRepository.save(s);
+        }
+    }
+
+    /**
+     * UserSeeder tạo {@code traveler@example.com} nhưng {@link #seedBookings} chỉ gán đơn cho 15 email demo —
+     * bổ sung 4 đơn (paid / pending / cancelled) để FE luôn có dữ liệu khi đăng nhập tài khoản traveler mặc định.
+     */
+    private void ensureDefaultTravelerHasDemoBookings() {
+        User traveler = userRepository.findByEmail("traveler@example.com").orElse(null);
+        if (traveler == null) {
+            log.debug("traveler@example.com not found, skip default traveler bookings.");
+            return;
+        }
+        if (bookingRepository.countByUser_Id(traveler.getId()) > 0) {
+            log.debug("traveler@example.com already has booking(s), skip.");
+            return;
+        }
+        List<TourSession> scheduled = tourSessionRepository.findAll().stream()
+                .filter(s -> "scheduled".equalsIgnoreCase(s.getStatus()))
+                .toList();
+        if (scheduled.isEmpty()) {
+            log.warn("No scheduled tour sessions — cannot seed traveler@example.com bookings.");
+            return;
+        }
+        Random rnd = new Random(99);
+        record TravelerPlan(String status, int guests) { }
+        List<TravelerPlan> plans = List.of(
+                new TravelerPlan("paid", 2),
+                new TravelerPlan("paid", 1),
+                new TravelerPlan("pending", 2),
+                new TravelerPlan("cancelled", 1)
+        );
+        int i = 0;
+        for (TravelerPlan p : plans) {
+            TourSession s = scheduled.get(i % scheduled.size());
+            seedOneSyntheticBooking(traveler, s, p.status(), p.guests(), rnd);
+            i++;
+        }
+        log.info("Seeded {} demo booking(s) for traveler@example.com (password: Traveler@123)", plans.size());
     }
 
     /** Tạo session quá khứ (đã hoàn thành) cho N tour đầu để có booking 'completed'. */
@@ -385,20 +528,14 @@ public class DemoDataSeeder {
 
     private void attachGuests(Booking b, User cust, int guests) {
         List<BookingGuest> gs = b.getBookingGuests();
-        gs.add(BookingGuest.builder()
-                .booking(b)
-                .fullName(cust.getFullName())
-                .idNumber("0790" + (100000000L + new Random(cust.getId().hashCode()).nextInt(900000000)))
-                .dateOfBirth(cust.getDateOfBirth())
-                .sortOrder(0)
-                .build());
+        // Chỉ lưu khách kèm — người đặt đã có trên booking.user và roster LEAD; tránh trùng 1 slot.
         for (int i = 1; i < guests; i++) {
             gs.add(BookingGuest.builder()
                     .booking(b)
                     .fullName("Người đi cùng " + i + " - " + firstName(cust.getFullName()))
                     .idNumber("0790" + (100000000L + new Random(cust.getId().hashCode() + i).nextInt(900000000)))
                     .dateOfBirth(cust.getDateOfBirth() == null ? LocalDate.of(1990, 1, 1) : cust.getDateOfBirth().minusYears(2 * i))
-                    .sortOrder(i)
+                    .sortOrder(i - 1)
                     .build());
         }
         bookingRepository.save(b);
@@ -501,6 +638,10 @@ public class DemoDataSeeder {
     }
 
     // ---------------- Helpers ----------------
+
+    private static String employeeCodeFromId(UUID id) {
+        return "EMP-" + id.toString().replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT);
+    }
 
     private static int rand(int min, int max) {
         return min + (int) (Math.random() * (max - min + 1));

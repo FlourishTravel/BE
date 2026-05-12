@@ -32,9 +32,9 @@ public interface RefundRepository extends JpaRepository<Refund, UUID> {
         LEFT JOIN b.user u
         LEFT JOIN b.session s
         LEFT JOIN s.tour t
-        WHERE (:status IS NULL OR LOWER(r.status) = LOWER(:status))
-          AND (:from IS NULL OR r.createdAt >= :from)
-          AND (:to IS NULL OR r.createdAt <= :to)
+        WHERE (:status IS NULL OR r.status = :status)
+          AND r.createdAt >= :from
+          AND r.createdAt <= :to
           AND (
                 LOWER(COALESCE(u.fullName, '')) LIKE :pattern
              OR LOWER(COALESCE(u.email, ''))    LIKE :pattern

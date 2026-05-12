@@ -31,7 +31,7 @@ public class TourController {
     private final TourService tourService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<Page<Tour>>> list(
+    public ResponseEntity<ApiResponse<Page<TourSummaryDto>>> list(
             @RequestParam(required = false) String destination,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
@@ -41,7 +41,7 @@ public class TourController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size) {
         // Native query đã có ORDER BY t.created_at; không truyền Sort để tránh Spring nối "t.createdAt" (sai tên cột PostgreSQL)
-        Page<Tour> tours = tourService.search(destination, minPrice, maxPrice, startDate, categoryId,
+        Page<TourSummaryDto> tours = tourService.publicCatalog(destination, minPrice, maxPrice, startDate, categoryId,
                 PageRequest.of(page, size));
         return ResponseEntity.ok(ApiResponse.ok(tours));
     }
@@ -69,23 +69,21 @@ public class TourController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<Tour>> getById(@PathVariable UUID id) {
-        Tour tour = tourService.getById(id);
-        return ResponseEntity.ok(ApiResponse.ok(tour));
+    public ResponseEntity<ApiResponse<TourDetailDto>> getById(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.ok(tourService.getPublicDetail(id)));
     }
 
     @GetMapping("/by-slug/{slug}")
-    public ResponseEntity<ApiResponse<Tour>> getBySlug(@PathVariable String slug) {
-        Tour tour = tourService.getBySlug(slug);
-        return ResponseEntity.ok(ApiResponse.ok(tour));
+    public ResponseEntity<ApiResponse<TourDetailDto>> getBySlug(@PathVariable String slug) {
+        return ResponseEntity.ok(ApiResponse.ok(tourService.getPublicDetailBySlug(slug)));
     }
 
     /** Tour tương tự / Có thể bạn cũng thích (cùng danh mục hoặc mới nhất). */
     @GetMapping("/{id}/similar")
-    public ResponseEntity<ApiResponse<List<Tour>>> getSimilar(
+    public ResponseEntity<ApiResponse<List<TourSummaryDto>>> getSimilar(
             @PathVariable UUID id,
             @RequestParam(defaultValue = "4") int limit) {
-        List<Tour> list = tourService.getSimilarTours(id, Math.min(limit, 20));
+        List<TourSummaryDto> list = tourService.getSimilarSummaries(id, Math.min(limit, 20));
         return ResponseEntity.ok(ApiResponse.ok(list));
     }
 

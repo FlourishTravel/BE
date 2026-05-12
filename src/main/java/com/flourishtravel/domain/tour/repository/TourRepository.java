@@ -104,4 +104,15 @@ public interface TourRepository extends JpaRepository<Tour, UUID> {
     Page<Tour> adminSearch(@Param("pattern") String pattern, Pageable pageable);
 
     long countByCategory_Id(UUID categoryId);
+
+    /**
+     * Lịch trình theo ngày; activities được load lazy với batch (xem TourItinerary.activities).
+     * Không JOIN FETCH hai bag (itineraries + activities) trong một query — MultipleBagFetchException.
+     */
+    @Query("""
+            SELECT DISTINCT t FROM Tour t
+            LEFT JOIN FETCH t.itineraries it
+            WHERE t.id = :id
+            """)
+    Optional<Tour> findByIdWithItinerariesAndActivities(@Param("id") UUID id);
 }
