@@ -6,7 +6,6 @@ import com.flourishtravel.domain.chatbot.repository.ChatbotIntentRepository;
 import com.flourishtravel.domain.chatbot.service.ChatbotConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
