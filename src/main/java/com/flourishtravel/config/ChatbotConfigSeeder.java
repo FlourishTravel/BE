@@ -24,10 +24,7 @@ import java.io.InputStream;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-@ConditionalOnProperties({
-        @ConditionalOnProperty(name = "app.seed.enabled", havingValue = "true", matchIfMissing = true),
-        @ConditionalOnProperty(name = "app.seed.chatbot-config-on-startup", havingValue = "true")
-})
+@ConditionalOnProperty(name = "app.seed.chatbot-config-on-startup", havingValue = "true")
 public class ChatbotConfigSeeder {
 
     private static final String CONFIG_FILE = "chatbot-config-sample.json";
