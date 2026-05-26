@@ -6,9 +6,7 @@ spring:
   config:
     activate:
       on-profile: cloud
-  main:
-    # Mở port 8080 sớm hơn trên instance nhỏ (DO health check TCP)
-    lazy-initialization: true
+  # lazy-init làm actuator/controller có thể chưa map → 404 trên DO
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
