@@ -166,6 +166,9 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludeDevtools>true</excludeDevtools>
+                </configuration>
                 <!-- Chạy local: mvn spring-boot:run → dùng cấu hình mặc định (PostgreSQL). -->
             </plugin>
         </plugins>

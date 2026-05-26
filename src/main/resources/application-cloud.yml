@@ -6,9 +6,13 @@ spring:
   config:
     activate:
       on-profile: cloud
+  main:
+    # Mở port 8080 sớm hơn trên instance nhỏ (DO health check TCP)
+    lazy-initialization: true
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.mail.MailSenderAutoConfiguration
 
   datasource:
     url: jdbc:postgresql://${DB_HOST:db-postgresql-sgp1-flourishtourism-do-user-37760190-0.m.db.ondigitalocean.com}:${DB_PORT:25060}/${DB_NAME:defaultdb}
@@ -35,6 +39,12 @@ management:
     health:
       probes:
         enabled: true
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
 
 logging:
   level:

@@ -60,7 +60,9 @@ git push origin main
 
 **Tạo app:** **Apps → Create App → GitHub** → chọn repo **BE** (không phải monorepo FlourishTravel) → **Source directory** để **`/`** (root) → spec đọc từ **`BE/.do/app.yaml`** (`dockerfile_path: Dockerfile`). Set **`DB_PASSWORD`** và **`JWT_SECRET`** (Secret) trên dashboard.
 
-**Chỉnh tay (không dùng spec):** Web Service → Source directory **`/`** → Dockerfile **`Dockerfile`** → HTTP port **`8080`** → Health check **`/api/swagger-ui.html`**.
+**Chỉnh tay (không dùng spec):** Web Service → Source directory **`/`** → Dockerfile **`Dockerfile`** → HTTP port **`8080`**.
+
+**Health check (bắt buộc nếu báo `connection refused`):** Path **`/api/actuator/health`**, **Initial delay 300s**, Period 20s, Failure threshold 15. Nếu app tạo trước khi có `.do/app.yaml`, vào **Component → Settings → Health Check** chỉnh tay (spec không tự ghi đè). Instance khuyến nghị **1 GB RAM** (`apps-s-1vcpu-1gb`).
 
 **Database:** PostgreSQL DO (`application-cloud.yml`, profile `cloud`). Thêm **Trusted sources** cho App Platform vào cluster DB.
 
