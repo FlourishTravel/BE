@@ -4,6 +4,7 @@ import com.flourishtravel.domain.chatbot.entity.ChatbotTrainingPhrase;
 import com.flourishtravel.domain.chatbot.repository.ChatbotTrainingPhraseRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.annotation.Order;
@@ -17,6 +18,7 @@ import java.util.List;
  * Seed câu hỏi / câu nói mẫu để chatbot map đúng FAQ (training data).
  */
 @Component
+@ConditionalOnProperty(name = "app.seed.enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 @Slf4j
 public class ChatbotTrainingPhraseSeeder {

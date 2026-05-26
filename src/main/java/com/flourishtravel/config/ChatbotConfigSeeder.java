@@ -22,6 +22,7 @@ import java.io.InputStream;
  * Mặc định tắt trên ECS (profile cloud). Idempotent: bỏ qua nếu DB đã có intent.
  */
 @Component
+@ConditionalOnProperty(name = "app.seed.enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 @Slf4j
 @ConditionalOnProperty(name = "app.seed.chatbot-config-on-startup", havingValue = "true")

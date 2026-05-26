@@ -23,4 +23,21 @@ spring:
 
 app:
   seed:
+    enabled: false
     chatbot-config-on-startup: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.flourishtravel: INFO
+    org.springframework.security: WARN

@@ -58,6 +58,8 @@ server:
 # JWT & Encryption
 app:
   seed:
+    # Cloud (profile cloud): false — tránh seed nặng làm chậm startup / fail health check DO.
+    enabled: ${SEED_ENABLED:true}
     # ECS/cloud: false (mặc định). Local dev: bật trong application-dev.yml hoặc SEED_CHATBOT_CONFIG=true
     chatbot-config-on-startup: ${SEED_CHATBOT_CONFIG:false}
   encryption:

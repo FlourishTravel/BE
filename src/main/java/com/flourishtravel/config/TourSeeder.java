@@ -11,6 +11,7 @@ import com.flourishtravel.domain.tour.repository.CategoryRepository;
 import com.flourishtravel.domain.tour.repository.TourRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.annotation.Order;
@@ -28,6 +29,7 @@ import java.util.Map;
  * - Khi đã có tour: bổ sung itinerary/location/video cho tour cũ thiếu; thêm tour mới (slug chưa có) theo danh sách seed.
  */
 @Component
+@ConditionalOnProperty(name = "app.seed.enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 @Slf4j
 public class TourSeeder {
