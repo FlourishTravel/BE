@@ -46,6 +46,95 @@ GitHub **không chạy được** ứng dụng Java/Spring Boot. Bạn cần dep
 
 ---
 
+## 3. DigitalOcean App Platform (repo GitHub **BE**)
+
+Repo **BE** có `pom.xml` ở root nhưng App Platform thường báo *No components detected* khi **chưa có `Dockerfile` trên GitHub** (file chỉ nằm local chưa push).
+
+**Bước bắt buộc — push lên `main`:**
+
+```bash
+git add Dockerfile .dockerignore .do/app.yaml src/main/resources/application-cloud.yml
+git commit -m "chore: add Dockerfile and DO App Platform spec"
+git push origin main
+```
+
+**Tạo app:** **Apps → Create App → GitHub** → chọn repo **BE** (không phải monorepo FlourishTravel) → **Source directory** để **`/`** (root) → spec đọc từ **`BE/.do/app.yaml`** (`dockerfile_path: Dockerfile`). Set **`DB_PASSWORD`** và **`JWT_SECRET`** (Secret) trên dashboard.
+
+**Chỉnh tay (không dùng spec):** Web Service → Source directory **`/`** → Dockerfile **`Dockerfile`** → HTTP port **`8080`** → Health check **`/api/swagger-ui.html`**.
+
+**Database:** PostgreSQL DO (`application-cloud.yml`, profile `cloud`). Thêm **Trusted sources** cho App Platform vào cluster DB.
+
+---
+
+### Monorepo FlourishTravel (tuỳ chọn)
+
+Nếu deploy từ repo gốc **FlourishTravel** (có thư mục `BE/`): dùng **`.do/app.yaml`** ở root monorepo (`source_dir: /BE`). Frontend **FEv2** deploy component riêng.
+
+---
+
+## 4. AWS (Spring Boot JAR trong container)
+
+**Lưu ý (2026):** [AWS App Runner không còn nhận khách hàng mới](https://docs.aws.amazon.com/apprunner/latest/dg/apprunner-availability-change.html); tài khoản mới thường **không tạo được** service App Runner. AWS gợi ý dùng **Amazon ECS Express Mode** (tương đương độ đơn giản, vẫn container + ALB). Trong repo có **`BE/Dockerfile`**: build Maven multi-stage, chạy `app.jar`, port container **8080** (Spring vẫn đọc `PORT` nếu bạn set trên task).
+
+### 4.1. Chuẩn bị
+
+1. **Database:** PostgreSQL (vd. **DigitalOcean** — profile `cloud` trong `application-cloud.yml`). Security Group/task phải **cho phép outbound TCP** tới host DB (vd. `...ondigitalocean.com:25060`). Bật TLS: **`DB_SSL_MODE=require`** (đừng dùng `?sslmode=...` trong biến env — form ECS hay báo *Invalid value* vì ký tự `?`).
+2. **Redis:** `application.yml` bật **spring-boot-starter-data-redis** (host mặc định `localhost`). Trên AWS bạn cần **ElastiCache (Redis)** trong VPC **hoặc** Redis có endpoint public, rồi set `REDIS_HOST` / `REDIS_PORT` (và `REDIS_PASSWORD` nếu có). Nếu chưa có Redis mà app lỗi health/startup, tạm thời dùng ElastiCache tối thiểu hoặc chỉnh cấu hình loại trừ Redis (tương tự profile `dev` trong `application-dev.yml`).
+3. **Biến môi trường:** Không dùng file `.env` trong container. **`Dockerfile` luôn chạy** `--spring.profiles.active=${SPRING_PROFILES_ACTIVE:-cloud}` (nếu ECS để trống hoặc không set thì vẫn là `cloud`). **Bắt buộc** **`DB_PASSWORD`**. Xoá hẳn biến `SPRING_PROFILES_ACTIVE` trên task nếu trước đó set giá trị rỗng (dễ làm mất profile). Thêm `JWT_SECRET`, `FRONTEND_URL`, `API_BASE_URL`, MoMo URL, `REDIS_*`, v.v.
+4. **Context path:** API nằm dưới **`/api`**. Health check ALB nên trỏ path trả 200, ví dụ **`/api/swagger-ui.html`** hoặc **`/api/actuator/health`** (nếu 403 thì đổi path hoặc nới security).
+
+### 4.2. Đăng nhập Docker và push image lên **Amazon ECR**
+
+`Dockerfile` nằm trong thư mục **`BE`** — build **từ trong `BE`** (không phải root monorepo). **Docker Desktop** phải đang chạy. Thay `ACCOUNT_ID`, `REGION`, tên repo nếu khác ví dụ dưới.
+
+**Nếu PowerShell báo `aws` is not recognized:** chưa có [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) — cài MSI hoặc `winget install Amazon.AWSCLI`, đóng mở terminal, chạy `aws --version`. Cách A (PowerShell-only) cần cài module `AWSPowerShell.NetCore`.
+
+**Thứ tự bắt buộc:** `docker login` vào registry ECR **trước** `docker push`. Lỗi `no basic auth credentials` = chưa login hoặc token hết hạn (~12h) → chạy lại lệnh login.
+
+**Cách A — AWS Tools for PowerShell** ([Registry authentication](https://docs.aws.amazon.com/AmazonECR/latest/userguide/registry_auth.html)):
+
+```powershell
+# Đăng nhập ECR (Region trùng repository của bạn, ví dụ us-east-1)
+(Get-ECRLoginCommand -Region us-east-1).Password | docker login --username AWS --password-stdin 083011581293.dkr.ecr.us-east-1.amazonaws.com
+```
+
+**Cách B — AWS CLI v2** (nếu không dùng module PowerShell):
+
+```powershell
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 083011581293.dkr.ecr.us-east-1.amazonaws.com
+```
+
+**Build, tag, push** (ví dụ repository `ftl-be`):
+
+```powershell
+cd D:\CN7\EXE\FlourishTravel\BE
+docker build -t ftl-be .
+docker tag ftl-be:latest 083011581293.dkr.ecr.us-east-1.amazonaws.com/ftl-be:latest
+docker push 083011581293.dkr.ecr.us-east-1.amazonaws.com/ftl-be:latest
+```
+
+Token ECR hết hạn sau ~12 giờ — lỗi `unauthorized` khi push thì chạy lại bước `docker login`.
+
+### 4.3. Amazon ECS Express Mode (thay App Runner, khuyến nghị cho tài khoản mới)
+
+1. **ECR:** Tạo repository → build & push image từ `BE` (mục **3.2**).
+2. Làm theo [Express Mode — Getting started (console hoặc CLI)](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-getting-started.html): một lần tạo service với **container image ECR**, **container port 8080**, IAM `ecsTaskExecutionRole` + `ecsInfrastructureRoleForExpressServices`, env giống bảng Railway.
+3. AWS tự dựng **Fargate + Application Load Balancer** + URL mặc định; chỉ trả tiền tài nguyên (không phí riêng “Express Mode”).
+
+CLI mẫu (đổi ARN, image, tên service): xem [Migration từ App Runner → ECS Express](https://docs.aws.amazon.com/apprunner/latest/dg/apprunner-availability-change.html) (mục `create-express-gateway-service`).
+
+### 4.4. Elastic Beanstalk (Docker)
+
+1. Tạo môi trường **Docker** trên Amazon Linux 2.
+2. Deploy: đóng gói image lên ECR + `Dockerrun.aws.json` (v2) hoặc đẩy `Dockerfile` kèm context `BE` theo tài liệu Beanstalk Docker.
+3. Cấu hình **instance role** nếu app cần gọi S3/Bedrock (IAM), và **security group** mở inbound **8080** (hoặc port proxy mà Beanstalk dùng).
+
+### 4.5. ECS Fargate (tự cấu hình cluster + service + ALB)
+
+Phù hợp khi cần kiểm soát chi tiết **VPC**, nhiều service, ElastiCache chỉ private. Luồng: ECR → Task definition (port container **8080**) → Service + ALB. Cấu hình env giống trên.
+
+---
+
 ## Lưu ý
 
 - **Database:** Production nên dùng PostgreSQL. Railway/Render đều có PostgreSQL (free tier có giới hạn).

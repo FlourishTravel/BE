@@ -1,11 +1,13 @@
 # Chạy local: mvn spring-boot:run (pom.xml đã bật profile dev = H2, không Redis).
 # JAR / production: không dùng profile dev trừ khi set tay — cần PostgreSQL + Redis như cấu hình dưới.
+# Deploy cloud (ECS): SPRING_PROFILES_ACTIVE=cloud — mặc định DigitalOcean PostgreSQL trong application-cloud.yml; bắt buộc DB_PASSWORD (và tuỳ chỉnh DB_* nếu đổi cluster).
 spring:
   application:
     name: flourish-travel-backend
 
   datasource:
     # Port 5433 thường dùng khi cài PostgreSQL (vd. PostgreSQL 18); 5432 mặc định. Đổi qua biến DB_PORT nếu cần.
+    # DigitalOcean / cloud TLS: DB_SSL_MODE=require (tránh DB_JDBC_PARAMS=?... — ECS/AWS form env hay cấm ký tự "?").
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:flourishtravel}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:admin123}
@@ -13,11 +15,13 @@ spring:
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
+      data-source-properties:
+        sslmode: ${DB_SSL_MODE:disable}
 
   jpa:
-    # Tránh lỗi "Unable to determine Dialect" khi JDBC metadata chưa lấy được lúc khởi tạo
+    # Cần khi Hibernate chưa connect được DB lúc bootstrap (mạng / SSL / mật khẩu); tránh "Unable to determine Dialect".
+    # Cảnh báo HHH90000025 khi mọi thứ bình thường có thể bỏ qua. Profile dev dùng H2Dialect trong application-dev.yml.
     database-platform: org.hibernate.dialect.PostgreSQLDialect
-    # update = tự tạo/cập nhật bảng khi chạy (chỉ cần tạo database flourishtravel 1 lần trong pgAdmin)
     hibernate:
       ddl-auto: update
     show-sql: false
@@ -53,6 +57,9 @@ server:
 
 # JWT & Encryption
 app:
+  seed:
+    # ECS/cloud: false (mặc định). Local dev: bật trong application-dev.yml hoặc SEED_CHATBOT_CONFIG=true
+    chatbot-config-on-startup: ${SEED_CHATBOT_CONFIG:false}
   encryption:
     pii-key: ${PII_ENCRYPTION_KEY:}
   jwt:

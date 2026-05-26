@@ -300,11 +300,8 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
     }
 
     private List<Tour> searchTourEntities(String destination, BigDecimal minPrice, BigDecimal maxPrice, Integer durationDays, int limit) {
-        String destinationPattern = (destination != null && !destination.isBlank())
-                ? "%" + destination.trim() + "%"
-                : null;
         var page = tourRepository.searchForSuggestion(
-                destinationPattern,
+                TourService.destinationLikePattern(destination),
                 minPrice, maxPrice, null,
                 PageRequest.of(0, limit * 2));
         List<Tour> list = page.getContent();
@@ -724,9 +721,8 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
                     .build();
         }
         String keyword = extractSearchKeyword(content);
-        String destinationPattern = (keyword != null && !keyword.isBlank()) ? "%" + keyword.trim() + "%" : null;
         var page = tourRepository.searchForSuggestion(
-                destinationPattern,
+                TourService.destinationLikePattern(keyword),
                 null, null, null,
                 PageRequest.of(0, 8));
         List<ChatbotResponse.TourCard> cards = page.getContent().stream().map(this::toTourCard).collect(Collectors.toList());

@@ -1,15 +1,20 @@
 package com.flourishtravel.config;
 
-import io.github.cdimascio.dotenv.Dotenv;
-
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Spring Boot không đọc file .env — nạp vào {@link System#setProperty} trước khi chạy app
  * để {@code ${MOMO_PARTNER_CODE}} v.v. có giá trị khi dùng BE/.env.
  * Không ghi đè biến môi trường đã set (Docker, IDE Env).
+ * <p>
+ * Trùng key trong cùng file: giá trị <strong>cuối cùng</strong> được dùng (dotenv-java 3.x ném
+ * {@link IllegalStateException} nên không dùng thư viện đó nữa).
  */
 public final class DotEnvBootstrap {
 
@@ -26,29 +31,66 @@ public final class DotEnvBootstrap {
             if (envFile == null || !Files.isRegularFile(envFile)) {
                 continue;
             }
-            Path dir = envFile.getParent();
-            if (dir == null) {
+            try {
+                Map<String, String> entries = parseEnvFile(envFile);
+                entries.forEach(DotEnvBootstrap::applyEntry);
+            } catch (IOException e) {
+                throw new IllegalStateException("Không đọc được .env: " + envFile.toAbsolutePath(), e);
+            }
+            return;
+        }
+    }
+
+    /**
+     * Dòng trùng key: {@link LinkedHashMap#put} ghi đè → giữ giá trị cuối trong file.
+     */
+    private static Map<String, String> parseEnvFile(Path path) throws IOException {
+        Map<String, String> map = new LinkedHashMap<>();
+        for (String rawLine : Files.readAllLines(path, StandardCharsets.UTF_8)) {
+            String line = rawLine.trim();
+            if (line.isEmpty() || line.startsWith("#")) {
                 continue;
             }
-            Dotenv dotenv = Dotenv.configure().directory(dir.toString()).load();
-            dotenv.entries().forEach(e -> {
-                String key = e.getKey();
-                if (key == null || key.isBlank()) {
-                    return;
-                }
-                if (System.getenv(key) != null) {
-                    return;
-                }
-                if (System.getProperty(key) != null) {
-                    return;
-                }
-                String val = e.getValue();
-                if (val != null) {
-                    System.setProperty(key, val);
-                    mirrorAwsCredentialsToSdkSystemProperties(key, val);
-                }
-            });
+            if (line.startsWith("export ")) {
+                line = line.substring(7).trim();
+            }
+            int eq = line.indexOf('=');
+            if (eq <= 0) {
+                continue;
+            }
+            String key = line.substring(0, eq).trim();
+            if (key.isEmpty() || key.startsWith("#")) {
+                continue;
+            }
+            String value = unquote(line.substring(eq + 1).trim());
+            map.put(key, value);
+        }
+        return map;
+    }
+
+    private static String unquote(String value) {
+        if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+            return value.substring(1, value.length() - 1);
+        }
+        if (value.length() >= 2 && value.startsWith("'") && value.endsWith("'")) {
+            return value.substring(1, value.length() - 1);
+        }
+        return value;
+    }
+
+    private static void applyEntry(String key, String val) {
+        if (key == null || key.isBlank()) {
             return;
+        }
+        if (System.getenv(key) != null) {
+            return;
+        }
+        if (System.getProperty(key) != null) {
+            return;
+        }
+        if (val != null) {
+            System.setProperty(key, val);
+            mirrorAwsCredentialsToSdkSystemProperties(key, val);
         }
     }
 

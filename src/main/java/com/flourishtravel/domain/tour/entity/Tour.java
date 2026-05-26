@@ -36,6 +36,31 @@ public class Tour extends BaseEntity {
     @Column(name = "duration_nights")
     private Integer durationNights;
 
+    @Column(name = "destination_city", length = 80)
+    private String destinationCity;
+
+    @Column(precision = 3, scale = 2)
+    private BigDecimal rating;
+
+    @Column(length = 40)
+    private String badge;
+
+    /** hotel_4star,guide,transfer — comma separated */
+    @Column(length = 300)
+    private String tags;
+
+    @Builder.Default
+    private Boolean featured = false;
+
+    @Column(columnDefinition = "TEXT")
+    private String highlightsText;
+
+    @Column(name = "includes_text", columnDefinition = "TEXT")
+    private String includesText;
+
+    @Column(name = "excludes_text", columnDefinition = "TEXT")
+    private String excludesText;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id")
     @JsonIgnore

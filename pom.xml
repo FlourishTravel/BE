@@ -96,13 +96,6 @@
             <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
 
-        <!-- Nạp file .env (thư mục chạy hoặc BE/.env) trước khi Spring resolve ${MOMO_*}. -->
-        <dependency>
-            <groupId>io.github.cdimascio</groupId>
-            <artifactId>dotenv-java</artifactId>
-            <version>3.0.0</version>
-        </dependency>
-
         <!-- AWS Bedrock Runtime (chatbot LLM fallback) -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>

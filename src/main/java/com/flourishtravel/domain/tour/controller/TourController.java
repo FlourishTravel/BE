@@ -40,9 +40,11 @@ public class TourController {
             @RequestParam(required = false, defaultValue = "date_asc") String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size) {
-        // Native query đã có ORDER BY t.created_at; không truyền Sort để tránh Spring nối "t.createdAt" (sai tên cột PostgreSQL)
-        Page<TourSummaryDto> tours = tourService.publicCatalog(destination, minPrice, maxPrice, startDate, categoryId,
-                PageRequest.of(page, size));
+        Page<TourSummaryDto> tours = startDate != null
+                ? tourService.publicCatalog(destination, minPrice, maxPrice, startDate, categoryId,
+                        PageRequest.of(page, size))
+                : tourService.publicCatalogBrowse(destination, minPrice, maxPrice, categoryId,
+                        PageRequest.of(page, size));
         return ResponseEntity.ok(ApiResponse.ok(tours));
     }
 

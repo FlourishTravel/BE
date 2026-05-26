@@ -19,6 +19,10 @@ spring:
       ddl-auto: create-drop
     show-sql: true
 
+app:
+  seed:
+    chatbot-config-on-startup: true
+
 logging:
   level:
     com.flourishtravel: DEBUG

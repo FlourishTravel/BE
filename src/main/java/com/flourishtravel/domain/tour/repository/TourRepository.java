@@ -20,32 +20,30 @@ public interface TourRepository extends JpaRepository<Tour, UUID> {
 
     @Query(
         value = """
-        SELECT DISTINCT t.id, t.base_price, t.category_id, t.created_at, t.description,
-               t.duration_days, t.duration_nights, t.slug, t.title, t.updated_at
-        FROM tours t
-        INNER JOIN tour_sessions s ON s.tour_id = t.id
-        WHERE (CAST(:destinationPattern AS text) IS NULL OR LOWER(t.title) LIKE LOWER(CAST(:destinationPattern AS text)))
-          AND (:minPrice IS NULL OR t.base_price >= :minPrice)
-          AND (:maxPrice IS NULL OR t.base_price <= :maxPrice)
-          AND (:startDate IS NULL OR s.start_date >= :startDate)
-          AND (:categoryId IS NULL OR t.category_id = :categoryId)
+        SELECT DISTINCT t FROM Tour t
+        INNER JOIN t.sessions s
+        WHERE (LOWER(t.title) LIKE LOWER(:destinationPattern)
+               OR LOWER(COALESCE(t.destinationCity, '')) LIKE LOWER(:destinationPattern))
+          AND (:minPrice IS NULL OR t.basePrice >= :minPrice)
+          AND (:maxPrice IS NULL OR t.basePrice <= :maxPrice)
+          AND (:startDate IS NULL OR s.startDate >= :startDate)
+          AND (:categoryId IS NULL OR t.category.id = :categoryId)
           AND s.status = 'scheduled'
-          AND s.current_participants < s.max_participants
-        ORDER BY t.created_at ASC
+          AND s.currentParticipants < s.maxParticipants
+        ORDER BY t.createdAt ASC
         """,
         countQuery = """
-        SELECT COUNT(DISTINCT t.id)
-        FROM tours t
-        INNER JOIN tour_sessions s ON s.tour_id = t.id
-        WHERE (CAST(:destinationPattern AS text) IS NULL OR LOWER(t.title) LIKE LOWER(CAST(:destinationPattern AS text)))
-          AND (:minPrice IS NULL OR t.base_price >= :minPrice)
-          AND (:maxPrice IS NULL OR t.base_price <= :maxPrice)
-          AND (:startDate IS NULL OR s.start_date >= :startDate)
-          AND (:categoryId IS NULL OR t.category_id = :categoryId)
+        SELECT COUNT(DISTINCT t.id) FROM Tour t
+        INNER JOIN t.sessions s
+        WHERE (LOWER(t.title) LIKE LOWER(:destinationPattern)
+               OR LOWER(COALESCE(t.destinationCity, '')) LIKE LOWER(:destinationPattern))
+          AND (:minPrice IS NULL OR t.basePrice >= :minPrice)
+          AND (:maxPrice IS NULL OR t.basePrice <= :maxPrice)
+          AND (:startDate IS NULL OR s.startDate >= :startDate)
+          AND (:categoryId IS NULL OR t.category.id = :categoryId)
           AND s.status = 'scheduled'
-          AND s.current_participants < s.max_participants
-        """,
-        nativeQuery = true
+          AND s.currentParticipants < s.maxParticipants
+        """
     )
     Page<Tour> search(@Param("destinationPattern") String destinationPattern,
                       @Param("minPrice") BigDecimal minPrice,
@@ -55,27 +53,26 @@ public interface TourRepository extends JpaRepository<Tour, UUID> {
                       Pageable pageable);
 
     /**
-     * Tìm tour theo địa điểm/giá (không lọc session). Dùng cho chatbot gợi ý khi có thể chưa có session scheduled.
+     * Tìm tour theo địa điểm/giá (không lọc session). Trang catalog / gợi ý / danh sách công khai.
      */
     @Query(
         value = """
-        SELECT t.id, t.base_price, t.category_id, t.created_at, t.description,
-               t.duration_days, t.duration_nights, t.slug, t.title, t.updated_at
-        FROM tours t
-        WHERE (CAST(:destinationPattern AS text) IS NULL OR LOWER(t.title) LIKE LOWER(CAST(:destinationPattern AS text)))
-          AND (:minPrice IS NULL OR t.base_price >= :minPrice)
-          AND (:maxPrice IS NULL OR t.base_price <= :maxPrice)
-          AND (:categoryId IS NULL OR t.category_id = :categoryId)
-        ORDER BY t.created_at ASC
+        SELECT t FROM Tour t
+        WHERE (LOWER(t.title) LIKE LOWER(:destinationPattern)
+               OR LOWER(COALESCE(t.destinationCity, '')) LIKE LOWER(:destinationPattern))
+          AND (:minPrice IS NULL OR t.basePrice >= :minPrice)
+          AND (:maxPrice IS NULL OR t.basePrice <= :maxPrice)
+          AND (:categoryId IS NULL OR t.category.id = :categoryId)
+        ORDER BY t.featured DESC NULLS LAST, t.createdAt DESC
         """,
         countQuery = """
-        SELECT COUNT(t.id) FROM tours t
-        WHERE (CAST(:destinationPattern AS text) IS NULL OR LOWER(t.title) LIKE LOWER(CAST(:destinationPattern AS text)))
-          AND (:minPrice IS NULL OR t.base_price >= :minPrice)
-          AND (:maxPrice IS NULL OR t.base_price <= :maxPrice)
-          AND (:categoryId IS NULL OR t.category_id = :categoryId)
-        """,
-        nativeQuery = true
+        SELECT COUNT(t.id) FROM Tour t
+        WHERE (LOWER(t.title) LIKE LOWER(:destinationPattern)
+               OR LOWER(COALESCE(t.destinationCity, '')) LIKE LOWER(:destinationPattern))
+          AND (:minPrice IS NULL OR t.basePrice >= :minPrice)
+          AND (:maxPrice IS NULL OR t.basePrice <= :maxPrice)
+          AND (:categoryId IS NULL OR t.category.id = :categoryId)
+        """
     )
     Page<Tour> searchForSuggestion(@Param("destinationPattern") String destinationPattern,
                                    @Param("minPrice") BigDecimal minPrice,
@@ -87,14 +84,6 @@ public interface TourRepository extends JpaRepository<Tour, UUID> {
 
     Page<Tour> findByIdNotOrderByCreatedAtDesc(UUID excludeId, Pageable pageable);
 
-    /**
-     * Danh sách tour cho admin: không lọc theo session/availability.
-     * Hỗ trợ search theo title hoặc slug (case-insensitive, partial match).
-     *
-     * LƯU Ý: truyền tham số dưới dạng PATTERN đã có '%' (ví dụ "%bali%").
-     * Nếu không filter, truyền "%%" (match all). Không truyền null để tránh
-     * Postgres suy ra type bytea cho LOWER() (lower(bytea) does not exist).
-     */
     @Query("""
         SELECT t FROM Tour t
         WHERE LOWER(t.title) LIKE :pattern
@@ -105,10 +94,6 @@ public interface TourRepository extends JpaRepository<Tour, UUID> {
 
     long countByCategory_Id(UUID categoryId);
 
-    /**
-     * Lịch trình theo ngày; activities được load lazy với batch (xem TourItinerary.activities).
-     * Không JOIN FETCH hai bag (itineraries + activities) trong một query — MultipleBagFetchException.
-     */
     @Query("""
             SELECT DISTINCT t FROM Tour t
             LEFT JOIN FETCH t.itineraries it

@@ -41,8 +41,28 @@ public class TourDetailDto {
     private List<LocationRef> locations;
     private List<SessionDetail> sessions;
 
+    private String destinationCity;
+    private BigDecimal rating;
+    private String badge;
+    private List<String> tags;
+    private List<String> highlights;
+    private List<String> includes;
+    private List<String> excludes;
+    private List<ReviewRef> reviews;
+    private String thumbnailUrl;
+
     private Instant createdAt;
     private Instant updatedAt;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ReviewRef {
+        private String authorName;
+        private BigDecimal rating;
+        private String comment;
+    }
 
     @Data
     @Builder

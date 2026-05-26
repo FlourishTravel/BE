@@ -1,0 +1,38 @@
+# DigitalOcean App Platform — repo GitHub "BE" (Spring Boot ở root, có pom.xml + Dockerfile)
+# Push file này + Dockerfile lên main rồi Create App → chọn repo BE.
+name: flourish-travel-be
+region: sgp
+ingress:
+  rules:
+    - component:
+        name: api
+      match:
+        path:
+          prefix: /
+services:
+  - name: api
+    dockerfile_path: Dockerfile
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    health_check:
+      http_path: /api/swagger-ui.html
+    envs:
+      - key: SPRING_PROFILES_ACTIVE
+        value: cloud
+      - key: DB_HOST
+        value: db-postgresql-sgp1-flourishtourism-do-user-37760190-0.m.db.ondigitalocean.com
+      - key: DB_PORT
+        value: "25060"
+      - key: DB_NAME
+        value: defaultdb
+      - key: DB_USER
+        value: doadmin
+      - key: DB_SSL_MODE
+        value: require
+      - key: DB_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+      - key: JWT_SECRET
+        scope: RUN_TIME
+        type: SECRET

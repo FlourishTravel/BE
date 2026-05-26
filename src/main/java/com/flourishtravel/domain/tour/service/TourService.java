@@ -50,10 +50,8 @@ public class TourService {
     @Transactional(readOnly = true)
     public Page<Tour> search(String destination, BigDecimal minPrice, BigDecimal maxPrice,
                              LocalDate startDate, UUID categoryId, Pageable pageable) {
-        String destinationPattern = (destination != null && !destination.isBlank())
-                ? "%" + destination.trim() + "%"
-                : null;
-        return tourRepository.search(destinationPattern, minPrice, maxPrice, startDate, categoryId, pageable);
+        return tourRepository.search(
+                destinationLikePattern(destination), minPrice, maxPrice, startDate, categoryId, pageable);
     }
 
     /**
@@ -64,6 +62,23 @@ public class TourService {
     public Page<TourSummaryDto> publicCatalog(String destination, BigDecimal minPrice, BigDecimal maxPrice,
                                               LocalDate startDate, UUID categoryId, Pageable pageable) {
         return search(destination, minPrice, maxPrice, startDate, categoryId, pageable).map(this::toSummary);
+    }
+
+    /** Danh sách catalog (không bắt buộc còn chỗ session) — trang Tour & Vé. */
+    @Transactional(readOnly = true)
+    public Page<TourSummaryDto> publicCatalogBrowse(String destination, BigDecimal minPrice, BigDecimal maxPrice,
+                                                   UUID categoryId, Pageable pageable) {
+        return tourRepository.searchForSuggestion(
+                        destinationLikePattern(destination), minPrice, maxPrice, categoryId, pageable)
+                .map(this::toSummary);
+    }
+
+    /** Postgres: không truyền null vào LOWER(LIKE) — dùng %% (match all). */
+    public static String destinationLikePattern(String destination) {
+        if (destination == null || destination.isBlank()) {
+            return "%%";
+        }
+        return "%" + destination.trim() + "%";
     }
 
     @Transactional(readOnly = true)
@@ -108,11 +123,8 @@ public class TourService {
     /** Kiểm tra còn chỗ: tìm session sớm nhất còn slot theo địa điểm (cho chatbot / API). */
     @Transactional(readOnly = true)
     public Optional<AvailabilityCheckDto> checkAvailability(String destination, LocalDate fromDate) {
-        String destinationPattern = (destination != null && !destination.isBlank())
-                ? "%" + destination.trim() + "%"
-                : null;
         Page<Tour> tours = tourRepository.search(
-                destinationPattern,
+                destinationLikePattern(destination),
                 null, null, fromDate != null ? fromDate : LocalDate.now(), null,
                 PageRequest.of(0, 10));
         for (Tour t : tours.getContent()) {
@@ -412,6 +424,8 @@ public class TourService {
                 ? "draft"
                 : computeStatus(tour.getSessions());
 
+        String thumbnailUrl = images.isEmpty() ? null : images.get(0).getImageUrl();
+
         return TourDetailDto.builder()
                 .id(tour.getId())
                 .title(tour.getTitle())
@@ -427,9 +441,33 @@ public class TourService {
                 .itineraries(itineraries)
                 .locations(locations)
                 .sessions(sessions)
+                .destinationCity(tour.getDestinationCity())
+                .rating(tour.getRating())
+                .badge(tour.getBadge())
+                .tags(splitCsv(tour.getTags()))
+                .highlights(splitLines(tour.getHighlightsText()))
+                .includes(splitLines(tour.getIncludesText()))
+                .excludes(splitLines(tour.getExcludesText()))
+                .thumbnailUrl(thumbnailUrl)
                 .createdAt(tour.getCreatedAt())
                 .updatedAt(tour.getUpdatedAt())
                 .build();
+    }
+
+    private List<String> splitCsv(String raw) {
+        if (raw == null || raw.isBlank()) return List.of();
+        return java.util.Arrays.stream(raw.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+    }
+
+    private List<String> splitLines(String raw) {
+        if (raw == null || raw.isBlank()) return List.of();
+        return java.util.Arrays.stream(raw.split("\n"))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
     }
 
     private TourDetailDto.ItineraryRef toItineraryRef(TourItinerary it) {

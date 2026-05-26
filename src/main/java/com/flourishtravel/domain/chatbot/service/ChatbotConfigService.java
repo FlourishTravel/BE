@@ -12,6 +12,7 @@ import com.flourishtravel.domain.chatbot.repository.ChatbotIntentRepository;
 import com.flourishtravel.domain.chatbot.repository.ChatbotIntentTrainingPhraseRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,29 +61,25 @@ public class ChatbotConfigService {
         for (ChatbotConfigImportDto.IntentImportDto idto : dto.getIntents()) {
             if (idto.getIntent_name() == null || idto.getIntent_name().isBlank()) continue;
 
-            ChatbotIntent intent = intentRepository.findByIntentName(idto.getIntent_name())
-                    .orElse(ChatbotIntent.builder().intentName(idto.getIntent_name()).build());
+            ChatbotIntent intent = upsertIntent(idto, order++);
 
-            intent.setCategory(idto.getCategory());
-            intent.setEntitiesToExtract(toJson(idto.getEntities_to_extract()));
-            intent.setSystemAction(toJson(idto.getSystem_action()));
-            intent.setResponseTemplate(idto.getResponse_template());
-            intent.setContextOutput(idto.getContext_output());
-            intent.setSentimentAnalysis(idto.getSentiment_analysis());
-            intent.setSentimentThreshold(idto.getSentiment_threshold());
-            intent.setContextRequirement(idto.getContext_requirement());
-            intent.setSortOrder(order++);
-            intentRepository.save(intent);
-
-            // Replace training phrases
-            intentPhraseRepository.deleteByIntent_Id(intent.getId());
+            // Replace training phrases (idempotent per intent)
+            if (intent.getId() != null) {
+                intentPhraseRepository.deleteByIntent_Id(intent.getId());
+            }
             if (idto.getTraining_phrases() != null) {
                 for (String phrase : idto.getTraining_phrases()) {
-                    if (phrase == null || phrase.isBlank()) continue;
-                    intentPhraseRepository.save(ChatbotIntentTrainingPhrase.builder()
-                            .intent(intent)
-                            .phrase(phrase.trim())
-                            .build());
+                    if (phrase == null || phrase.isBlank()) {
+                        continue;
+                    }
+                    try {
+                        intentPhraseRepository.save(ChatbotIntentTrainingPhrase.builder()
+                                .intent(intent)
+                                .phrase(phrase.trim())
+                                .build());
+                    } catch (DataIntegrityViolationException e) {
+                        log.debug("Training phrase already exists for intent {}: {}", intent.getIntentName(), phrase);
+                    }
                 }
             }
         }
@@ -126,6 +123,40 @@ public class ChatbotConfigService {
             result.add(new ChatbotIntentWithPhrases(intent, phrases));
         }
         return result;
+    }
+
+    private ChatbotIntent upsertIntent(ChatbotConfigImportDto.IntentImportDto idto, int sortOrder) {
+        String name = idto.getIntent_name();
+        ChatbotIntent intent = intentRepository.findByIntentName(name)
+                .orElseGet(() -> ChatbotIntent.builder().intentName(name).build());
+
+        intent.setCategory(idto.getCategory());
+        intent.setEntitiesToExtract(toJson(idto.getEntities_to_extract()));
+        intent.setSystemAction(toJson(idto.getSystem_action()));
+        intent.setResponseTemplate(idto.getResponse_template());
+        intent.setContextOutput(idto.getContext_output());
+        intent.setSentimentAnalysis(idto.getSentiment_analysis());
+        intent.setSentimentThreshold(idto.getSentiment_threshold());
+        intent.setContextRequirement(idto.getContext_requirement());
+        intent.setSortOrder(sortOrder);
+
+        try {
+            return intentRepository.save(intent);
+        } catch (DataIntegrityViolationException e) {
+            log.debug("Concurrent insert for intent {}, reloading", name);
+            ChatbotIntent existing = intentRepository.findByIntentName(name)
+                    .orElseThrow(() -> e);
+            existing.setCategory(intent.getCategory());
+            existing.setEntitiesToExtract(intent.getEntitiesToExtract());
+            existing.setSystemAction(intent.getSystemAction());
+            existing.setResponseTemplate(intent.getResponseTemplate());
+            existing.setContextOutput(intent.getContextOutput());
+            existing.setSentimentAnalysis(intent.getSentimentAnalysis());
+            existing.setSentimentThreshold(intent.getSentimentThreshold());
+            existing.setContextRequirement(intent.getContextRequirement());
+            existing.setSortOrder(sortOrder);
+            return intentRepository.save(existing);
+        }
     }
 
     private ChatbotConfigResponseDto.IntentResponseDto toIntentResponseDto(ChatbotIntent intent) {
