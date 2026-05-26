@@ -6,6 +6,7 @@ import com.flourishtravel.domain.chatbot.repository.ChatbotIntentRepository;
 import com.flourishtravel.domain.chatbot.service.ChatbotConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -22,10 +23,12 @@ import java.io.InputStream;
  * Mặc định tắt trên ECS (profile cloud). Idempotent: bỏ qua nếu DB đã có intent.
  */
 @Component
-@ConditionalOnProperty(name = "app.seed.enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 @Slf4j
-@ConditionalOnProperty(name = "app.seed.chatbot-config-on-startup", havingValue = "true")
+@ConditionalOnProperties({
+        @ConditionalOnProperty(name = "app.seed.enabled", havingValue = "true", matchIfMissing = true),
+        @ConditionalOnProperty(name = "app.seed.chatbot-config-on-startup", havingValue = "true")
+})
 public class ChatbotConfigSeeder {
 
     private static final String CONFIG_FILE = "chatbot-config-sample.json";
