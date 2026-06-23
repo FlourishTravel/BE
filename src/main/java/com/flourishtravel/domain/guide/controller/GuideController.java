@@ -9,6 +9,9 @@ import com.flourishtravel.domain.guide.dto.ParticipantActivityAttendanceResultDt
 import com.flourishtravel.domain.guide.dto.SessionCheckinResultDto;
 import com.flourishtravel.domain.guide.dto.SessionParticipantResultDto;
 import com.flourishtravel.domain.guide.service.GuideService;
+import com.flourishtravel.domain.tour.dto.SessionActivitySchedulePatchRequest;
+import com.flourishtravel.domain.tour.dto.SessionScheduleViewDto;
+import com.flourishtravel.domain.tour.service.TourSessionScheduleService;
 import com.flourishtravel.security.UserPrincipal;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +30,7 @@ import java.util.UUID;
 public class GuideController {
 
     private final GuideService guideService;
+    private final TourSessionScheduleService sessionScheduleService;
 
     @GetMapping("/sessions")
     public ResponseEntity<ApiResponse<List<GuideSessionSummaryDto>>> getMySessions(
@@ -141,6 +145,45 @@ public class GuideController {
         ParticipantActivityAttendanceResultDto row = guideService.checkOutParticipantAtActivity(
                 principal.getId(), sessionId, participantId, activityId);
         return ResponseEntity.ok(ApiResponse.ok("Đã check-out tại điểm", row));
+    }
+
+    @GetMapping("/sessions/{sessionId}/schedule")
+    public ResponseEntity<ApiResponse<SessionScheduleViewDto>> getSessionSchedule(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID sessionId) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        return ResponseEntity.ok(ApiResponse.ok(sessionScheduleService.getSchedule(sessionId, principal)));
+    }
+
+    @PatchMapping("/sessions/{sessionId}/schedule/activities/{activityId}")
+    public ResponseEntity<ApiResponse<SessionScheduleViewDto>> patchSessionActivitySchedule(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID sessionId,
+            @PathVariable UUID activityId,
+            @RequestBody SessionActivitySchedulePatchRequest request) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        return ResponseEntity.ok(ApiResponse.ok("Đã lưu bản nháp",
+                sessionScheduleService.saveDraft(sessionId, activityId, request, principal)));
+    }
+
+    @PostMapping("/sessions/{sessionId}/schedule/activities/{activityId}/publish")
+    public ResponseEntity<ApiResponse<SessionScheduleViewDto>> publishSessionActivitySchedule(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID sessionId,
+            @PathVariable UUID activityId) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        return ResponseEntity.ok(ApiResponse.ok("Đã công bố lịch trình",
+                sessionScheduleService.publish(sessionId, activityId, principal)));
+    }
+
+    @PostMapping("/sessions/{sessionId}/schedule/activities/{activityId}/cancel")
+    public ResponseEntity<ApiResponse<SessionScheduleViewDto>> cancelSessionActivitySchedule(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID sessionId,
+            @PathVariable UUID activityId) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        return ResponseEntity.ok(ApiResponse.ok("Đã hủy hoạt động trong lịch đoàn",
+                sessionScheduleService.cancelActivity(sessionId, activityId, principal)));
     }
 
     @Data

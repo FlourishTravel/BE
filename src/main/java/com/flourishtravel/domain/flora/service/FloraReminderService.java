@@ -9,6 +9,7 @@ import com.flourishtravel.domain.flora.repository.FloraReminderDeliveryRepositor
 import com.flourishtravel.domain.flora.repository.UserLocationPingRepository;
 import com.flourishtravel.domain.notification.entity.Notification;
 import com.flourishtravel.domain.notification.service.NotificationService;
+import com.flourishtravel.domain.review.repository.ReviewRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,6 +38,11 @@ public class FloraReminderService {
     private final FloraPrivacyService privacyService;
     private final NotificationService notificationService;
     private final UserLocationPingRepository locationPingRepository;
+    private final ReviewRepository reviewRepository;
+
+    private static final String POST_TOUR_FEEDBACK_TITLE = "Flora muốn nghe cảm nhận của bạn";
+    private static final String POST_TOUR_FEEDBACK_BODY =
+            "Chuyến đi của bạn đã kết thúc. Chia sẻ vài điều để Flora gợi ý hành trình phù hợp hơn lần sau nhé.";
 
     @Value("${app.flora.timezone:Asia/Ho_Chi_Minh}")
     private String tourTimezone;
@@ -69,7 +75,7 @@ public class FloraReminderService {
                         default -> FloraReminderTypes.TOUR_REMINDER_5_MINUTES;
                     };
                     deliverOnce(booking, userId, type, meeting.getTime(),
-                            buildGatheringMessage(threshold, meeting));
+                            buildGatheringMessage(threshold, meeting), "Flora AI");
                 }
             }
         }
@@ -81,10 +87,11 @@ public class FloraReminderService {
         for (Booking booking : bookingRepository.findRecentlyCompletedForFlora(today.minusDays(1), Set.of("completed"))) {
             UUID userId = booking.getUser().getId();
             if (!privacyService.hasNotificationConsent(userId)) continue;
+            if (reviewRepository.existsByBooking_Id(booking.getId())) continue;
             String key = meetingReminderKey(booking.getId(), FloraReminderTypes.POST_TOUR_FEEDBACK, Instant.EPOCH);
             if (deliveryRepository.existsByIdempotencyKey(key)) continue;
             deliverOnce(booking, userId, FloraReminderTypes.POST_TOUR_FEEDBACK, Instant.now(),
-                    "Chuyến đi của bạn đã kết thúc rồi. Flora rất muốn biết bạn thích nhất điều gì để lần sau gợi ý phù hợp hơn.");
+                    POST_TOUR_FEEDBACK_BODY, POST_TOUR_FEEDBACK_TITLE);
         }
     }
 
@@ -100,14 +107,18 @@ public class FloraReminderService {
         String body = String.format(
                 "Bạn đang cách điểm tập trung khoảng %.0fm. Flora gợi ý bạn quay lại %s ngay để kịp giờ lên xe.",
                 distanceMeters, point);
-        deliverOnce(booking, userId, FloraReminderTypes.RETURN_TO_BUS_ALERT, meeting.getTime(), body);
+        deliverOnce(booking, userId, FloraReminderTypes.RETURN_TO_BUS_ALERT, meeting.getTime(), body, "Flora AI");
     }
 
     private void deliverOnce(Booking booking, UUID userId, String type, Instant meetingAt, String body) {
+        deliverOnce(booking, userId, type, meetingAt, body, "Flora AI");
+    }
+
+    private void deliverOnce(Booking booking, UUID userId, String type, Instant meetingAt, String body, String title) {
         String key = meetingReminderKey(booking.getId(), type, meetingAt);
         if (deliveryRepository.existsByIdempotencyKey(key)) return;
 
-        Notification n = notificationService.createFloraNotification(userId, type, "Flora AI", body, booking.getId());
+        Notification n = notificationService.createFloraNotification(userId, type, title, body, booking.getId());
         FloraReminderDelivery delivery = FloraReminderDelivery.builder()
                 .booking(booking)
                 .user(booking.getUser())

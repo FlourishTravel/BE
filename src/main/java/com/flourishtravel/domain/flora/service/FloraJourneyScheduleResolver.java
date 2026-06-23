@@ -4,9 +4,13 @@ import com.flourishtravel.domain.booking.entity.Booking;
 import com.flourishtravel.domain.flora.FloraScheduleConstants;
 import com.flourishtravel.domain.flora.dto.FloraActivityDto;
 import com.flourishtravel.domain.flora.dto.FloraNextMeetingDto;
+import com.flourishtravel.domain.tour.SessionScheduleConstants;
 import com.flourishtravel.domain.tour.entity.TourActivity;
 import com.flourishtravel.domain.tour.entity.TourItinerary;
 import com.flourishtravel.domain.tour.entity.TourSession;
+import com.flourishtravel.domain.tour.entity.TourSessionActivityOverride;
+import com.flourishtravel.domain.tour.schedule.SessionScheduleMergeHelper;
+import com.flourishtravel.domain.tour.schedule.SessionScheduleMergeHelper.EffectiveActivityFields;
 import lombok.Builder;
 import lombok.Value;
 
@@ -56,7 +60,28 @@ public class FloraJourneyScheduleResolver {
             List<TourItinerary> itineraryDays,
             ZoneId zone,
             int safetyBufferMinutes,
+            Map<UUID, TourSessionActivityOverride> publishedOverrides) {
+        return resolve(booking, session, itineraryDays, zone, safetyBufferMinutes, Instant.now(), publishedOverrides);
+    }
+
+    public static ScheduleSnapshot resolve(
+            Booking booking,
+            TourSession session,
+            List<TourItinerary> itineraryDays,
+            ZoneId zone,
+            int safetyBufferMinutes,
             Instant now) {
+        return resolve(booking, session, itineraryDays, zone, safetyBufferMinutes, now, Map.of());
+    }
+
+    public static ScheduleSnapshot resolve(
+            Booking booking,
+            TourSession session,
+            List<TourItinerary> itineraryDays,
+            ZoneId zone,
+            int safetyBufferMinutes,
+            Instant now,
+            Map<UUID, TourSessionActivityOverride> publishedOverrides) {
         LocalDate today = LocalDate.ofInstant(now, zone);
         List<String> warnings = new ArrayList<>();
 
@@ -86,7 +111,11 @@ public class FloraJourneyScheduleResolver {
 
                 int actIndex = 0;
                 for (TourActivity act : activities) {
-                    ResolvedSlot slot = toSlot(act, dayNum, activityDate, zone, actIndex == 0 && !firstDaySeen);
+                    TourSessionActivityOverride published = null;
+                    if (publishedOverrides != null && act.getId() != null) {
+                        published = publishedOverrides.get(act.getId());
+                    }
+                    ResolvedSlot slot = toSlot(act, published, dayNum, activityDate, zone, actIndex == 0 && !firstDaySeen);
                     if (slot != null) slots.add(slot);
                     actIndex++;
                 }
@@ -196,6 +225,10 @@ public class FloraJourneyScheduleResolver {
                 .eventType(slot.getEventType())
                 .scheduleStatus(slot.getScheduleStatus())
                 .reminderEligible(reminderEligible)
+                .scheduleSource(slot.getScheduleSource())
+                .scheduleVersion(slot.getScheduleVersion())
+                .lastUpdatedAt(slot.getLastUpdatedAt())
+                .lastUpdatedReason(slot.getLastUpdatedReason())
                 .build();
     }
 
@@ -222,49 +255,70 @@ public class FloraJourneyScheduleResolver {
 
     private static ResolvedSlot toSlot(
             TourActivity act,
+            TourSessionActivityOverride publishedOverride,
             int dayNumber,
             LocalDate activityDate,
             ZoneId zone,
             boolean firstActivityOfTrip) {
 
-        String scheduleStatus = resolveScheduleStatus(act);
-        if (FloraScheduleConstants.SCHEDULE_UNAVAILABLE.equals(scheduleStatus) && act.getStartTime() == null) {
+        EffectiveActivityFields effective = SessionScheduleMergeHelper.resolve(act, publishedOverride);
+        if (effective.isCancelled()) {
             return null;
         }
 
-        Instant startAt = act.getStartTime() != null
-                ? ZonedDateTime.of(activityDate, act.getStartTime(), zone).toInstant()
+        String scheduleStatus = effective.getScheduleStatus();
+        if (FloraScheduleConstants.SCHEDULE_UNAVAILABLE.equals(scheduleStatus) && effective.getStartTime() == null) {
+            return null;
+        }
+
+        Instant startAt = effective.getStartTime() != null
+                ? ZonedDateTime.of(activityDate, effective.getStartTime(), zone).toInstant()
                 : null;
         Instant endAt = null;
-        if (act.getEndTime() != null) {
-            endAt = ZonedDateTime.of(activityDate, act.getEndTime(), zone).toInstant();
+        if (effective.getEndTime() != null) {
+            endAt = ZonedDateTime.of(activityDate, effective.getEndTime(), zone).toInstant();
         } else if (startAt != null && act.getDurationMinutes() != null && act.getDurationMinutes() > 0) {
             endAt = startAt.plus(Duration.ofMinutes(act.getDurationMinutes()));
         } else if (startAt != null) {
             endAt = startAt.plus(Duration.ofMinutes(60));
         }
 
-        boolean gathering = Boolean.TRUE.equals(act.getIsGatheringEvent());
+        boolean gathering = effective.isGatheringEvent();
         String eventType = gathering
-                ? resolveGatheringEventType(act, dayNumber, firstActivityOfTrip)
+                ? resolveGatheringEventType(effective.getGatheringEventType(), act, dayNumber, firstActivityOfTrip)
                 : FloraScheduleConstants.EVENT_ACTIVITY;
 
         return ResolvedSlot.builder()
                 .activityId(act.getId())
-                .title(act.getTitle())
-                .description(act.getDescription())
+                .title(effective.getTitle())
+                .description(effective.getDescription())
                 .activityType(act.getActivityType())
                 .dayNumber(dayNumber)
                 .startAt(startAt)
                 .endAt(endAt)
-                .locationName(act.getLocationName())
-                .locationAddress(act.getLocationAddress())
-                .latitude(toDouble(act.getLatitude()))
-                .longitude(toDouble(act.getLongitude()))
+                .locationName(effective.getLocationName())
+                .locationAddress(effective.getLocationAddress())
+                .latitude(toDouble(effective.getLatitude()))
+                .longitude(toDouble(effective.getLongitude()))
                 .scheduleStatus(scheduleStatus)
+                .scheduleSource(effective.getScheduleSource())
+                .scheduleVersion(effective.getScheduleVersion())
+                .lastUpdatedAt(effective.getLastUpdatedAt())
+                .lastUpdatedReason(effective.getLastUpdatedReason())
                 .eventType(eventType)
                 .meetingEvent(gathering || FloraScheduleConstants.isMeetingEventType(eventType))
                 .build();
+    }
+
+    private static String resolveGatheringEventType(
+            String overrideType,
+            TourActivity act,
+            int dayNumber,
+            boolean firstActivityOfTrip) {
+        if (overrideType != null && !overrideType.isBlank()) {
+            return overrideType.trim().toUpperCase();
+        }
+        return resolveGatheringEventType(act, dayNumber, firstActivityOfTrip);
     }
 
     private static String resolveGatheringEventType(TourActivity act, int dayNumber, boolean firstActivityOfTrip) {
@@ -301,6 +355,10 @@ public class FloraJourneyScheduleResolver {
                 .activityType(slot.getActivityType())
                 .scheduleStatus(slot.getScheduleStatus())
                 .dayNumber(slot.getDayNumber())
+                .scheduleSource(slot.getScheduleSource())
+                .scheduleVersion(slot.getScheduleVersion())
+                .lastUpdatedAt(slot.getLastUpdatedAt())
+                .lastUpdatedReason(slot.getLastUpdatedReason())
                 .build();
     }
 
@@ -381,6 +439,10 @@ public class FloraJourneyScheduleResolver {
         String scheduleStatus;
         String eventType;
         boolean meetingEvent;
+        String scheduleSource;
+        Integer scheduleVersion;
+        Instant lastUpdatedAt;
+        String lastUpdatedReason;
 
         boolean isMeetingEvent() {
             return meetingEvent;

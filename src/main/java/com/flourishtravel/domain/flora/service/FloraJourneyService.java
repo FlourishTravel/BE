@@ -10,6 +10,7 @@ import com.flourishtravel.domain.tour.entity.Tour;
 import com.flourishtravel.domain.tour.entity.TourItinerary;
 import com.flourishtravel.domain.tour.entity.TourSession;
 import com.flourishtravel.domain.tour.repository.TourRepository;
+import com.flourishtravel.domain.tour.service.TourSessionScheduleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -30,6 +32,7 @@ public class FloraJourneyService {
     private final FloraPrivacyService privacyService;
     private final TourRepository tourRepository;
     private final ChatbotDataService chatbotDataService;
+    private final TourSessionScheduleService sessionScheduleService;
 
     @Value("${app.flora.timezone:Asia/Ho_Chi_Minh}")
     private String tourTimezone;
@@ -59,7 +62,8 @@ public class FloraJourneyService {
         }
 
         FloraJourneyScheduleResolver.ScheduleSnapshot snapshot = FloraJourneyScheduleResolver.resolve(
-                booking, session, itineraryDays, zone, safetyBufferMinutes);
+                booking, session, itineraryDays, zone, safetyBufferMinutes,
+                session != null ? sessionScheduleService.loadPublishedOverrides(session.getId()) : Map.of());
 
         FloraJourneyDto.FloraScheduleItemDto currentLegacy = null;
         FloraJourneyDto.FloraScheduleItemDto nextLegacy = null;

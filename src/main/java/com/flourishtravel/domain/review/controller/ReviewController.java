@@ -7,12 +7,14 @@ import com.flourishtravel.security.UserPrincipal;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -33,7 +35,8 @@ public class ReviewController {
                 principal.getId(),
                 request.getBookingId(),
                 request.getRating(),
-                request.getComment());
+                request.getComment(),
+                request.getFeedbackTags());
         return ResponseEntity.ok(ApiResponse.ok("Đã gửi đánh giá", review));
     }
 
@@ -43,6 +46,9 @@ public class ReviewController {
         @Min(1)
         @Max(5)
         private int rating = 5;
+        @Size(max = 2000)
         private String comment;
+        @Size(max = 10)
+        private List<String> feedbackTags;
     }
 }

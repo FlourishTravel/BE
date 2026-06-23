@@ -7,6 +7,8 @@ import com.flourishtravel.domain.tour.entity.Tour;
 import com.flourishtravel.domain.tour.entity.TourActivity;
 import com.flourishtravel.domain.tour.entity.TourItinerary;
 import com.flourishtravel.domain.tour.entity.TourSession;
+import com.flourishtravel.domain.tour.SessionScheduleConstants;
+import com.flourishtravel.domain.tour.entity.TourSessionActivityOverride;
 import com.flourishtravel.domain.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -149,6 +152,71 @@ class FloraJourneyScheduleResolverTest {
     }
 
     @Test
+    void publishedOverride_changesMeetingTimeAndSource() {
+        TourActivity gathering = gatheringActivity("Tập trung lên xe", LocalTime.of(10, 40),
+                "Bãi xe cổng chính", FloraScheduleConstants.SCHEDULE_CONFIRMED);
+        gathering.setId(UUID.randomUUID());
+
+        TourSessionActivityOverride override = TourSessionActivityOverride.builder()
+                .publicationStatus(SessionScheduleConstants.PUBLICATION_PUBLISHED)
+                .startTimeOverride(LocalTime.of(10, 20))
+                .locationNameOverride("Cổng phụ phía Đông")
+                .scheduleStatus(FloraScheduleConstants.SCHEDULE_CONFIRMED)
+                .version(1)
+                .build();
+
+        Instant now = ZonedDateTime.of(2026, 6, 25, 10, 0, 0, 0, ZONE).toInstant();
+        var snapshot = withClockAndOverrides(day(1, List.of(gathering)), now,
+                Map.of(gathering.getId(), override));
+
+        assertNotNull(snapshot.getNextMeeting());
+        assertEquals(20L, snapshot.getNextMeeting().getMinutesUntil());
+        assertEquals("Cổng phụ phía Đông", snapshot.getNextMeeting().getLocationName());
+        assertEquals(SessionScheduleConstants.SOURCE_SESSION_OVERRIDE, snapshot.getNextMeeting().getScheduleSource());
+        assertTrue(snapshot.getNextMeeting().getReminderEligible());
+    }
+
+    @Test
+    void cancelledOverride_excludedFromNextActivity() {
+        TourActivity gathering = gatheringActivity("Tập trung lên xe", LocalTime.of(10, 40),
+                "Bãi xe", FloraScheduleConstants.SCHEDULE_CONFIRMED);
+        gathering.setId(UUID.randomUUID());
+        TourActivity next = activity("Ăn trưa", LocalTime.of(12, 0), LocalTime.of(13, 0),
+                false, null, FloraScheduleConstants.SCHEDULE_CONFIRMED);
+        next.setId(UUID.randomUUID());
+
+        TourSessionActivityOverride cancelled = TourSessionActivityOverride.builder()
+                .publicationStatus(SessionScheduleConstants.PUBLICATION_CANCELLED)
+                .build();
+
+        Instant now = ZonedDateTime.of(2026, 6, 25, 10, 0, 0, 0, ZONE).toInstant();
+        var snapshot = withClockAndOverrides(day(1, List.of(gathering, next)), now,
+                Map.of(gathering.getId(), cancelled));
+
+        assertNotNull(snapshot.getNextActivity());
+        assertEquals("Ăn trưa", snapshot.getNextActivity().getTitle());
+    }
+
+    @Test
+    void estimatedOverride_notReminderEligible() {
+        TourActivity gathering = gatheringActivity("Tập trung", LocalTime.of(10, 40),
+                "Bãi xe", FloraScheduleConstants.SCHEDULE_CONFIRMED);
+        gathering.setId(UUID.randomUUID());
+
+        TourSessionActivityOverride override = TourSessionActivityOverride.builder()
+                .publicationStatus(SessionScheduleConstants.PUBLICATION_PUBLISHED)
+                .scheduleStatus(FloraScheduleConstants.SCHEDULE_ESTIMATED)
+                .build();
+
+        Instant now = ZonedDateTime.of(2026, 6, 25, 10, 0, 0, 0, ZONE).toInstant();
+        var snapshot = withClockAndOverrides(day(1, List.of(gathering)), now,
+                Map.of(gathering.getId(), override));
+
+        assertNotNull(snapshot.getNextMeeting());
+        assertFalse(snapshot.getNextMeeting().getReminderEligible());
+    }
+
+    @Test
     void timezone_usesAsiaHoChiMinh() {
         TourActivity act = activity("Sáng sớm", LocalTime.of(7, 0), LocalTime.of(8, 0),
                 false, null, FloraScheduleConstants.SCHEDULE_CONFIRMED);
@@ -167,6 +235,16 @@ class FloraJourneyScheduleResolverTest {
 
     private FloraJourneyScheduleResolver.ScheduleSnapshot withClock(List<TourItinerary> days, Instant now) {
         return FloraJourneyScheduleResolver.resolve(booking, session, days, ZONE, 10, now);
+    }
+
+    private FloraJourneyScheduleResolver.ScheduleSnapshot withClockAndOverrides(
+            List<TourItinerary> days, Instant now, Map<UUID, TourSessionActivityOverride> overrides) {
+        return FloraJourneyScheduleResolver.resolve(booking, session, days, ZONE, 10, now, overrides);
+    }
+
+    private FloraJourneyScheduleResolver.ScheduleSnapshot withClockAndOverrides(
+            TourItinerary day, Instant now, Map<UUID, TourSessionActivityOverride> overrides) {
+        return withClockAndOverrides(List.of(day), now, overrides);
     }
 
     private static TourItinerary day(int dayNumber, List<TourActivity> activities) {

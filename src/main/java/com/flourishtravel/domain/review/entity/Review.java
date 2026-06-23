@@ -37,4 +37,8 @@ public class Review extends BaseEntity {
 
     @Column(columnDefinition = "TEXT")
     private String comment;
+
+    /** Comma-separated Flora feedback tag IDs (Phase 1.4). */
+    @Column(name = "feedback_tags", columnDefinition = "TEXT")
+    private String feedbackTags;
 }

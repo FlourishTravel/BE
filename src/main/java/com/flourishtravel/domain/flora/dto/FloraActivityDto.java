@@ -26,4 +26,10 @@ public class FloraActivityDto {
     private String activityType;
     private String scheduleStatus;
     private Integer dayNumber;
+
+    /** Phase 1.5 — session override metadata (optional). */
+    private String scheduleSource;
+    private Integer scheduleVersion;
+    private Instant lastUpdatedAt;
+    private String lastUpdatedReason;
 }

@@ -25,4 +25,10 @@ public class FloraNextMeetingDto {
     private Double longitude;
     private String scheduleStatus;
     private Boolean reminderEligible;
+
+    /** Phase 1.5 — session override metadata (optional). */
+    private String scheduleSource;
+    private Integer scheduleVersion;
+    private Instant lastUpdatedAt;
+    private String lastUpdatedReason;
 }
