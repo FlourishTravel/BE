@@ -3,6 +3,7 @@ package com.flourishtravel.domain.notification.service;
 import com.flourishtravel.common.exception.ResourceNotFoundException;
 import com.flourishtravel.domain.notification.entity.Notification;
 import com.flourishtravel.domain.notification.repository.NotificationRepository;
+import com.flourishtravel.domain.notification.push.service.PushNotificationQueueService;
 import com.flourishtravel.domain.user.entity.User;
 import com.flourishtravel.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
+    private final PushNotificationQueueService pushNotificationQueueService;
 
     private static final int DEFAULT_LIMIT = 20;
     private static final int MAX_LIMIT = 100;
@@ -71,6 +73,8 @@ public class NotificationService {
                 .data(data)
                 .isRead(false)
                 .build();
-        return notificationRepository.save(n);
+        Notification saved = notificationRepository.save(n);
+        pushNotificationQueueService.scheduleQueueAfterCommit(saved.getId());
+        return saved;
     }
 }

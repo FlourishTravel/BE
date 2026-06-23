@@ -147,6 +147,21 @@ app:
       trusted-proxy:
         enabled: ${CHATBOT_TRUSTED_PROXY:false}
 
+  push:
+    fcm:
+      enabled: ${FCM_ENABLED:false}
+      credentials-path: ${GOOGLE_APPLICATION_CREDENTIALS:}
+      max-devices-per-user: ${FCM_MAX_DEVICES_PER_USER:5}
+      max-attempts: ${FCM_MAX_ATTEMPTS:3}
+      dispatcher-poll-ms: ${FCM_DISPATCHER_POLL_MS:60000}
+      allowed-types:
+        - TOUR_REMINDER_30_MINUTES
+        - TOUR_REMINDER_15_MINUTES
+        - TOUR_REMINDER_5_MINUTES
+        - RETURN_TO_BUS_ALERT
+        - SCHEDULE_CHANGED
+        - POST_TOUR_FEEDBACK
+
 # Swagger / OpenAPI
 springdoc:
   api-docs:
