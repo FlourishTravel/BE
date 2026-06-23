@@ -492,6 +492,10 @@ public class TourService {
                                 .costEstimate(a.getCostEstimate())
                                 .costIncluded(a.getCostIncluded())
                                 .tags(a.getTags())
+                                .locationAddress(a.getLocationAddress())
+                                .isGatheringEvent(a.getIsGatheringEvent())
+                                .gatheringEventType(a.getGatheringEventType())
+                                .scheduleStatus(a.getScheduleStatus())
                                 .build())
                         .toList();
 
@@ -572,7 +576,12 @@ public class TourService {
                                 .costEstimate(a.getCostEstimate())
                                 .costIncluded(a.getCostIncluded() != null ? a.getCostIncluded() : Boolean.TRUE)
                                 .tags(trimToNull(a.getTags()))
+                                .locationAddress(trimToNull(a.getLocationAddress()))
+                                .isGatheringEvent(Boolean.TRUE.equals(a.getIsGatheringEvent()))
+                                .gatheringEventType(trimToNull(a.getGatheringEventType()))
+                                .scheduleStatus(normalizeScheduleStatus(a.getScheduleStatus()))
                                 .build();
+                        validateActivityTimes(act);
                         it.getActivities().add(act);
                         idx++;
                     }
@@ -587,6 +596,32 @@ public class TourService {
 
     private String safeTrim(String s) {
         return s == null ? null : s.trim();
+    }
+
+    private static String normalizeScheduleStatus(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        return raw.trim().toUpperCase();
+    }
+
+    private static void validateActivityTimes(TourActivity act) {
+        if (act.getStartTime() != null && act.getEndTime() != null && !act.getEndTime().isAfter(act.getStartTime())) {
+            throw new BadRequestException("Giờ kết thúc hoạt động phải sau giờ bắt đầu" +
+                    (act.getTitle() != null ? " (" + act.getTitle() + ")" : ""));
+        }
+        boolean hasLat = act.getLatitude() != null;
+        boolean hasLon = act.getLongitude() != null;
+        if (hasLat != hasLon) {
+            throw new BadRequestException("latitude và longitude phải được nhập cùng nhau cho hoạt động"
+                    + (act.getTitle() != null ? " (" + act.getTitle() + ")" : ""));
+        }
+        if (hasLat) {
+            double lat = act.getLatitude().doubleValue();
+            double lon = act.getLongitude().doubleValue();
+            if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+                throw new BadRequestException("Tọa độ GPS không hợp lệ cho hoạt động"
+                        + (act.getTitle() != null ? " (" + act.getTitle() + ")" : ""));
+            }
+        }
     }
 
     /**

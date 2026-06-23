@@ -3,6 +3,7 @@ package com.flourishtravel.domain.flora.service;
 import com.flourishtravel.domain.booking.entity.Booking;
 import com.flourishtravel.domain.chatbot.dto.WeatherForecastDto;
 import com.flourishtravel.domain.chatbot.service.ChatbotDataService;
+import com.flourishtravel.domain.flora.FloraScheduleConstants;
 import com.flourishtravel.domain.flora.dto.FloraJourneyDto;
 import com.flourishtravel.domain.flora.dto.FloraNextMeetingDto;
 import com.flourishtravel.domain.tour.entity.Tour;
@@ -30,71 +31,63 @@ public class FloraJourneyService {
     private final TourRepository tourRepository;
     private final ChatbotDataService chatbotDataService;
 
-    @Value("${app.flora.default-gathering-hour:7}")
-    private int defaultGatheringHour;
-
-    @Value("${app.flora.default-gathering-minute:0}")
-    private int defaultGatheringMinute;
-
     @Value("${app.flora.timezone:Asia/Ho_Chi_Minh}")
     private String tourTimezone;
+
+    @Value("${app.flora.journey.safety-buffer-minutes:10}")
+    private int safetyBufferMinutes;
 
     @Transactional(readOnly = true)
     public FloraJourneyDto getJourney(UUID bookingId, UUID userId) {
         Booking booking = privacyService.requireOwnedBooking(bookingId, userId);
+        return buildJourney(booking);
+    }
+
+    @Transactional(readOnly = true)
+    public FloraJourneyDto buildJourney(Booking booking) {
         TourSession session = booking.getSession();
         Tour tour = session != null ? session.getTour() : null;
-
         ZoneId zone = ZoneId.of(tourTimezone);
         LocalDate today = LocalDate.now(zone);
-        Instant nextGathering = computeNextGathering(session, zone);
-        Long minutesUntil = nextGathering != null
-                ? Duration.between(Instant.now(), nextGathering).toMinutes()
-                : null;
 
-        FloraJourneyDto.FloraScheduleItemDto current = null;
-        FloraJourneyDto.FloraScheduleItemDto next = null;
+        List<TourItinerary> itineraryDays = List.of();
         if (tour != null) {
             var tourOpt = tourRepository.findByIdWithItinerariesAndActivities(tour.getId());
-            if (tourOpt.isPresent()) {
-                List<TourItinerary> days = tourOpt.get().getItineraries();
-                if (days != null && !days.isEmpty()) {
-                    int dayIndex = session != null && session.getStartDate() != null
-                            ? (int) Math.max(1, Math.min(days.size(),
-                            Duration.between(session.getStartDate().atStartOfDay(), today.atStartOfDay()).toDays() + 1))
-                            : 1;
-                    TourItinerary currentDay = days.stream()
-                            .filter(d -> d.getDayNumber() != null && d.getDayNumber() == dayIndex)
-                            .findFirst()
-                            .orElse(days.get(0));
-                    current = FloraJourneyDto.FloraScheduleItemDto.builder()
-                            .dayNumber(currentDay.getDayNumber())
-                            .title(currentDay.getTitle())
-                            .summary(currentDay.getSummary() != null ? currentDay.getSummary() : currentDay.getDescription())
-                            .build();
-                    int nextIdx = Math.min(dayIndex, days.size() - 1);
-                    if (nextIdx + 1 < days.size()) {
-                        TourItinerary nd = days.get(nextIdx + 1);
-                        next = FloraJourneyDto.FloraScheduleItemDto.builder()
-                                .dayNumber(nd.getDayNumber())
-                                .title(nd.getTitle())
-                                .summary(nd.getSummary())
-                                .build();
-                    }
-                }
+            if (tourOpt.isPresent() && tourOpt.get().getItineraries() != null) {
+                itineraryDays = tourOpt.get().getItineraries();
             }
         }
+
+        FloraJourneyScheduleResolver.ScheduleSnapshot snapshot = FloraJourneyScheduleResolver.resolve(
+                booking, session, itineraryDays, zone, safetyBufferMinutes);
+
+        FloraJourneyDto.FloraScheduleItemDto currentLegacy = null;
+        FloraJourneyDto.FloraScheduleItemDto nextLegacy = null;
+        if (snapshot.getLegacyCurrentDay() != null) {
+            currentLegacy = FloraJourneyDto.FloraScheduleItemDto.builder()
+                    .dayNumber(snapshot.getLegacyCurrentDay().getDayNumber())
+                    .title(snapshot.getLegacyCurrentDay().getTitle())
+                    .summary(snapshot.getLegacyCurrentDay().getSummary())
+                    .build();
+        }
+        if (snapshot.getLegacyNextDay() != null) {
+            nextLegacy = FloraJourneyDto.FloraScheduleItemDto.builder()
+                    .dayNumber(snapshot.getLegacyNextDay().getDayNumber())
+                    .title(snapshot.getLegacyNextDay().getTitle())
+                    .summary(snapshot.getLegacyNextDay().getSummary())
+                    .build();
+        }
+
+        FloraNextMeetingDto nextMeeting = snapshot.getNextMeeting();
+        String meetingPoint = resolveLegacyMeetingPoint(nextMeeting, booking);
+        Instant nextGatheringAt = nextMeeting != null ? nextMeeting.getTime() : null;
+        Long minutesUntilGathering = nextMeeting != null ? nextMeeting.getMinutesUntil() : null;
 
         String dest = tour != null ? tour.getDestinationCity() : null;
         String weatherSummary = null;
         if (dest != null && !dest.isBlank()) {
             WeatherForecastDto w = chatbotDataService.getWeatherForecast(dest);
             if (w != null && w.getSummary() != null) weatherSummary = w.getSummary();
-        }
-
-        String meetingPoint = booking.getPickupAddress();
-        if (meetingPoint == null || meetingPoint.isBlank()) {
-            meetingPoint = "Điểm tập trung theo lịch tour (xem voucher/email xác nhận)";
         }
 
         List<String> packing = new ArrayList<>();
@@ -104,11 +97,8 @@ public class FloraJourneyService {
             packing.add("Áo mưa / ô");
         }
 
-        FloraNextMeetingDto nextMeeting = FloraNextMeetingDto.builder()
-                .time(nextGathering)
-                .location(meetingPoint)
-                .minutesUntil(minutesUntil)
-                .build();
+        List<String> notices = new ArrayList<>();
+        notices.add("Liên hệ hotline trên voucher nếu cần hỗ trợ khẩn trong chuyến đi.");
 
         return FloraJourneyDto.builder()
                 .bookingId(booking.getId())
@@ -120,35 +110,40 @@ public class FloraJourneyService {
                 .sessionEndDate(session != null ? session.getEndDate() : null)
                 .guestCount(booking.getGuestCount())
                 .meetingPoint(meetingPoint)
-                .nextGatheringAt(nextGathering)
-                .minutesUntilGathering(minutesUntil)
-                .currentScheduleItem(current)
-                .nextScheduleItem(next)
+                .nextGatheringAt(nextGatheringAt)
+                .minutesUntilGathering(minutesUntilGathering)
+                .currentScheduleItem(currentLegacy)
+                .nextScheduleItem(nextLegacy)
                 .weatherSummary(weatherSummary)
                 .packingReminders(packing)
-                .importantNotices(List.of("Liên hệ hotline trên voucher nếu cần hỗ trợ khẩn trong chuyến đi."))
+                .importantNotices(notices)
                 .nextMeeting(nextMeeting)
+                .journeyStatus(snapshot.getJourneyStatus())
+                .currentActivity(snapshot.getCurrentActivity())
+                .nextActivity(snapshot.getNextActivity())
+                .warnings(snapshot.getWarnings())
+                .freeMinutesUntilMeeting(snapshot.getFreeMinutesUntilMeeting())
                 .build();
     }
 
+    /**
+     * @deprecated No longer uses FLORA_GATHERING_HOUR. Returns confirmed next meeting instant only.
+     */
     public Instant computeNextGathering(TourSession session, ZoneId zone) {
-        if (session == null || session.getStartDate() == null) return null;
-        LocalDate today = LocalDate.now(zone);
-        if (today.isBefore(session.getStartDate()) || (session.getEndDate() != null && today.isAfter(session.getEndDate()))) {
-            if (today.isBefore(session.getStartDate())) {
-                return ZonedDateTime.of(session.getStartDate(), LocalTime.of(defaultGatheringHour, defaultGatheringMinute), zone).toInstant();
-            }
+        return null;
+    }
+
+    /**
+     * Next confirmed gathering/meeting instant for reminders — never from default hour fallback.
+     */
+    @Transactional(readOnly = true)
+    public FloraNextMeetingDto resolveReminderMeeting(Booking booking) {
+        FloraJourneyDto journey = buildJourney(booking);
+        FloraNextMeetingDto meeting = journey.getNextMeeting();
+        if (meeting == null || !Boolean.TRUE.equals(meeting.getReminderEligible())) {
             return null;
         }
-        ZonedDateTime gatherToday = ZonedDateTime.of(today, LocalTime.of(defaultGatheringHour, defaultGatheringMinute), zone);
-        if (gatherToday.toInstant().isAfter(Instant.now())) {
-            return gatherToday.toInstant();
-        }
-        LocalDate tomorrow = today.plusDays(1);
-        if (session.getEndDate() == null || !tomorrow.isAfter(session.getEndDate())) {
-            return ZonedDateTime.of(tomorrow, LocalTime.of(defaultGatheringHour, defaultGatheringMinute), zone).toInstant();
-        }
-        return null;
+        return meeting;
     }
 
     public boolean isActiveTrip(Booking booking) {
@@ -160,5 +155,18 @@ public class FloraJourneyService {
         LocalDate today = LocalDate.now(zone);
         return !today.isBefore(session.getStartDate())
                 && (session.getEndDate() == null || !today.isAfter(session.getEndDate()));
+    }
+
+    private static String resolveLegacyMeetingPoint(FloraNextMeetingDto nextMeeting, Booking booking) {
+        if (nextMeeting != null && nextMeeting.getLocationName() != null && !nextMeeting.getLocationName().isBlank()) {
+            return nextMeeting.getLocationName();
+        }
+        if (nextMeeting != null && nextMeeting.getLocation() != null && !nextMeeting.getLocation().isBlank()) {
+            return nextMeeting.getLocation();
+        }
+        if (booking.getPickupAddress() != null && !booking.getPickupAddress().isBlank()) {
+            return booking.getPickupAddress().trim();
+        }
+        return null;
     }
 }

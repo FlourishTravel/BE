@@ -3,6 +3,7 @@ package com.flourishtravel.domain.flora.service;
 import com.flourishtravel.domain.booking.entity.Booking;
 import com.flourishtravel.domain.booking.repository.BookingRepository;
 import com.flourishtravel.domain.flora.FloraReminderTypes;
+import com.flourishtravel.domain.flora.dto.FloraNextMeetingDto;
 import com.flourishtravel.domain.flora.entity.FloraReminderDelivery;
 import com.flourishtravel.domain.flora.repository.FloraReminderDeliveryRepository;
 import com.flourishtravel.domain.flora.repository.UserLocationPingRepository;
@@ -56,10 +57,10 @@ public class FloraReminderService {
             if (!privacyService.hasNotificationConsent(userId)) continue;
             if (!journeyService.isActiveTrip(booking)) continue;
 
-            Instant gathering = journeyService.computeNextGathering(booking.getSession(), zone);
-            if (gathering == null) continue;
+            FloraNextMeetingDto meeting = journeyService.resolveReminderMeeting(booking);
+            if (meeting == null || meeting.getTime() == null) continue;
 
-            long minutesUntil = Duration.between(now, gathering).toMinutes();
+            long minutesUntil = Duration.between(now, meeting.getTime()).toMinutes();
             for (int threshold : REMINDER_MINUTES) {
                 if (minutesUntil <= threshold && minutesUntil >= threshold - 1) {
                     String type = switch (threshold) {
@@ -67,7 +68,8 @@ public class FloraReminderService {
                         case 15 -> FloraReminderTypes.TOUR_REMINDER_15_MINUTES;
                         default -> FloraReminderTypes.TOUR_REMINDER_5_MINUTES;
                     };
-                    deliverOnce(booking, userId, type, gathering, buildGatheringMessage(threshold, booking));
+                    deliverOnce(booking, userId, type, meeting.getTime(),
+                            buildGatheringMessage(threshold, meeting));
                 }
             }
         }
@@ -79,7 +81,7 @@ public class FloraReminderService {
         for (Booking booking : bookingRepository.findRecentlyCompletedForFlora(today.minusDays(1), Set.of("completed"))) {
             UUID userId = booking.getUser().getId();
             if (!privacyService.hasNotificationConsent(userId)) continue;
-            String key = idempotencyKey(booking.getId(), FloraReminderTypes.POST_TOUR_FEEDBACK, Instant.EPOCH);
+            String key = meetingReminderKey(booking.getId(), FloraReminderTypes.POST_TOUR_FEEDBACK, Instant.EPOCH);
             if (deliveryRepository.existsByIdempotencyKey(key)) continue;
             deliverOnce(booking, userId, FloraReminderTypes.POST_TOUR_FEEDBACK, Instant.now(),
                     "Chuyến đi của bạn đã kết thúc rồi. Flora rất muốn biết bạn thích nhất điều gì để lần sau gợi ý phù hợp hơn.");
@@ -88,18 +90,21 @@ public class FloraReminderService {
 
     @Transactional
     public void sendReturnToBusAlert(Booking booking, UUID userId, String meetingPoint, double distanceMeters) {
-        Instant gather = journeyService.computeNextGathering(booking.getSession(), ZoneId.of(tourTimezone));
-        String key = idempotencyKey(booking.getId(), FloraReminderTypes.RETURN_TO_BUS_ALERT,
-                gather != null ? gather : Instant.now());
+        FloraNextMeetingDto meeting = journeyService.resolveReminderMeeting(booking);
+        if (meeting == null || meeting.getTime() == null) return;
+
+        String key = meetingReminderKey(booking.getId(), FloraReminderTypes.RETURN_TO_BUS_ALERT, meeting.getTime());
         if (deliveryRepository.existsByIdempotencyKey(key)) return;
+
+        String point = meeting.getLocationName() != null ? meeting.getLocationName() : meetingPoint;
         String body = String.format(
                 "Bạn đang cách điểm tập trung khoảng %.0fm. Flora gợi ý bạn quay lại %s ngay để kịp giờ lên xe.",
-                distanceMeters, meetingPoint);
-        deliverOnce(booking, userId, FloraReminderTypes.RETURN_TO_BUS_ALERT, Instant.now(), body);
+                distanceMeters, point);
+        deliverOnce(booking, userId, FloraReminderTypes.RETURN_TO_BUS_ALERT, meeting.getTime(), body);
     }
 
-    private void deliverOnce(Booking booking, UUID userId, String type, Instant scheduledAt, String body) {
-        String key = idempotencyKey(booking.getId(), type, scheduledAt);
+    private void deliverOnce(Booking booking, UUID userId, String type, Instant meetingAt, String body) {
+        String key = meetingReminderKey(booking.getId(), type, meetingAt);
         if (deliveryRepository.existsByIdempotencyKey(key)) return;
 
         Notification n = notificationService.createFloraNotification(userId, type, "Flora AI", body, booking.getId());
@@ -107,7 +112,7 @@ public class FloraReminderService {
                 .booking(booking)
                 .user(booking.getUser())
                 .reminderType(type)
-                .scheduledAt(scheduledAt)
+                .scheduledAt(meetingAt)
                 .sentAt(Instant.now())
                 .status("sent")
                 .notificationId(n.getId())
@@ -116,18 +121,26 @@ public class FloraReminderService {
         deliveryRepository.save(delivery);
     }
 
-    static String idempotencyKey(UUID bookingId, String type, Instant at) {
-        long bucket = at.getEpochSecond() / 60;
-        return bookingId + ":" + type + ":" + bucket;
+    /** Stable per meeting instant — schedule changes produce new keys. */
+    static String meetingReminderKey(UUID bookingId, String type, Instant meetingAt) {
+        long epoch = meetingAt != null ? meetingAt.getEpochSecond() : 0L;
+        return bookingId + ":" + type + ":" + epoch;
     }
 
-    private static String buildGatheringMessage(int minutes, Booking booking) {
-        String point = booking.getPickupAddress() != null ? booking.getPickupAddress() : "điểm tập trung";
+    static String idempotencyKey(UUID bookingId, String type, Instant at) {
+        return meetingReminderKey(bookingId, type, at);
+    }
+
+    private static String buildGatheringMessage(int minutes, FloraNextMeetingDto meeting) {
+        String point = meeting.getLocationName() != null && !meeting.getLocationName().isBlank()
+                ? meeting.getLocationName()
+                : "điểm tập trung";
         if (minutes <= 5) {
             return "Flora nhắc gấp: còn khoảng 5 phút nữa đoàn tập trung tại " + point + ".";
         }
         if (minutes <= 15) {
-            return "Flora nhắc bạn nhé: còn khoảng 15 phút nữa đoàn sẽ tập trung lên xe tại " + point + ". Bạn nên bắt đầu quay lại để không lỡ lịch trình.";
+            return "Flora nhắc bạn nhé: còn khoảng 15 phút nữa đoàn sẽ tập trung tại " + point
+                    + ". Bạn nên bắt đầu quay lại để không lỡ lịch trình.";
         }
         return "Flora nhắc nhẹ: còn khoảng 30 phút nữa đến giờ tập trung tại " + point + ".";
     }

@@ -2,6 +2,7 @@ package com.flourishtravel.domain.flora.service;
 
 import com.flourishtravel.domain.chatbot.dto.ChatbotRequest;
 import com.flourishtravel.domain.chatbot.dto.ChatbotResponse;
+import com.flourishtravel.domain.chatbot.security.ChatbotSecurityService;
 import com.flourishtravel.domain.chatbot.service.ChatbotUserContextService;
 import com.flourishtravel.domain.flora.dto.FloraJourneyDto;
 import com.flourishtravel.domain.flora.dto.FloraSuggestedActionDto;
@@ -21,6 +22,7 @@ public class FloraContextBuilder {
     private final UserTravelPreferenceService preferenceService;
     private final FloraPrivacyService privacyService;
     private final FloraJourneyService journeyService;
+    private final ChatbotSecurityService chatbotSecurityService;
 
     public String buildCombinedHint(ChatbotRequest request, UUID userId, Map<String, Object> previousState) {
         StringBuilder sb = new StringBuilder();
@@ -31,12 +33,12 @@ public class FloraContextBuilder {
             String profile = chatbotUserContextService.buildProfileHint(userId);
             if (!profile.isBlank()) {
                 if (!sb.isEmpty()) sb.append("\n");
-                sb.append(privacyService.sanitizeForPrompt(profile));
+                sb.append(privacyService.sanitizeForLlm(profile));
             }
             String prefs = preferenceService.buildPreferenceHint(userId);
             if (!prefs.isBlank()) {
                 if (!sb.isEmpty()) sb.append("\n");
-                sb.append(privacyService.sanitizeForPrompt(prefs));
+                sb.append(privacyService.sanitizeForLlm(prefs));
             }
         }
 
@@ -45,10 +47,13 @@ public class FloraContextBuilder {
             appendJourneyContext(sb, bookingId, userId);
         }
 
-        if (request.getLatitude() != null && request.getLongitude() != null) {
+        if (chatbotSecurityService.shouldIncludeLocationInHint(request, userId)) {
             if (!sb.isEmpty()) sb.append("\n");
-            sb.append("Vị trí GPS user (đã cấp quyền): lat=").append(request.getLatitude())
-                    .append(", lon=").append(request.getLongitude()).append("\n");
+            sb.append("Vị trí GPS user (đã cấp quyền): lat=")
+                    .append(roundCoordinate(request.getLatitude()))
+                    .append(", lon=")
+                    .append(roundCoordinate(request.getLongitude()))
+                    .append("\n");
         }
 
         return sb.toString();
@@ -107,6 +112,10 @@ public class FloraContextBuilder {
             }
         } catch (Exception ignored) {
         }
+    }
+
+    private static double roundCoordinate(double value) {
+        return Math.round(value * 100.0) / 100.0;
     }
 
     private static String buildSessionHint(Map<String, Object> previousState) {

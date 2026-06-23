@@ -1,6 +1,8 @@
 package com.flourishtravel.common.exception;
 
+import com.flourishtravel.common.exception.TooManyRequestsException;
 import com.flourishtravel.common.dto.ApiResponse;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -61,6 +63,13 @@ public class GlobalExceptionHandler {
         log.warn("Request body JSON invalid: {}", e.getMostSpecificCause() != null ? e.getMostSpecificCause().getMessage() : e.getMessage());
         String message = "Request body JSON không hợp lệ. Trường chuỗi (ví dụ content) không được chứa xuống dòng thật; nếu cần xuống dòng hãy dùng \\n.";
         return ResponseEntity.badRequest().body(ApiResponse.error(message));
+    }
+
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTooManyRequests(TooManyRequestsException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(e.getRetryAfterSeconds()))
+                .body(ApiResponse.error(e.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)

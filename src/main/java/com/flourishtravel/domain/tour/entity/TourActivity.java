@@ -78,4 +78,24 @@ public class TourActivity extends BaseEntity {
     /** Tags CSV: instagram, family, accessible, eco, photo, local-food, adventure... */
     @Column(length = 500)
     private String tags;
+
+    /** Địa chỉ chi tiết (khác tên địa điểm). */
+    @Column(name = "location_address", length = 500)
+    private String locationAddress;
+
+    /** Hoạt động tập trung / lên xe / họp đoàn — dùng cho Flora reminders. */
+    @Column(name = "is_gathering_event")
+    @Builder.Default
+    private Boolean isGatheringEvent = false;
+
+    /**
+     * DEPARTURE | MEETING | RETURN_TO_BUS | CHECK_IN | CHECK_OUT — chỉ khi isGatheringEvent=true.
+     * Null → Flora suy luận (RETURN_TO_BUS hoặc DEPARTURE ngày 1).
+     */
+    @Column(name = "gathering_event_type", length = 30)
+    private String gatheringEventType;
+
+    /** CONFIRMED | ESTIMATED | UNAVAILABLE — mức độ tin cậy lịch cho Flora. */
+    @Column(name = "schedule_status", length = 20)
+    private String scheduleStatus;
 }

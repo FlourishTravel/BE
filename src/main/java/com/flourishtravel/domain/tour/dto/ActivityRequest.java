@@ -52,4 +52,23 @@ public class ActivityRequest {
 
     @Size(max = 500)
     private String tags;
+
+    @Size(max = 500)
+    private String locationAddress;
+
+    private Boolean isGatheringEvent;
+
+    @Pattern(
+            regexp = "^$|^(DEPARTURE|MEETING|RETURN_TO_BUS|CHECK_IN|CHECK_OUT)$",
+            message = "gatheringEventType không hợp lệ"
+    )
+    @Size(max = 30)
+    private String gatheringEventType;
+
+    @Pattern(
+            regexp = "^$|^(CONFIRMED|ESTIMATED|UNAVAILABLE)$",
+            message = "scheduleStatus phải là CONFIRMED, ESTIMATED hoặc UNAVAILABLE"
+    )
+    @Size(max = 20)
+    private String scheduleStatus;
 }

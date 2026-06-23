@@ -106,7 +106,7 @@ public class LlmService {
             } catch (WebClientResponseException e) {
                 boolean retryable = e.getStatusCode() != null
                         && (e.getStatusCode().value() == 503 || e.getStatusCode().value() == 429);
-                log.warn("OpenRouter API error: {} {}", e.getStatusCode(), e.getResponseBodyAsString());
+                log.warn("OpenRouter API error: status={}", e.getStatusCode() != null ? e.getStatusCode().value() : "unknown");
                 if (retryable && attempt < RETRY_MAX) {
                     try {
                         TimeUnit.MILLISECONDS.sleep(RETRY_DELAY_MS);

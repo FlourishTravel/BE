@@ -5,6 +5,7 @@ import com.flourishtravel.domain.booking.entity.Booking;
 import com.flourishtravel.domain.chatbot.client.OpenMeteoClient;
 import com.flourishtravel.domain.flora.dto.FloraLocationRequest;
 import com.flourishtravel.domain.flora.dto.FloraLocationResponse;
+import com.flourishtravel.domain.flora.dto.FloraNextMeetingDto;
 import com.flourishtravel.domain.flora.entity.UserLocationPing;
 import com.flourishtravel.domain.flora.repository.UserLocationPingRepository;
 import lombok.RequiredArgsConstructor;
@@ -56,24 +57,49 @@ public class FloraLocationService {
         boolean suggestReturn = false;
         String message = "Flora đã cập nhật vị trí của bạn.";
 
-        String meetingPoint = booking.getPickupAddress();
-        if (meetingPoint != null && !meetingPoint.isBlank()) {
-            double[] meetingCoords = openMeteoClient.geocode(meetingPoint + " Vietnam");
-            if (meetingCoords != null) {
-                distanceMeters = haversineMeters(request.getLatitude(), request.getLongitude(), meetingCoords[0], meetingCoords[1]);
-                var journey = journeyService.getJourney(bookingId, userId);
-                Long minutesUntil = journey.getMinutesUntilGathering();
-                if (distanceMeters > returnThresholdMeters
-                        && minutesUntil != null
-                        && minutesUntil <= returnMinutesBefore
-                        && minutesUntil >= 0) {
-                    suggestReturn = true;
-                    message = String.format(
-                            "Bạn đang cách điểm tập trung khoảng %.0fm. Flora gợi ý bạn quay lại %s ngay để kịp giờ lên xe.",
-                            distanceMeters, meetingPoint);
-                    if (privacyService.hasNotificationConsent(userId)) {
-                        reminderService.sendReturnToBusAlert(booking, userId, meetingPoint, distanceMeters);
-                    }
+        var journey = journeyService.getJourney(bookingId, userId);
+        FloraNextMeetingDto meeting = journey.getNextMeeting();
+        boolean canUseMeeting = meeting != null && Boolean.TRUE.equals(meeting.getReminderEligible());
+
+        if (canUseMeeting) {
+            double meetingLat;
+            double meetingLon;
+            if (meeting.getLatitude() != null && meeting.getLongitude() != null) {
+                meetingLat = meeting.getLatitude();
+                meetingLon = meeting.getLongitude();
+            } else if (meeting.getLocationName() != null && !meeting.getLocationName().isBlank()) {
+                double[] meetingCoords = openMeteoClient.geocode(meeting.getLocationName() + " Vietnam");
+                if (meetingCoords == null) {
+                    meetingCoords = openMeteoClient.geocode(meeting.getLocationName());
+                }
+                if (meetingCoords == null) {
+                    return FloraLocationResponse.builder()
+                            .accepted(true)
+                            .message(message)
+                            .build();
+                }
+                meetingLat = meetingCoords[0];
+                meetingLon = meetingCoords[1];
+            } else {
+                return FloraLocationResponse.builder()
+                        .accepted(true)
+                        .message(message)
+                        .build();
+            }
+
+            distanceMeters = haversineMeters(request.getLatitude(), request.getLongitude(), meetingLat, meetingLon);
+            Long minutesUntil = journey.getMinutesUntilGathering();
+            String meetingLabel = meeting.getLocationName() != null ? meeting.getLocationName() : "điểm tập trung";
+            if (distanceMeters > returnThresholdMeters
+                    && minutesUntil != null
+                    && minutesUntil <= returnMinutesBefore
+                    && minutesUntil >= 0) {
+                suggestReturn = true;
+                message = String.format(
+                        "Bạn đang cách điểm tập trung khoảng %.0fm. Flora gợi ý bạn quay lại %s ngay để kịp giờ lên xe.",
+                        distanceMeters, meetingLabel);
+                if (privacyService.hasNotificationConsent(userId)) {
+                    reminderService.sendReturnToBusAlert(booking, userId, meetingLabel, distanceMeters);
                 }
             }
         }

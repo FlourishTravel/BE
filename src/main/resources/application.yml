@@ -115,6 +115,37 @@ app:
     return-to-bus-threshold-meters: ${FLORA_RETURN_THRESHOLD_M:500}
     return-to-bus-minutes-before: ${FLORA_RETURN_MINUTES:20}
     location-retention-hours: ${FLORA_LOCATION_RETENTION_H:48}
+    journey:
+      safety-buffer-minutes: ${FLORA_JOURNEY_SAFETY_BUFFER_MINUTES:10}
+    recommendations:
+      default-radius-meters: ${FLORA_RECOMMEND_DEFAULT_RADIUS_M:1000}
+      max-radius-meters: ${FLORA_RECOMMEND_MAX_RADIUS_M:3000}
+      default-limit: ${FLORA_RECOMMEND_DEFAULT_LIMIT:5}
+      max-limit: ${FLORA_RECOMMEND_MAX_LIMIT:10}
+      estimated-walking-speed-meters-per-minute: ${FLORA_RECOMMEND_WALK_SPEED_MPM:60}
+      rate-limit:
+        requests-per-minute: ${FLORA_RECOMMEND_RATE_LIMIT_PER_MINUTE:10}
+      default-visit-minutes:
+        restaurant: 35
+        cafe: 30
+        attraction: 45
+        photo-spot: 20
+        shopping: 30
+        restroom: 10
+
+  chatbot:
+    rate-limit:
+      authenticated:
+        requests-per-minute: ${CHATBOT_RATE_LIMIT_AUTH_PER_MINUTE:30}
+        requests-per-hour: ${CHATBOT_RATE_LIMIT_AUTH_PER_HOUR:300}
+      anonymous:
+        requests-per-minute: ${CHATBOT_RATE_LIMIT_ANON_PER_MINUTE:10}
+        requests-per-hour: ${CHATBOT_RATE_LIMIT_ANON_PER_HOUR:80}
+      in-memory:
+        max-keys: ${CHATBOT_RATE_LIMIT_MAX_KEYS:10000}
+        cleanup-interval-ms: ${CHATBOT_RATE_LIMIT_CLEANUP_MS:300000}
+      trusted-proxy:
+        enabled: ${CHATBOT_TRUSTED_PROXY:false}
 
 # Swagger / OpenAPI
 springdoc:

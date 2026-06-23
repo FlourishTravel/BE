@@ -1,5 +1,7 @@
 package com.flourishtravel.config;
 
+import com.flourishtravel.domain.chatbot.security.ChatbotRateLimitFilter;
+import com.flourishtravel.domain.flora.recommendation.FloraNearbyRateLimitFilter;
 import com.flourishtravel.security.JwtAuthenticationFilter;
 import com.flourishtravel.security.JwtEntryPoint;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final ChatbotRateLimitFilter chatbotRateLimitFilter;
+    private final FloraNearbyRateLimitFilter floraNearbyRateLimitFilter;
     private final JwtEntryPoint jwtEntryPoint;
 
     @Bean
@@ -56,7 +60,9 @@ public class SecurityConfig {
                 .requestMatchers("/guide/**").hasAnyRole("ADMIN", "TOUR_GUIDE")
                 .anyRequest().authenticated()
             )
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterAfter(chatbotRateLimitFilter, JwtAuthenticationFilter.class)
+            .addFilterAfter(floraNearbyRateLimitFilter, ChatbotRateLimitFilter.class);
         return http.build();
     }
 }

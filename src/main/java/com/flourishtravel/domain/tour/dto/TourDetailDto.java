@@ -129,6 +129,10 @@ public class TourDetailDto {
         private BigDecimal costEstimate;
         private Boolean costIncluded;
         private String tags;
+        private String locationAddress;
+        private Boolean isGatheringEvent;
+        private String gatheringEventType;
+        private String scheduleStatus;
     }
 
     @Data

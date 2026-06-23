@@ -6,23 +6,24 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class FloraNextMeetingDto {
+public class FloraActivityDto {
 
-    /** @deprecated use locationName — kept for backward compatibility */
-    private Instant time;
-    private String location;
-    private Long minutesUntil;
-
-    private String eventType;
+    private UUID id;
+    private String title;
+    private String description;
+    private Instant startAt;
+    private Instant endAt;
     private String locationName;
     private String locationAddress;
     private Double latitude;
     private Double longitude;
+    private String activityType;
     private String scheduleStatus;
-    private Boolean reminderEligible;
+    private Integer dayNumber;
 }

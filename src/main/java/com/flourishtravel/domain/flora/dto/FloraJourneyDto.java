@@ -34,6 +34,13 @@ public class FloraJourneyDto {
     private List<String> importantNotices;
     private FloraNextMeetingDto nextMeeting;
 
+    /** Phase 1.2 — activity-level journey (optional). */
+    private String journeyStatus;
+    private FloraActivityDto currentActivity;
+    private FloraActivityDto nextActivity;
+    private List<String> warnings;
+    private Long freeMinutesUntilMeeting;
+
     @Data
     @Builder
     @NoArgsConstructor

@@ -10,6 +10,7 @@ import com.flourishtravel.domain.chatbot.repository.ChatbotTrainingPhraseReposit
 import com.flourishtravel.domain.chatbot.repository.PolicyFaqRepository;
 import com.flourishtravel.domain.chatbot.repository.SearchLogRepository;
 import com.flourishtravel.domain.chatbot.service.ChatbotConfigService.ChatbotIntentWithPhrases;
+import com.flourishtravel.domain.chatbot.security.ChatbotSecurityAuditLogger;
 import com.flourishtravel.domain.tour.dto.AvailabilityCheckDto;
 import com.flourishtravel.domain.tour.entity.Tour;
 import com.flourishtravel.domain.tour.entity.TourImage;
@@ -51,6 +52,7 @@ public class ChatbotService {
     private final ChatbotDataService chatbotDataService;
     private final ChatbotUserContextService chatbotUserContextService;
     private final FloraContextBuilder floraContextBuilder;
+    private final ChatbotSecurityAuditLogger chatbotSecurityAuditLogger;
 
     private static final String PROMPT_TEMPLATE = FloraAiPersona.SYSTEM + """
 
@@ -136,6 +138,7 @@ Cá nhân hóa: Nếu có block "Hồ sơ khách đang đăng nhập" bên dư�
                 return buildResponseFromLlm(llmJson, content, request, userId);
             }
             log.info("Chatbot: LLM returned null, using fallback (check OPENROUTER_API_KEY or LLM JSON parse)");
+            chatbotSecurityAuditLogger.llmFallbackUsed(userId != null);
             return fallbackResponse(content);
         } catch (Exception e) {
             log.error("Chatbot processMessage failed", e);
@@ -209,15 +212,7 @@ Cá nhân hóa: Nếu có block "Hồ sơ khách đang đăng nhập" bên dư�
     }
 
     private static UUID resolveUserId(UUID authenticatedUserId, ChatbotRequest request) {
-        if (authenticatedUserId != null) return authenticatedUserId;
-        if (request.getUserId() != null && !request.getUserId().isBlank()) {
-            try {
-                return UUID.fromString(request.getUserId().trim());
-            } catch (IllegalArgumentException ignored) {
-                return null;
-            }
-        }
-        return null;
+        return authenticatedUserId;
     }
 
     @SuppressWarnings("unchecked")
