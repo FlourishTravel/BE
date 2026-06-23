@@ -1,0 +1,28 @@
+flowchart TB
+  User((Traveler))
+
+  subgraph FloraAI[Flora AI MVP]
+    UC01[UC01 Personalized Tour Recommendation]
+    UC02[UC02 Active Tour Companion]
+    UC03[UC03 Gathering Reminder]
+    UC04[UC04 Nearby Place Recommendation]
+    UC05[UC05 Return-to-Bus Alert]
+    UC06[UC06 Flora Chat]
+    UC07[UC07 Post-Tour Feedback]
+  end
+
+  User --> UC01
+  User --> UC02
+  User --> UC03
+  User --> UC04
+  User --> UC05
+  User --> UC06
+  User --> UC07
+
+  UC01 --> ToursAPI[/tours + flora-match + flora-recommend/]
+  UC02 --> JourneyAPI[/flora/bookings/journey/]
+  UC03 --> NotifAPI[/notifications/]
+  UC04 --> NearbyAPI[/chatbot/nearby-places/]
+  UC05 --> LocationAPI[/flora/bookings/location/]
+  UC06 --> ChatAPI[/chatbot/message/]
+  UC07 --> ReviewAPI[/reviews/]

@@ -36,4 +36,21 @@ public class UserController {
         UserProfileResponse profile = userService.updateProfile(principal.getId(), request);
         return ResponseEntity.ok(ApiResponse.ok("Cập nhật hồ sơ thành công", profile));
     }
+
+    @GetMapping("/me/travel-preferences")
+    public ResponseEntity<ApiResponse<com.flourishtravel.domain.flora.dto.TravelPreferencesDto>> getTravelPreferences(
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        return ResponseEntity.ok(ApiResponse.ok(
+                userService.getTravelPreferences(principal.getId())));
+    }
+
+    @PatchMapping("/me/travel-preferences")
+    public ResponseEntity<ApiResponse<com.flourishtravel.domain.flora.dto.TravelPreferencesDto>> updateTravelPreferences(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestBody com.flourishtravel.domain.flora.dto.UpdateTravelPreferencesRequest request) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        return ResponseEntity.ok(ApiResponse.ok("Cập nhật sở thích du lịch thành công",
+                userService.updateTravelPreferences(principal.getId(), request)));
+    }
 }

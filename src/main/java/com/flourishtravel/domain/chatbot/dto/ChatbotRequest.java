@@ -1,19 +1,27 @@
 package com.flourishtravel.domain.chatbot.dto;
 
+import com.flourishtravel.domain.flora.dto.FloraNextMeetingDto;
+import com.flourishtravel.domain.flora.dto.FloraSuggestedActionDto;
 import lombok.Data;
 
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Data
 public class ChatbotRequest {
 
     private String content;
-    /** Session identifier (demo gửi "demo-xxx", client thật có thể gửi UUID string). */
+    /** Alias for content (Flora clients). */
+    private String message;
     private String sessionId;
     private String userId;
-    /**
-     * State từ response trước (FE bắt buộc gửi lại ở mỗi tin nhắn tiếp theo).
-     * Backend merge state.slots vào lượt mới → chatbot trả lời dựa trên câu trước (destination, ngày, intent…).
-     */
     private Map<String, Object> state;
+
+    /** Active booking for in-trip context (optional). */
+    private UUID bookingId;
+    private Double latitude;
+    private Double longitude;
+    private String locale;
+    private String source;
 }

@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Repository
@@ -240,4 +241,25 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
                                                  @Param("today") LocalDate today,
                                                  @Param("rangeStart") LocalDate rangeStart,
                                                  @Param("rangeEnd") LocalDate rangeEnd);
+
+    @Query("""
+            SELECT DISTINCT b FROM Booking b
+            JOIN FETCH b.user u
+            JOIN FETCH b.session s
+            JOIN FETCH s.tour
+            WHERE LOWER(b.status) IN :statuses
+              AND s.startDate <= :today AND s.endDate >= :today
+            """)
+    List<Booking> findActiveForFloraReminders(@Param("today") LocalDate today,
+                                              @Param("statuses") Set<String> statuses);
+
+    @Query("""
+            SELECT DISTINCT b FROM Booking b
+            JOIN FETCH b.user u
+            JOIN FETCH b.session s
+            WHERE LOWER(b.status) IN :statuses
+              AND s.endDate = :yesterday
+            """)
+    List<Booking> findRecentlyCompletedForFlora(@Param("yesterday") LocalDate yesterday,
+                                                @Param("statuses") Set<String> statuses);
 }

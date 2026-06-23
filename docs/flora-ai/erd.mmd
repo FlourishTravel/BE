@@ -1,0 +1,49 @@
+erDiagram
+  users ||--o| user_travel_preferences : has
+  users ||--o{ bookings : places
+  bookings ||--o{ flora_reminder_deliveries : triggers
+  bookings ||--o{ user_location_pings : tracks
+
+  users {
+    uuid id PK
+    string email
+    string full_name
+  }
+
+  user_travel_preferences {
+    uuid id PK
+    uuid user_id FK
+    string travel_styles
+    string budget_level
+    string favorite_foods
+    string food_dislikes
+    string food_allergies
+    string preferred_activities
+    string avoided_activities
+    string travel_pace
+    boolean notification_consent
+    boolean location_consent
+    boolean personalization_consent
+  }
+
+  flora_reminder_deliveries {
+    uuid id PK
+    uuid booking_id FK
+    uuid user_id FK
+    string reminder_type
+    instant scheduled_at
+    instant sent_at
+    string status
+    uuid notification_id
+    string idempotency_key UK
+  }
+
+  user_location_pings {
+    uuid id PK
+    uuid booking_id FK
+    uuid user_id FK
+    double latitude
+    double longitude
+    double accuracy_meters
+    instant captured_at
+  }

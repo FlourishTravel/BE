@@ -107,6 +107,15 @@ app:
     upload-access-key-id: ${S3_UPLOAD_ACCESS_KEY_ID:}
     upload-secret-access-key: ${S3_UPLOAD_SECRET_ACCESS_KEY:}
 
+  flora:
+    timezone: ${FLORA_TOUR_TIMEZONE:Asia/Ho_Chi_Minh}
+    default-gathering-hour: ${FLORA_GATHERING_HOUR:7}
+    default-gathering-minute: ${FLORA_GATHERING_MINUTE:0}
+    reminder-check-ms: ${FLORA_REMINDER_CHECK_MS:60000}
+    return-to-bus-threshold-meters: ${FLORA_RETURN_THRESHOLD_M:500}
+    return-to-bus-minutes-before: ${FLORA_RETURN_MINUTES:20}
+    location-retention-hours: ${FLORA_LOCATION_RETENTION_H:48}
+
 # Swagger / OpenAPI
 springdoc:
   api-docs:

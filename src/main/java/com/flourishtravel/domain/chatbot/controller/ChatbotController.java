@@ -3,6 +3,7 @@ package com.flourishtravel.domain.chatbot.controller;
 import com.flourishtravel.common.dto.ApiResponse;
 import com.flourishtravel.domain.chatbot.dto.ChatbotRequest;
 import com.flourishtravel.domain.chatbot.dto.ChatbotResponse;
+import com.flourishtravel.domain.flora.service.FloraContextBuilder;
 import com.flourishtravel.domain.chatbot.service.ChatbotService;
 import com.flourishtravel.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ import java.util.UUID;
 public class ChatbotController {
 
     private final ChatbotService chatbotService;
+    private final FloraContextBuilder floraContextBuilder;
 
     @PostMapping("/message")
     public ResponseEntity<ApiResponse<ChatbotResponse>> message(
@@ -29,6 +31,7 @@ public class ChatbotController {
             @AuthenticationPrincipal UserPrincipal principal) {
         UUID userId = principal != null ? principal.getId() : null;
         ChatbotResponse response = chatbotService.processMessage(request, userId);
+        response = floraContextBuilder.enrich(response, request, userId);
         return ResponseEntity.ok(ApiResponse.ok(response));
     }
 }

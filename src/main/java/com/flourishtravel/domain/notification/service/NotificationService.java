@@ -58,4 +58,19 @@ public class NotificationService {
                     notificationRepository.save(n);
                 });
     }
+
+    @Transactional
+    public Notification createFloraNotification(UUID userId, String type, String title, String body, UUID bookingId) {
+        User user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        String data = bookingId != null ? "{\"bookingId\":\"" + bookingId + "\"}" : null;
+        Notification n = Notification.builder()
+                .user(user)
+                .type(type)
+                .title(title)
+                .body(body)
+                .data(data)
+                .isRead(false)
+                .build();
+        return notificationRepository.save(n);
+    }
 }

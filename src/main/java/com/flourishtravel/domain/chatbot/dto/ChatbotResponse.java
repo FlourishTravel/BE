@@ -1,5 +1,7 @@
 package com.flourishtravel.domain.chatbot.dto;
 
+import com.flourishtravel.domain.flora.dto.FloraNextMeetingDto;
+import com.flourishtravel.domain.flora.dto.FloraSuggestedActionDto;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -9,15 +11,23 @@ import java.util.List;
 import java.util.Map;
 
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 public class ChatbotResponse {
 
     private String reply;
+    /** Alias semantics for Flora clients — same as reply when set. */
+    private String answer;
     private List<TourCard> tours;
     private List<QuickReply> quickReplies;
     private Map<String, Object> state;
+
+    /** Flora MVP extensions (optional). */
+    private List<FloraSuggestedActionDto> suggestedActions;
+    private List<Map<String, Object>> recommendations;
+    private List<String> warnings;
+    private FloraNextMeetingDto nextMeeting;
 
     @Data
     @Builder

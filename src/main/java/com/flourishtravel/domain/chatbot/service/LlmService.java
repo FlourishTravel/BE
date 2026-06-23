@@ -37,7 +37,7 @@ public class LlmService {
     @Value("${app.openrouter.http-referer:https://flourishtravel.com}")
     private String httpReferer;
 
-    @Value("${app.openrouter.app-title:FlourishTravel}")
+    @Value("${app.openrouter.app-title:Flora AI}")
     private String appTitle;
 
     public LlmService(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {

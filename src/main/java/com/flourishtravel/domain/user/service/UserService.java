@@ -1,6 +1,9 @@
 package com.flourishtravel.domain.user.service;
 
 import com.flourishtravel.common.exception.ResourceNotFoundException;
+import com.flourishtravel.domain.flora.dto.TravelPreferencesDto;
+import com.flourishtravel.domain.flora.dto.UpdateTravelPreferencesRequest;
+import com.flourishtravel.domain.flora.service.UserTravelPreferenceService;
 import com.flourishtravel.domain.user.dto.UpdateProfileRequest;
 import com.flourishtravel.domain.user.dto.UserProfileResponse;
 import com.flourishtravel.domain.user.entity.User;
@@ -16,6 +19,7 @@ import java.util.UUID;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final UserTravelPreferenceService travelPreferenceService;
 
     @Transactional(readOnly = true)
     public UserProfileResponse getProfile(UUID userId) {
@@ -39,6 +43,18 @@ public class UserService {
         }
         user = userRepository.save(user);
         return toProfileResponse(user);
+    }
+
+    @Transactional(readOnly = true)
+    public TravelPreferencesDto getTravelPreferences(UUID userId) {
+        userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        return travelPreferenceService.getForUser(userId);
+    }
+
+    @Transactional
+    public TravelPreferencesDto updateTravelPreferences(UUID userId, UpdateTravelPreferencesRequest request) {
+        userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        return travelPreferenceService.update(userId, request);
     }
 
     private UserProfileResponse toProfileResponse(User user) {
