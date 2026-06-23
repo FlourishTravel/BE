@@ -197,10 +197,10 @@ MOMO_SECRET_KEY=
 MOMO_IPN_URL=http://localhost:8080/api/payments/momo/ipn
 FRONTEND_URL=http://localhost:5173
 
-# Chatbot AI (chỉ cần 1 trong 2; ưu tiên Gemini nếu set cả hai)
-GEMINI_API_KEY=      # Lấy tại: https://aistudio.google.com/apikey
-OPENAI_API_KEY=      # Lấy tại: https://platform.openai.com/api-keys
-# Tùy chọn: GEMINI_MODEL=gemini-1.5-flash, OPENAI_MODEL=gpt-4o-mini
+# Chatbot LLM — OpenRouter (Google Gemini 3 Flash Preview)
+OPENROUTER_API_KEY=   # https://openrouter.ai/keys
+# OPENROUTER_MODEL=google/gemini-3-flash-preview
+# OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 PII_ENCRYPTION_KEY=   # base64 32 bytes – mã hóa CCCD/CMND trong DB (tùy chọn, production nên set)
 ```
 
@@ -248,13 +248,20 @@ Cả ba đều trả `{ data: { accessToken, refreshToken, expiresIn, user: { id
 
 WebSocket: **ws://localhost:8080/api/ws/chat**
 
-## Cấu hình LLM (Chatbot thông minh)
+## Cấu hình Chatbot / AI
 
-Trợ lý AI dùng **Gemini** (ưu tiên) hoặc **OpenAI** để phân tích ý định và trả lời tự nhiên. Nếu không cấu hình key, chatbot vẫn chạy ở chế độ fallback (tìm tour theo từ khóa, câu trả lời cố định).
+Chatbot xử lý qua `ChatbotService`:
+
+1. **Rule-based trước:** training phrases, FAQ, tra cứu tour trong DB.
+2. **LLM khi cần:** `LlmService` gọi [OpenRouter](https://openrouter.ai) với model **`google/gemini-3-flash-preview`** (Gemini 3 Flash Preview).
+
+Nếu không set `OPENROUTER_API_KEY`, chatbot vẫn chạy **rule-based fallback**.
+
+API phụ trợ (không cần key): **Open-Meteo** (thời tiết), **Overpass/OSM** (địa điểm gần).
 
 ### Load biến từ file `.env` (BE/.env)
 
-Đã có sẵn file **BE/.env** (và **BE/.env.example**). Spring Boot không tự đọc `.env`, nên cần load thủ công khi chạy từ terminal:
+Copy **BE/.env.example** thành **BE/.env**. Spring Boot không tự đọc `.env`, nên cần load thủ công khi chạy từ terminal:
 
 - **PowerShell** (trong thư mục `BE`):
   ```powershell
@@ -269,40 +276,25 @@ Trợ lý AI dùng **Gemini** (ưu tiên) hoặc **OpenAI** để phân tích ý
 
 File `.env` đã được thêm vào **BE/.gitignore** để không bị commit key lên Git.
 
-### Cách 1: Biến môi trường (khuyến nghị)
+### Biến môi trường
 
-**Gemini (Google):**
-1. Vào [Google AI Studio](https://aistudio.google.com/apikey) → **Create API key**.
-2. Set trước khi chạy:
-   - **Windows PowerShell:** `$env:GEMINI_API_KEY="your-api-key-here"`
-   - **Linux/macOS:** `export GEMINI_API_KEY=your-api-key-here`
-   - Hoặc tạo file `.env` (nếu dùng tool load env) với dòng: `GEMINI_API_KEY=your-api-key-here`
+| Biến | Mặc định | Ghi chú |
+|------|----------|---------|
+| `OPENROUTER_API_KEY` | — | Bắt buộc để bật LLM. Lấy tại [openrouter.ai/keys](https://openrouter.ai/keys) |
+| `OPENROUTER_MODEL` | `google/gemini-3-flash-preview` | Model slug trên OpenRouter |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | OpenAI-compatible endpoint |
+| `OPENROUTER_HTTP_REFERER` | `https://flourishtravel.com` | Header khuyến nghị của OpenRouter |
+| `OPENROUTER_APP_TITLE` | `FlourishTravel` | Header `X-Title` |
 
-**OpenAI:**
-1. Vào [OpenAI API Keys](https://platform.openai.com/api-keys) → tạo key.
-2. Set: `OPENAI_API_KEY=sk-...`
-
-Chỉ cần **một trong hai** key. Nếu set cả hai, backend dùng **Gemini** trước.
-
-### Cách 2: application.yml (chỉ dùng khi dev, không commit key)
-
-Trong `BE/src/main/resources/application.yml`, sửa (hoặc override bằng profile):
-
-```yaml
-app:
-  gemini:
-    api-key: ${GEMINI_API_KEY:your-key-here}   # hoặc bỏ :your-key-here, set qua env
-    model: gemini-1.5-flash
-  openai:
-    api-key: ${OPENAI_API_KEY:}
-    model: gpt-4o-mini
-```
-
-**Lưu ý:** Không commit API key vào Git. Dùng biến môi trường hoặc secret (CI/production).
+**Production (DigitalOcean):** thêm `OPENROUTER_API_KEY` (Secret) trên App Platform → **Settings → Environment Variables**.
 
 ### Kiểm tra
 
-Sau khi set key và restart backend, gửi tin nhắn trong [demo chatbot](http://localhost:8080/api/chatbot-demo.html) (vd: "Tour biển 3 ngày"). Nếu LLM hoạt động, bot sẽ trả lời có intent/slots và câu tự nhiên thay vì câu fallback cố định.
+1. Set `OPENROUTER_API_KEY`, restart backend.
+2. Gửi tin tới `POST /api/chatbot/message` — log `Chatbot: using LLM response` nghĩa là OpenRouter hoạt động.
+3. Demo local: [chatbot-demo.html](http://localhost:8080/api/chatbot-demo.html) (vd: "Tour biển 3 ngày").
+
+**Lưu ý:** Không commit API key vào Git.
 
 ## Tài liệu liên quan
 
@@ -318,6 +310,6 @@ Sau khi set key và restart backend, gửi tin nhắn trong [demo chatbot](http:
 - [ ] Chat: MessageRepository, ChatRoomService, join_room/send_message trong WebSocket
 - [ ] Guide: SessionCheckin, Schedule API
 - [ ] Admin: CRUD Tour/Session/User, Stats, Refund, ContactRequest
-- [ ] Tích hợp LLM (OpenAI/Gemini) trong ChatbotService
+- [x] Tích hợp LLM (OpenRouter / Gemini 3 Flash) trong ChatbotService
 - [ ] OAuth Google/Facebook
 - [ ] Notifications, Favorites, Reviews, ContactRequests, Waitlist (entity + API)

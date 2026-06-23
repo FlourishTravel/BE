@@ -23,8 +23,8 @@ GitHub **không chạy được** ứng dụng Java/Spring Boot. Bạn cần dep
 | **DB_USER** | Reference từ Postgres (vd. `PGUSER`). |
 | **DB_PASSWORD** | Reference từ Postgres (vd. `PGPASSWORD`). **Quan trọng:** dùng reference, không gõ password local. |
 | **JWT_SECRET** | Tạo chuỗi bí mật ≥ 32 ký tự (vd. random: `openssl rand -base64 32`), paste vào. **Đổi** giá trị mặc định. |
-| **GEMINI_API_KEY** | Nếu dùng chatbot với Gemini: lấy key tại [Google AI Studio](https://aistudio.google.com/apikey), paste vào. Không dùng thì để trống (có thể lỗi khi gọi AI). |
-| **OPENAI_API_KEY** | Nếu dùng chatbot với OpenAI: lấy key tại [OpenAI API Keys](https://platform.openai.com/api-keys), paste vào. Không dùng thì để trống. |
+| **OPENROUTER_API_KEY** | API key từ [OpenRouter](https://openrouter.ai/keys). Chatbot dùng model `google/gemini-3-flash-preview`. |
+| **OPENROUTER_MODEL** | (Tùy chọn) Mặc định `google/gemini-3-flash-preview`. |
 | **SERVER_PORT** | Có thể **xóa** hoặc để `8080`. Railway tự set `PORT`; BE đã đọc `PORT` trước. |
 | **FRONTEND_URL** | URL frontend thật khi deploy (vd. GitHub Pages: `https://username.github.io/FlourishTravel-FE` hoặc Vercel/Netlify). Không dùng localhost. |
 
@@ -58,7 +58,7 @@ git commit -m "chore: add Dockerfile and DO App Platform spec"
 git push origin main
 ```
 
-**Tạo app:** **Apps → Create App → GitHub** → chọn repo **BE** (không phải monorepo FlourishTravel) → **Source directory** để **`/`** (root) → spec đọc từ **`BE/.do/app.yaml`** (`dockerfile_path: Dockerfile`). Set **`DB_PASSWORD`** và **`JWT_SECRET`** (Secret) trên dashboard.
+**Tạo app:** **Apps → Create App → GitHub** → chọn repo **BE** (không phải monorepo FlourishTravel) → **Source directory** để **`/`** (root) → spec đọc từ **`BE/.do/app.yaml`** (`dockerfile_path: Dockerfile`). Set **`DB_PASSWORD`** và **`JWT_SECRET`** (Secret) trên dashboard. Thêm **`OPENROUTER_API_KEY`** (Secret) để bật chatbot LLM.
 
 **Chỉnh tay (không dùng spec):** Web Service → Source directory **`/`** → Dockerfile **`Dockerfile`** → HTTP port **`8080`**.
 
@@ -129,7 +129,7 @@ CLI mẫu (đổi ARN, image, tên service): xem [Migration từ App Runner → 
 
 1. Tạo môi trường **Docker** trên Amazon Linux 2.
 2. Deploy: đóng gói image lên ECR + `Dockerrun.aws.json` (v2) hoặc đẩy `Dockerfile` kèm context `BE` theo tài liệu Beanstalk Docker.
-3. Cấu hình **instance role** nếu app cần gọi S3/Bedrock (IAM), và **security group** mở inbound **8080** (hoặc port proxy mà Beanstalk dùng).
+3. Cấu hình **instance role** nếu app cần gọi S3 (IAM), và **security group** mở inbound **8080** (hoặc port proxy mà Beanstalk dùng).
 
 ### 4.5. ECS Fargate (tự cấu hình cluster + service + ALB)
 

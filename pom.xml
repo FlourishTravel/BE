@@ -90,18 +90,12 @@
             <artifactId>spring-boot-starter-oauth2-client</artifactId>
         </dependency>
 
-        <!-- HTTP Client (Momo, OpenAI/Gemini) -->
+        <!-- HTTP Client (Momo, OpenRouter) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
 
-        <!-- AWS Bedrock Runtime (chatbot LLM fallback) -->
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>bedrockruntime</artifactId>
-            <version>2.34.0</version>
-        </dependency>
         <!-- S3 upload (URL trả về cho FE) — bật khi app.upload.storage=s3 -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>

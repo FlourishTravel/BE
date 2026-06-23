@@ -128,7 +128,7 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
                 log.debug("Chatbot: using LLM response for content length={}", content.length());
                 return buildResponseFromLlm(llmJson, content, request);
             }
-            log.info("Chatbot: LLM returned null, using fallback (check GEMINI_API_KEY / OpenAI key or LLM JSON parse)");
+            log.info("Chatbot: LLM returned null, using fallback (check OPENROUTER_API_KEY or LLM JSON parse)");
             return fallbackResponse(content);
         } catch (Exception e) {
             log.error("Chatbot processMessage failed", e);
