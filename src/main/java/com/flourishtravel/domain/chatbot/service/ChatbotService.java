@@ -18,6 +18,7 @@ import com.flourishtravel.domain.tour.entity.TourLocation;
 import com.flourishtravel.domain.tour.repository.TourRepository;
 import org.hibernate.Hibernate;
 import com.flourishtravel.domain.tour.service.TourService;
+import com.flourishtravel.domain.user.entity.User;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -46,6 +48,7 @@ public class ChatbotService {
     private final ObjectMapper objectMapper;
     private final TourService tourService;
     private final ChatbotDataService chatbotDataService;
+    private final ChatbotUserContextService chatbotUserContextService;
 
     private static final String PROMPT_TEMPLATE = """
 Persona: Bạn là chuyên viên tư vấn du lịch của FlourishTravel – lịch sự, chuyên nghiệp, nhiệt tình nhưng không quá suồng sã. Trả lời ngắn gọn, rõ ràng; khi cần chuyển sang nhân viên thì hướng dẫn cụ thể (hotline, form Liên hệ). CHỈ tư vấn trong lĩnh vực tour du lịch/chính sách. Nếu user viết tiếng Anh/Trung/Hàn: trả lời CÙNG ngôn ngữ đó.
@@ -70,10 +73,13 @@ Các intent:
 - unknown: không liên quan tour. reply lịch sự + quick_replies "Tour biển 3 ngày", "Chính sách hủy tour", "Để lại thông tin tư vấn".
 
 Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "còn ít chỗ", "đặt trong chat giảm 5%%", "để lại SĐT/email nhận khuyến mãi". Không spam.
+
+Cá nhân hóa: Nếu có block "Hồ sơ khách đang đăng nhập" bên dưới, ưu tiên gợi ý tour/địa điểm phù hợp lịch sử đặt và tour yêu thích; có thể nhắc nhẹ "dựa trên chuyến/tour bạn quan tâm trước đó".
 """;
 
     @Transactional
-    public ChatbotResponse processMessage(ChatbotRequest request) {
+    public ChatbotResponse processMessage(ChatbotRequest request, UUID authenticatedUserId) {
+        UUID userId = resolveUserId(authenticatedUserId, request);
         try {
             String raw = request.getContent() != null ? request.getContent().trim() : "";
             String content = normalizeUserInput(raw);
@@ -98,7 +104,7 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
             // Ưu tiên match intent từ training phrases (config import); có state thì ưu tiên intent theo context câu trước
             ChatbotIntentWithPhrases matched = matchIntentFromTrainingPhrases(content, request);
             if (matched != null) {
-                ChatbotResponse intentResponse = buildResponseFromIntent(matched, content, request);
+                ChatbotResponse intentResponse = buildResponseFromIntent(matched, content, request, userId);
                 if (intentResponse != null) return intentResponse;
             }
 
@@ -120,13 +126,13 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
                 }
             }
 
-            String contextHint = buildContextHint(request.getState());
+            String contextHint = buildCombinedContextHint(request.getState(), userId);
             String contentForFormat = content.replace("%", "%%");
             String hintForFormat = contextHint.replace("%", "%%");
             Map<String, Object> llmJson = llmService.generateJson(String.format(PROMPT_TEMPLATE, contentForFormat, hintForFormat));
             if (llmJson != null) {
-                log.debug("Chatbot: using LLM response for content length={}", content.length());
-                return buildResponseFromLlm(llmJson, content, request);
+                log.debug("Chatbot: using LLM response for content length={} userId={}", content.length(), userId);
+                return buildResponseFromLlm(llmJson, content, request, userId);
             }
             log.info("Chatbot: LLM returned null, using fallback (check OPENROUTER_API_KEY or LLM JSON parse)");
             return fallbackResponse(content);
@@ -189,8 +195,32 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
         return sb.append("\n").toString();
     }
 
+    private String buildCombinedContextHint(Map<String, Object> previousState, UUID userId) {
+        StringBuilder sb = new StringBuilder();
+        String sessionHint = buildContextHint(previousState);
+        if (!sessionHint.isBlank()) sb.append(sessionHint);
+        String profileHint = chatbotUserContextService.buildProfileHint(userId);
+        if (!profileHint.isBlank()) {
+            if (!sb.isEmpty()) sb.append("\n");
+            sb.append(profileHint);
+        }
+        return sb.toString();
+    }
+
+    private static UUID resolveUserId(UUID authenticatedUserId, ChatbotRequest request) {
+        if (authenticatedUserId != null) return authenticatedUserId;
+        if (request.getUserId() != null && !request.getUserId().isBlank()) {
+            try {
+                return UUID.fromString(request.getUserId().trim());
+            } catch (IllegalArgumentException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
     @SuppressWarnings("unchecked")
-    private ChatbotResponse buildResponseFromLlm(Map<String, Object> llmJson, String content, ChatbotRequest request) {
+    private ChatbotResponse buildResponseFromLlm(Map<String, Object> llmJson, String content, ChatbotRequest request, UUID userId) {
         String intent = getString(llmJson, "intent");
         String reply = getString(llmJson, "reply");
         if (reply == null || reply.isBlank()) reply = "Mình đã ghi nhận, bạn cần thêm thông tin gì không?";
@@ -244,6 +274,10 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
         state.put("slots", slots);
 
         String destination = slots.get("destination") != null ? String.valueOf(slots.get("destination")) : null;
+        if (isBlankDestination(destination) && userId != null) {
+            List<String> preferred = chatbotUserContextService.preferredDestinations(userId);
+            if (!preferred.isEmpty()) destination = preferred.get(0);
+        }
         BigDecimal minPrice = null;
         BigDecimal maxPrice = null;
         if (slots.get("budget_min") instanceof Number n) minPrice = BigDecimal.valueOf(n.doubleValue() * 1_000_000);
@@ -253,7 +287,7 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
         List<ChatbotResponse.TourCard> tours = List.of();
         if ("search_tour".equals(intent)) {
             tours = searchToursWithDuration(destination, minPrice, maxPrice, durationDays, 6);
-            saveSearchLog(request, content, destination, minPrice, maxPrice, durationDays, tours.size());
+            saveSearchLog(request, userId, content, destination, minPrice, maxPrice, durationDays, tours.size());
         } else if ("trip_planner".equals(intent)) {
             String destForSearch = destination;
             if (destForSearch == null || destForSearch.isBlank()) {
@@ -633,10 +667,15 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
         return all.stream().filter(p -> topicKey.equals(p.getTopicKey())).findFirst().map(PolicyFaq::getContent).orElse(all.get(0).getContent());
     }
 
-    private void saveSearchLog(ChatbotRequest request, String query, String destination, BigDecimal minPrice, BigDecimal maxPrice, Integer durationDays, int resultCount) {
+    private static boolean isBlankDestination(String destination) {
+        return destination == null || destination.isBlank() || "null".equalsIgnoreCase(destination.trim());
+    }
+
+    private void saveSearchLog(ChatbotRequest request, UUID userId, String query, String destination, BigDecimal minPrice, BigDecimal maxPrice, Integer durationDays, int resultCount) {
         try {
+            User user = userId != null ? chatbotUserContextService.findUser(userId).orElse(null) : null;
             SearchLog entry = SearchLog.builder()
-                    .user(null)
+                    .user(user)
                     .sessionId(request.getSessionId())
                     .searchQuery(query)
                     .destination(destination)
@@ -857,7 +896,7 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
     }
 
     /** Tạo response từ intent đã match: điền template, gọi system_action (tour search...), trả state. */
-    private ChatbotResponse buildResponseFromIntent(ChatbotIntentWithPhrases iwp, String content, ChatbotRequest request) {
+    private ChatbotResponse buildResponseFromIntent(ChatbotIntentWithPhrases iwp, String content, ChatbotRequest request, UUID userId) {
         ChatbotIntent intent = iwp.intent();
         String template = intent.getResponseTemplate();
         if (template == null || template.isBlank()) template = "Mình đã ghi nhận yêu cầu của bạn. Bạn cần thêm thông tin gì không?";
@@ -877,7 +916,11 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
                 String type = action != null ? (String) action.get("type") : null;
                 String endpoint = action != null ? (String) action.get("api_endpoint") : null;
                 String dest = slots.get("destination") != null ? String.valueOf(slots.get("destination")) : null;
-                if (dest == null || dest.isBlank()) dest = extractSearchKeyword(content);
+                if (isBlankDestination(dest)) dest = extractSearchKeyword(content);
+                if (isBlankDestination(dest) && userId != null) {
+                    List<String> preferred = chatbotUserContextService.preferredDestinations(userId);
+                    if (!preferred.isEmpty()) dest = preferred.get(0);
+                }
 
                 if ("database_query".equals(type) && endpoint != null && endpoint.contains("tour")) {
                     BigDecimal min = slots.get("budget_min") instanceof Number n ? BigDecimal.valueOf(n.doubleValue() * 1_000_000) : null;
@@ -885,7 +928,7 @@ Upselling/Chốt đơn (khi hợp): Gợi ý xe đưa đón, vé show, SIM; "cò
                     Integer days = slots.get("duration_days") instanceof Number n ? n.intValue() : null;
                     if (days == null && slots.get("duration") instanceof Number n) days = n.intValue();
                     tours = searchToursWithDuration(dest, min, max, days, 6);
-                    saveSearchLog(request, content, dest, min, max, days, tours.size());
+                    saveSearchLog(request, userId, content, dest, min, max, days, tours.size());
                 } else if ("check_realtime_inventory".equals(type) && endpoint != null && (endpoint.contains("availability") || endpoint.contains("bookings"))) {
                     var avOpt = tourService.checkAvailability(dest, null);
                     if (avOpt.isPresent()) {
