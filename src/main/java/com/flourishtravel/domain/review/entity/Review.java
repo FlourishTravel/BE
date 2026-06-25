@@ -41,4 +41,12 @@ public class Review extends BaseEntity {
     /** Comma-separated Flora feedback tag IDs (Phase 1.4). */
     @Column(name = "feedback_tags", columnDefinition = "TEXT")
     private String feedbackTags;
+
+    @Column(name = "is_published", nullable = false)
+    @Builder.Default
+    private Boolean isPublished = false;
+
+    @Column(name = "is_featured", nullable = false)
+    @Builder.Default
+    private Boolean isFeatured = false;
 }

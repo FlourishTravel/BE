@@ -8,11 +8,15 @@ import com.flourishtravel.domain.guide.dto.GuideSessionSummaryDto;
 import com.flourishtravel.domain.guide.dto.ParticipantActivityAttendanceResultDto;
 import com.flourishtravel.domain.guide.dto.SessionCheckinResultDto;
 import com.flourishtravel.domain.guide.dto.SessionParticipantResultDto;
+import com.flourishtravel.domain.guide.dto.CreateGuideSessionExpenseRequest;
+import com.flourishtravel.domain.guide.dto.GuideSessionExpenseDto;
+import com.flourishtravel.domain.guide.service.GuideSessionExpenseService;
 import com.flourishtravel.domain.guide.service.GuideService;
 import com.flourishtravel.domain.tour.dto.SessionActivitySchedulePatchRequest;
 import com.flourishtravel.domain.tour.dto.SessionScheduleViewDto;
 import com.flourishtravel.domain.tour.service.TourSessionScheduleService;
 import com.flourishtravel.security.UserPrincipal;
+import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -31,6 +35,7 @@ public class GuideController {
 
     private final GuideService guideService;
     private final TourSessionScheduleService sessionScheduleService;
+    private final GuideSessionExpenseService expenseService;
 
     @GetMapping("/sessions")
     public ResponseEntity<ApiResponse<List<GuideSessionSummaryDto>>> getMySessions(
@@ -184,6 +189,34 @@ public class GuideController {
         if (principal == null) return ResponseEntity.status(401).build();
         return ResponseEntity.ok(ApiResponse.ok("Đã hủy hoạt động trong lịch đoàn",
                 sessionScheduleService.cancelActivity(sessionId, activityId, principal)));
+    }
+
+    @GetMapping("/sessions/{sessionId}/expenses")
+    public ResponseEntity<ApiResponse<List<GuideSessionExpenseDto>>> listSessionExpenses(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID sessionId) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        return ResponseEntity.ok(ApiResponse.ok(expenseService.listForSession(sessionId, principal.getId())));
+    }
+
+    @PostMapping("/sessions/{sessionId}/expenses")
+    public ResponseEntity<ApiResponse<GuideSessionExpenseDto>> createSessionExpense(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID sessionId,
+            @Valid @RequestBody CreateGuideSessionExpenseRequest request) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        GuideSessionExpenseDto row = expenseService.create(sessionId, principal.getId(), request);
+        return ResponseEntity.ok(ApiResponse.ok("Đã ghi chi phí", row));
+    }
+
+    @DeleteMapping("/sessions/{sessionId}/expenses/{expenseId}")
+    public ResponseEntity<ApiResponse<Void>> deleteSessionExpense(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID sessionId,
+            @PathVariable UUID expenseId) {
+        if (principal == null) return ResponseEntity.status(401).build();
+        expenseService.delete(sessionId, expenseId, principal.getId());
+        return ResponseEntity.ok(ApiResponse.ok("Đã xóa chi phí", null));
     }
 
     @Data

@@ -6,6 +6,8 @@ import com.flourishtravel.domain.booking.entity.Booking;
 import com.flourishtravel.domain.booking.repository.BookingRepository;
 import com.flourishtravel.domain.flora.feedback.FloraFeedbackTagCatalog;
 import com.flourishtravel.domain.flora.feedback.FloraPostTourEligibility;
+import com.flourishtravel.domain.review.dto.ReviewModerationRequest;
+import com.flourishtravel.domain.review.dto.ReviewViewDto;
 import com.flourishtravel.domain.review.entity.Review;
 import com.flourishtravel.domain.review.repository.ReviewRepository;
 import com.flourishtravel.domain.user.entity.User;
@@ -68,5 +70,59 @@ public class ReviewService {
                 .feedbackTags(FloraFeedbackTagCatalog.joinTagIds(feedbackTags))
                 .build();
         return reviewRepository.save(review);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReviewViewDto> listAdmin() {
+        return reviewRepository.findAllAdmin().stream()
+                .map(this::toDto)
+                .toList();
+    }
+
+    @Transactional
+    public ReviewViewDto updateModeration(UUID reviewId, ReviewModerationRequest request) {
+        Review review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new ResourceNotFoundException("Review", reviewId));
+        if (request.getIsPublished() != null) {
+            review.setIsPublished(request.getIsPublished());
+            if (!request.getIsPublished()) {
+                review.setIsFeatured(false);
+            }
+        }
+        if (request.getIsFeatured() != null) {
+            review.setIsFeatured(Boolean.TRUE.equals(request.getIsFeatured()) && Boolean.TRUE.equals(review.getIsPublished()));
+        }
+        return toDto(reviewRepository.save(review));
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReviewViewDto> listPublic(UUID tourId) {
+        return reviewRepository.findPublic(tourId).stream()
+                .map(this::toDto)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReviewViewDto> listPublicFeatured() {
+        return reviewRepository.findFeaturedPublic().stream()
+                .map(this::toDto)
+                .toList();
+    }
+
+    private ReviewViewDto toDto(Review review) {
+        return ReviewViewDto.builder()
+                .id(review.getId())
+                .bookingId(review.getBooking() != null ? review.getBooking().getId() : null)
+                .userId(review.getUser() != null ? review.getUser().getId() : null)
+                .userName(review.getUser() != null ? review.getUser().getFullName() : null)
+                .tourId(review.getTour() != null ? review.getTour().getId() : null)
+                .tourTitle(review.getTour() != null ? review.getTour().getTitle() : null)
+                .rating(review.getRating())
+                .comment(review.getComment())
+                .feedbackTags(review.getFeedbackTags())
+                .isPublished(review.getIsPublished())
+                .isFeatured(review.getIsFeatured())
+                .createdAt(review.getCreatedAt())
+                .build();
     }
 }

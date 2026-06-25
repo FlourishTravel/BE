@@ -41,6 +41,12 @@ public class UserService {
         if (request.getAvatarUrl() != null) {
             user.setAvatarUrl(request.getAvatarUrl().trim().isEmpty() ? null : request.getAvatarUrl().trim());
         }
+        if (request.getGender() != null) {
+            user.setGender(request.getGender().trim().isEmpty() ? null : request.getGender().trim());
+        }
+        if (request.getAddress() != null) {
+            user.setAddress(request.getAddress().trim().isEmpty() ? null : request.getAddress().trim());
+        }
         user = userRepository.save(user);
         return toProfileResponse(user);
     }
@@ -64,6 +70,8 @@ public class UserService {
                 .fullName(user.getFullName())
                 .phone(user.getPhone())
                 .avatarUrl(user.getAvatarUrl())
+                .gender(user.getGender())
+                .address(user.getAddress())
                 .role(user.getRole() != null ? user.getRole().getName() : null)
                 .build();
     }

@@ -13,6 +13,10 @@ public interface TravelTicketRepository extends JpaRepository<TravelTicket, UUID
 
     Optional<TravelTicket> findBySlugAndPublishedTrue(String slug);
 
+    Optional<TravelTicket> findBySlug(String slug);
+
+    boolean existsBySlugIgnoreCase(String slug);
+
     @Query("""
             SELECT t FROM TravelTicket t
             WHERE t.published = true

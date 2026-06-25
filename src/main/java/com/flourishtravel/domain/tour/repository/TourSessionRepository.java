@@ -20,6 +20,8 @@ public interface TourSessionRepository extends JpaRepository<TourSession, UUID> 
 
     List<TourSession> findByTourGuide_IdAndStartDateBetweenOrderByStartDateAsc(UUID guideId, LocalDate from, LocalDate to);
 
+    long countByTourGuide_Id(UUID guideId);
+
     /** Số session HDV còn phía trước (từ ngày from trở đi, trạng thái scheduled). */
     @Query("""
         SELECT COUNT(s) FROM TourSession s

@@ -20,6 +20,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByEmail(String email);
 
+    List<User> findByIsActiveTrue();
+
     /**
      * Danh sách HDV (role = TOUR_GUIDE) đang active, sắp xếp theo tên đầy đủ.
      * Dùng cho trang Điều hành tour (FE chọn HDV thay thế).
@@ -31,6 +33,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
         ORDER BY u.fullName ASC
         """)
     List<User> findActiveByRoleName(@Param("roleName") String roleName);
+
+    Optional<User> findByIdAndRole_NameAndIsActiveTrue(UUID id, String roleName);
 
     /**
      * Tìm kiếm khách hàng cho admin (role = TRAVELER theo mặc định).

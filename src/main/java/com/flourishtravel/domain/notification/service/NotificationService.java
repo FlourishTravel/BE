@@ -1,6 +1,7 @@
 package com.flourishtravel.domain.notification.service;
 
 import com.flourishtravel.common.exception.ResourceNotFoundException;
+import com.flourishtravel.domain.notification.dto.AdminNotificationSummaryDto;
 import com.flourishtravel.domain.notification.entity.Notification;
 import com.flourishtravel.domain.notification.repository.NotificationRepository;
 import com.flourishtravel.domain.notification.push.service.PushNotificationQueueService;
@@ -13,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -25,6 +28,21 @@ public class NotificationService {
 
     private static final int DEFAULT_LIMIT = 20;
     private static final int MAX_LIMIT = 100;
+
+    @Transactional(readOnly = true)
+    public Page<AdminNotificationSummaryDto> listForAdmin(int page, int size) {
+        int safeSize = size > 0 ? Math.min(size, MAX_LIMIT) : DEFAULT_LIMIT;
+        PageRequest pageRequest = PageRequest.of(Math.max(page, 0), safeSize);
+        return notificationRepository.findAllByOrderByCreatedAtDesc(pageRequest)
+                .map(n -> AdminNotificationSummaryDto.builder()
+                        .id(n.getId())
+                        .title(n.getTitle())
+                        .body(n.getBody())
+                        .type(n.getType())
+                        .recipientEmail(n.getUser().getEmail())
+                        .createdAt(n.getCreatedAt())
+                        .build());
+    }
 
     @Transactional(readOnly = true)
     public Page<Notification> getMyNotifications(UUID userId, Boolean unreadOnly, Integer limit) {
@@ -76,5 +94,43 @@ public class NotificationService {
         Notification saved = notificationRepository.save(n);
         pushNotificationQueueService.scheduleQueueAfterCommit(saved.getId());
         return saved;
+    }
+
+    @Transactional
+    public int broadcastToAll(String title, String body, String type) {
+        List<User> users = userRepository.findByIsActiveTrue();
+        return createAndDispatchBulk(users, title, body, type);
+    }
+
+    @Transactional
+    public int broadcastToRole(String roleName, String title, String body, String type) {
+        List<User> users = userRepository.findActiveByRoleName(roleName);
+        return createAndDispatchBulk(users, title, body, type);
+    }
+
+    private int createAndDispatchBulk(List<User> users, String title, String body, String type) {
+        String normalizedType = normalizeType(type);
+        int count = 0;
+        for (User user : users) {
+            Notification n = Notification.builder()
+                    .user(user)
+                    .type(normalizedType)
+                    .title(title)
+                    .body(body)
+                    .isRead(false)
+                    .build();
+            Notification saved = notificationRepository.save(n);
+            pushNotificationQueueService.scheduleQueueAfterCommit(saved.getId());
+            count++;
+        }
+        return count;
+    }
+
+    private String normalizeType(String type) {
+        String normalized = type == null ? "" : type.trim();
+        if (normalized.isEmpty()) {
+            return "general";
+        }
+        return normalized.toLowerCase(Locale.ROOT);
     }
 }

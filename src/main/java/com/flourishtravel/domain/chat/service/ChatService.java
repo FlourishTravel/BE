@@ -115,13 +115,46 @@ public class ChatService {
         }
     }
 
+    /**
+     * Khách đặt tour, HDV phụ trách session, hoặc admin.
+     */
+    private User resolveBookingChatActor(Booking booking, UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        if (booking.getUser().getId().equals(userId)) {
+            return user;
+        }
+        TourSession session = booking.getSession();
+        User guide = session != null ? session.getTourGuide() : null;
+        if (guide != null && guide.getId().equals(userId)) {
+            return user;
+        }
+        String roleName = user.getRole() != null ? user.getRole().getName() : "";
+        if ("ADMIN".equalsIgnoreCase(roleName)) {
+            return user;
+        }
+        throw new ResourceNotFoundException("Booking", booking.getId());
+    }
+
+    private void ensureGuideInChatRoom(TourSession session, ChatRoom room) {
+        if (session == null || room == null) {
+            return;
+        }
+        User guide = session.getTourGuide();
+        if (guide != null && !chatMemberRepository.existsByRoomAndUser(room, guide)) {
+            chatMemberRepository.save(ChatMember.builder()
+                    .room(room)
+                    .user(guide)
+                    .joinedAt(Instant.now())
+                    .build());
+        }
+    }
+
     @Transactional
     public TourChatContextDto getTourChatContext(UUID bookingId, UUID userId) {
         Booking booking = bookingRepository.findByIdWithSessionTourForChat(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking", bookingId));
-        if (!booking.getUser().getId().equals(userId)) {
-            throw new ResourceNotFoundException("Booking", bookingId);
-        }
+        User actor = resolveBookingChatActor(booking, userId);
         TourSession session = booking.getSession();
         var tour = session.getTour();
         String tourTitle = tour != null ? tour.getTitle() : null;
@@ -131,8 +164,14 @@ public class ChatService {
             ensureTravelerInChatRoom(booking);
         }
         ChatRoom room = chatRoomRepository.findBySession_Id(session.getId()).orElse(null);
+        if (eligible && room == null) {
+            room = ensureChatRoomForSession(session);
+        }
+        if (eligible && room != null) {
+            ensureGuideInChatRoom(session, room);
+        }
 
-        boolean isMember = room != null && chatMemberRepository.existsByRoomAndUser(room, booking.getUser());
+        boolean isMember = room != null && chatMemberRepository.existsByRoomAndUser(room, actor);
         boolean canChat = eligible && room != null && isMember;
 
         String denyReason = null;
@@ -166,16 +205,15 @@ public class ChatService {
     public List<ChatMessageViewDto> getBookingChatMessages(UUID bookingId, UUID userId, Integer limit) {
         Booking booking = bookingRepository.findByIdWithSessionTourForChat(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking", bookingId));
-        if (!booking.getUser().getId().equals(userId)) {
-            throw new ResourceNotFoundException("Booking", bookingId);
-        }
+        User actor = resolveBookingChatActor(booking, userId);
         if (!isChatEligibleBookingStatus(booking.getStatus())) {
             throw new BadRequestException("Đơn chưa đủ điều kiện để xem phòng chat.");
         }
         ensureTravelerInChatRoom(booking);
         ChatRoom room = chatRoomRepository.findBySession_Id(booking.getSession().getId())
-                .orElseThrow(() -> new BadRequestException("Không thể mở phòng chat cho lịch này."));
-        if (!chatMemberRepository.existsByRoomAndUser(room, booking.getUser())) {
+                .orElseGet(() -> ensureChatRoomForSession(booking.getSession()));
+        ensureGuideInChatRoom(booking.getSession(), room);
+        if (!chatMemberRepository.existsByRoomAndUser(room, actor)) {
             throw new BadRequestException("Bạn chưa tham gia phòng chat này.");
         }
         int size = limit != null && limit > 0 ? Math.min(limit, MAX_LIMIT) : DEFAULT_LIMIT;
@@ -197,22 +235,20 @@ public class ChatService {
         }
         Booking booking = bookingRepository.findByIdWithSessionTourForChat(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking", bookingId));
-        if (!booking.getUser().getId().equals(userId)) {
-            throw new ResourceNotFoundException("Booking", bookingId);
-        }
+        User actor = resolveBookingChatActor(booking, userId);
         if (!isChatEligibleBookingStatus(booking.getStatus())) {
             throw new BadRequestException("Đơn chưa đủ điều kiện để gửi tin nhắn.");
         }
         ensureTravelerInChatRoom(booking);
         ChatRoom room = chatRoomRepository.findBySession_Id(booking.getSession().getId())
-                .orElseThrow(() -> new BadRequestException("Không thể mở phòng chat cho lịch này."));
-        User user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
-        if (!chatMemberRepository.existsByRoomAndUser(room, user)) {
+                .orElseGet(() -> ensureChatRoomForSession(booking.getSession()));
+        ensureGuideInChatRoom(booking.getSession(), room);
+        if (!chatMemberRepository.existsByRoomAndUser(room, actor)) {
             throw new BadRequestException("Bạn chưa tham gia phòng chat này.");
         }
         Message msg = Message.builder()
                 .room(room)
-                .sender(user)
+                .sender(actor)
                 .messageType("text")
                 .content(trimmed)
                 .build();

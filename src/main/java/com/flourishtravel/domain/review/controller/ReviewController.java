@@ -1,6 +1,7 @@
 package com.flourishtravel.domain.review.controller;
 
 import com.flourishtravel.common.dto.ApiResponse;
+import com.flourishtravel.domain.review.dto.ReviewViewDto;
 import com.flourishtravel.domain.review.entity.Review;
 import com.flourishtravel.domain.review.service.ReviewService;
 import com.flourishtravel.security.UserPrincipal;
@@ -38,6 +39,17 @@ public class ReviewController {
                 request.getComment(),
                 request.getFeedbackTags());
         return ResponseEntity.ok(ApiResponse.ok("Đã gửi đánh giá", review));
+    }
+
+    @GetMapping("/public")
+    public ResponseEntity<ApiResponse<List<ReviewViewDto>>> listPublic(
+            @RequestParam(required = false) UUID tourId) {
+        return ResponseEntity.ok(ApiResponse.ok(reviewService.listPublic(tourId)));
+    }
+
+    @GetMapping("/featured")
+    public ResponseEntity<ApiResponse<List<ReviewViewDto>>> listFeatured() {
+        return ResponseEntity.ok(ApiResponse.ok(reviewService.listPublicFeatured()));
     }
 
     @Data
