@@ -1,7 +1,7 @@
 package com.flourishtravel.domain.notification.controller;
 
 import com.flourishtravel.common.dto.ApiResponse;
-import com.flourishtravel.domain.notification.entity.Notification;
+import com.flourishtravel.domain.notification.dto.NotificationViewDto;
 import com.flourishtravel.domain.notification.service.NotificationService;
 import com.flourishtravel.domain.notification.push.dto.PushDeviceRegisterRequest;
 import com.flourishtravel.domain.notification.push.dto.PushDeviceRegisterResponse;
@@ -25,26 +25,26 @@ public class NotificationController {
     private final PushDeviceService pushDeviceService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<Page<Notification>>> getMy(
+    public ResponseEntity<ApiResponse<Page<NotificationViewDto>>> getMy(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(required = false) Boolean unread_only,
             @RequestParam(required = false) Integer limit) {
         if (principal == null) {
             return ResponseEntity.status(401).build();
         }
-        Page<Notification> page = notificationService.getMyNotifications(
+        Page<NotificationViewDto> page = notificationService.getMyNotifications(
                 principal.getId(), unread_only, limit);
         return ResponseEntity.ok(ApiResponse.ok(page));
     }
 
     @PatchMapping("/{id}/read")
-    public ResponseEntity<ApiResponse<Notification>> markRead(
+    public ResponseEntity<ApiResponse<NotificationViewDto>> markRead(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable java.util.UUID id) {
         if (principal == null) {
             return ResponseEntity.status(401).build();
         }
-        Notification n = notificationService.markAsRead(id, principal.getId());
+        NotificationViewDto n = notificationService.markAsRead(id, principal.getId());
         return ResponseEntity.ok(ApiResponse.ok("Đã đánh dấu đọc", n));
     }
 

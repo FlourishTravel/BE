@@ -2,6 +2,7 @@ package com.flourishtravel.domain.notification.service;
 
 import com.flourishtravel.common.exception.ResourceNotFoundException;
 import com.flourishtravel.domain.notification.dto.AdminNotificationSummaryDto;
+import com.flourishtravel.domain.notification.dto.NotificationViewDto;
 import com.flourishtravel.domain.notification.entity.Notification;
 import com.flourishtravel.domain.notification.repository.NotificationRepository;
 import com.flourishtravel.domain.notification.push.service.PushNotificationQueueService;
@@ -45,18 +46,20 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
-    public Page<Notification> getMyNotifications(UUID userId, Boolean unreadOnly, Integer limit) {
+    public Page<NotificationViewDto> getMyNotifications(UUID userId, Boolean unreadOnly, Integer limit) {
         User user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
         int size = limit != null && limit > 0 ? Math.min(limit, MAX_LIMIT) : DEFAULT_LIMIT;
         PageRequest page = PageRequest.of(0, size);
         if (Boolean.TRUE.equals(unreadOnly)) {
-            return notificationRepository.findByUserAndIsReadFalseOrderByCreatedAtDesc(user, page);
+            return notificationRepository.findByUserAndIsReadFalseOrderByCreatedAtDesc(user, page)
+                    .map(this::toViewDto);
         }
-        return notificationRepository.findByUserOrderByCreatedAtDesc(user, page);
+        return notificationRepository.findByUserOrderByCreatedAtDesc(user, page)
+                .map(this::toViewDto);
     }
 
     @Transactional
-    public Notification markAsRead(UUID notificationId, UUID userId) {
+    public NotificationViewDto markAsRead(UUID notificationId, UUID userId) {
         Notification n = notificationRepository.findById(notificationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Notification", notificationId));
         if (!n.getUser().getId().equals(userId)) {
@@ -64,7 +67,7 @@ public class NotificationService {
         }
         n.setIsRead(true);
         n.setReadAt(Instant.now());
-        return notificationRepository.save(n);
+        return toViewDto(notificationRepository.save(n));
     }
 
     @Transactional
@@ -132,5 +135,18 @@ public class NotificationService {
             return "general";
         }
         return normalized.toLowerCase(Locale.ROOT);
+    }
+
+    private NotificationViewDto toViewDto(Notification notification) {
+        return NotificationViewDto.builder()
+                .id(notification.getId())
+                .type(notification.getType())
+                .title(notification.getTitle())
+                .body(notification.getBody())
+                .data(notification.getData())
+                .isRead(notification.getIsRead())
+                .readAt(notification.getReadAt())
+                .createdAt(notification.getCreatedAt())
+                .build();
     }
 }
