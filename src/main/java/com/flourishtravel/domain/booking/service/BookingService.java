@@ -42,6 +42,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -277,15 +279,10 @@ public class BookingService {
         BigDecimal discountAmount = BigDecimal.ZERO;
         Promotion promotion = null;
         if (promotionCode != null && !promotionCode.isBlank()) {
-            promotion = promotionRepository.findByCodeAndIsActiveTrue(promotionCode).orElse(null);
+            promotion = findActivePromotion(promotionCode).orElse(null);
             if (promotion != null && Instant.now().isAfter(promotion.getValidFrom()) && Instant.now().isBefore(promotion.getValidTo())) {
                 if (promotion.getMinOrderAmount() == null || totalAmount.compareTo(promotion.getMinOrderAmount()) >= 0) {
-                    BigDecimal discount = promotion.getDiscountType().equals("percent")
-                            ? totalAmount.multiply(promotion.getDiscountValue()).divide(BigDecimal.valueOf(100))
-                            : promotion.getDiscountValue();
-                    if (promotion.getMaxDiscountAmount() != null && discount.compareTo(promotion.getMaxDiscountAmount()) > 0) {
-                        discount = promotion.getMaxDiscountAmount();
-                    }
+                    BigDecimal discount = computePromotionDiscount(promotion, totalAmount);
                     discountAmount = discount;
                     totalAmount = totalAmount.subtract(discountAmount);
                 }
@@ -480,7 +477,8 @@ public class BookingService {
 
     @Transactional(readOnly = true)
     public ValidatePromoResult validatePromo(String code, UUID sessionId, int guestCount, UUID userIdOrNull) {
-        if (code == null || code.isBlank()) {
+        String normalizedCode = normalizePromoCode(code);
+        if (normalizedCode == null) {
             return new ValidatePromoResult(false, BigDecimal.ZERO, "Mã không được để trống");
         }
         TourSession session = sessionRepository.findById(sessionId).orElse(null);
@@ -496,20 +494,56 @@ public class BookingService {
         }
         BigDecimal unitPrice = session.getTour().getBasePrice() != null ? session.getTour().getBasePrice() : BigDecimal.ZERO;
         BigDecimal totalAmount = unitPrice.multiply(BigDecimal.valueOf(guestCount));
-        return promotionRepository.findByCodeAndIsActiveTrue(code)
-                .filter(p -> Instant.now().isAfter(p.getValidFrom()) && Instant.now().isBefore(p.getValidTo()))
-                .filter(p -> p.getUsageLimit() == null || p.getUsedCount() < p.getUsageLimit())
-                .filter(p -> p.getMinOrderAmount() == null || totalAmount.compareTo(p.getMinOrderAmount()) >= 0)
-                .map(p -> {
-                    BigDecimal discount = p.getDiscountType().equals("percent")
-                            ? totalAmount.multiply(p.getDiscountValue()).divide(BigDecimal.valueOf(100))
-                            : p.getDiscountValue();
-                    if (p.getMaxDiscountAmount() != null && discount.compareTo(p.getMaxDiscountAmount()) > 0) {
-                        discount = p.getMaxDiscountAmount();
-                    }
-                    return new ValidatePromoResult(true, discount, "Áp dụng thành công");
-                })
-                .orElse(new ValidatePromoResult(false, BigDecimal.ZERO, "Mã không hợp lệ hoặc đã hết hạn"));
+        Optional<Promotion> promoOpt = findActivePromotion(normalizedCode);
+        if (promoOpt.isEmpty()) {
+            return new ValidatePromoResult(false, BigDecimal.ZERO, "Mã không hợp lệ hoặc đã hết hạn");
+        }
+        Promotion p = promoOpt.get();
+        Instant now = Instant.now();
+        if (!now.isAfter(p.getValidFrom()) || !now.isBefore(p.getValidTo())) {
+            return new ValidatePromoResult(false, BigDecimal.ZERO, "Mã đã hết hạn hoặc chưa có hiệu lực");
+        }
+        if (p.getUsageLimit() != null && p.getUsedCount() >= p.getUsageLimit()) {
+            return new ValidatePromoResult(false, BigDecimal.ZERO, "Mã đã hết lượt sử dụng");
+        }
+        if (p.getMinOrderAmount() != null && totalAmount.compareTo(p.getMinOrderAmount()) < 0) {
+            return new ValidatePromoResult(
+                    false,
+                    BigDecimal.ZERO,
+                    "Đơn tối thiểu " + p.getMinOrderAmount().stripTrailingZeros().toPlainString() + " VND để dùng mã này");
+        }
+        BigDecimal discount = computePromotionDiscount(p, totalAmount);
+        return new ValidatePromoResult(true, discount, "Áp dụng thành công");
+    }
+
+    private String normalizePromoCode(String code) {
+        if (code == null) {
+            return null;
+        }
+        String trimmed = code.trim();
+        return trimmed.isEmpty() ? null : trimmed.toUpperCase(Locale.ROOT);
+    }
+
+    private Optional<Promotion> findActivePromotion(String code) {
+        String normalized = normalizePromoCode(code);
+        if (normalized == null) {
+            return Optional.empty();
+        }
+        return promotionRepository.findByCodeIgnoreCaseAndIsActiveTrue(normalized);
+    }
+
+    private boolean isPercentDiscount(String discountType) {
+        return "percent".equalsIgnoreCase(discountType == null ? "" : discountType.trim());
+    }
+
+    private BigDecimal computePromotionDiscount(Promotion promotion, BigDecimal totalAmount) {
+        BigDecimal discount = isPercentDiscount(promotion.getDiscountType())
+                ? totalAmount.multiply(promotion.getDiscountValue()).divide(BigDecimal.valueOf(100))
+                : promotion.getDiscountValue();
+        if (promotion.getMaxDiscountAmount() != null && discount.compareTo(promotion.getMaxDiscountAmount()) > 0) {
+            discount = promotion.getMaxDiscountAmount();
+        }
+        return discount;
     }
 
     @Transactional

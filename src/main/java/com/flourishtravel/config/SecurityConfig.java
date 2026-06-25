@@ -56,6 +56,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/chatbot/nearby-places", "/chatbot/weather-forecast").permitAll()
                 .requestMatchers("/payments/momo/ipn").permitAll()
                 .requestMatchers(HttpMethod.POST, "/bookings/validate-session").permitAll()
+                .requestMatchers(HttpMethod.POST, "/bookings/validate-promo").permitAll()
                 .requestMatchers("/contact-requests").permitAll()
                 .requestMatchers(HttpMethod.POST, "/contact-requests/**").permitAll()
                 .requestMatchers("/uploads/**").permitAll()

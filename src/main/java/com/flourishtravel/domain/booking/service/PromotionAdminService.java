@@ -144,7 +144,7 @@ public class PromotionAdminService {
         if (normalized == null) {
             throw new BadRequestException(field + " không được để trống");
         }
-        return normalized;
+        return normalized.toUpperCase(Locale.ROOT);
     }
 
     private PromotionDto toDto(Promotion promotion) {

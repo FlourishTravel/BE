@@ -13,6 +13,8 @@ public interface PromotionRepository extends JpaRepository<Promotion, UUID> {
 
     Optional<Promotion> findByCodeAndIsActiveTrue(String code);
 
+    Optional<Promotion> findByCodeIgnoreCaseAndIsActiveTrue(String code);
+
     Optional<Promotion> findByCode(String code);
 
     boolean existsByCodeIgnoreCase(String code);
