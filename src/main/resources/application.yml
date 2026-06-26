@@ -66,7 +66,7 @@ app:
     pii-key: ${PII_ENCRYPTION_KEY:}
   jwt:
     secret: ${JWT_SECRET:your-256-bit-secret-key-change-in-production-min-32-chars}
-    access-token-validity-ms: 900000
+    access-token-validity-ms: 86400000
     refresh-token-validity-ms: 604800000
 
   # Sandbox mặc định (credentials mẫu MoMo công khai). Production: set biến môi trường hoặc .env.
