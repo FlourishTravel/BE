@@ -23,7 +23,8 @@ public class GeocodeService {
             String destinationCity) {
         if (!vietMapClient.isConfigured()) {
             throw new BadRequestException(
-                    "Chưa cấu hình VIETMAP_API_KEY trên server. Lấy key tại https://maps.vietmap.vn/console");
+                    "Chưa cấu hình VietMap API key trên server (VIETMAP_API_KEY hoặc MAP_VIET_ACESS_KEY). "
+                            + "Lấy key tại https://maps.vietmap.vn/console");
         }
 
         List<String> queries = new ArrayList<>();

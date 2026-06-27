@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
@@ -50,16 +51,21 @@ public class VietMapClient {
                     .queryParam("apikey", properties.getApiKey())
                     .queryParam("text", text.trim())
                     .queryParam("display_type", 6)
-                    .build(true)
+                    .build()
+                    .encode()
                     .toUri();
 
-            String raw = webClient.get()
-                    .uri(uri)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .block();
+            String raw = fetchBody(uri);
+            if (raw == null || raw.isBlank()) {
+                return Optional.empty();
+            }
 
             JsonNode root = objectMapper.readTree(raw);
+            if (root.isObject() && hasErrorCode(root)) {
+                log.warn("VietMap search error for '{}': {}", text, raw);
+                return Optional.empty();
+            }
+
             JsonNode results = extractResultArray(root);
             if (results == null || !results.isArray() || results.isEmpty()) {
                 return Optional.empty();
@@ -92,16 +98,20 @@ public class VietMapClient {
             URI uri = UriComponentsBuilder.fromHttpUrl(PLACE_V4)
                     .queryParam("apikey", properties.getApiKey())
                     .queryParam("refid", refId)
-                    .build(true)
+                    .build()
+                    .encode()
                     .toUri();
 
-            String raw = webClient.get()
-                    .uri(uri)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .block();
+            String raw = fetchBody(uri);
+            if (raw == null || raw.isBlank()) {
+                return Optional.empty();
+            }
 
             JsonNode root = objectMapper.readTree(raw);
+            if (root.isObject() && hasErrorCode(root)) {
+                log.warn("VietMap place error for refId={}: {}", refId, raw);
+                return Optional.empty();
+            }
             JsonNode place = root.isObject() && root.has("data") ? root.get("data") : root;
             Double lat = readCoordinate(place, "lat", "latitude");
             Double lng = readCoordinate(place, "lng", "longitude", "lon");
@@ -173,6 +183,28 @@ public class VietMapClient {
             }
         }
         return null;
+    }
+
+    private String fetchBody(URI uri) {
+        try {
+            return webClient.get()
+                    .uri(uri)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+        } catch (WebClientResponseException e) {
+            log.warn("VietMap HTTP {} for {}: {}", e.getStatusCode().value(), uri.getPath(), e.getResponseBodyAsString());
+            return null;
+        }
+    }
+
+    private static boolean hasErrorCode(JsonNode root) {
+        JsonNode code = root.get("code");
+        if (code == null || code.isNull()) {
+            return false;
+        }
+        String value = code.asText("");
+        return !value.isBlank() && !"OK".equalsIgnoreCase(value) && !"00".equals(value);
     }
 
     private static String readText(JsonNode node, String... keys) {

@@ -100,7 +100,8 @@ app:
     maps-api-key: ${GOOGLE_MAPS_API_KEY:}
 
   vietmap:
-    api-key: ${VIETMAP_API_KEY:}
+    # Ưu tiên VIETMAP_API_KEY; fallback tên biến legacy MAP_VIET_ACESS_KEY / MAP_VIET_ACCESS_KEY
+    api-key: ${VIETMAP_API_KEY:${MAP_VIET_ACESS_KEY:${MAP_VIET_ACCESS_KEY:}}}
 
   # Có hoặc không dấu / cuối đều được (BE chuẩn hóa khi ghép /checkout/...).
   frontend:

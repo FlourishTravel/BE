@@ -41,3 +41,6 @@ services:
       - key: JWT_SECRET
         scope: RUN_TIME
         type: SECRET
+      - key: VIETMAP_API_KEY
+        scope: RUN_TIME
+        type: SECRET
