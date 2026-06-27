@@ -52,8 +52,7 @@ spring:
 server:
   # PORT: Railway/Render tự set; SERVER_PORT: dùng khi chạy local hoặc set tay
   port: ${PORT:${SERVER_PORT:8080}}
-  servlet:
-    context-path: /api
+  # Không dùng context-path: DO ingress rule /api đã strip prefix → container nhận /tours, /health, ...
 
 # JWT & Encryption
 app:
@@ -75,7 +74,7 @@ app:
     access-key: ${MOMO_ACCESS_KEY:F8BBA842ECF85}
     secret-key: ${MOMO_SECRET_KEY:K951B6PE1waDMi640xX08PD3vg6EkVlz}
     endpoint: ${MOMO_ENDPOINT:https://test-payment.momo.vn}
-    ipn-url: ${MOMO_IPN_URL:http://localhost:8080/api/payments/momo/ipn}
+    ipn-url: ${MOMO_IPN_URL:http://localhost:8080/payments/momo/ipn}
     return-url: ${MOMO_RETURN_URL:http://localhost:5173/checkout/result}
     partner-name: ${MOMO_PARTNER_NAME:FlourishTravel}
     store-id: ${MOMO_STORE_ID:MomoTestStore}
@@ -86,7 +85,7 @@ app:
     client-id: ${PAYOS_CLIENT_ID:}
     api-key: ${PAYOS_API_KEY:}
     checksum-key: ${PAYOS_CHECKSUM_KEY:}
-    webhook-url: ${PAYOS_WEBHOOK_URL:http://localhost:8080/api/payments/payos/webhook}
+    webhook-url: ${PAYOS_WEBHOOK_URL:http://localhost:8080/payments/payos/webhook}
     return-url: ${PAYOS_RETURN_URL:http://localhost:5173/checkout/result}
     cancel-url: ${PAYOS_CANCEL_URL:http://localhost:5173/checkout/result}
 
@@ -103,7 +102,8 @@ app:
   # Có hoặc không dấu / cuối đều được (BE chuẩn hóa khi ghép /checkout/...).
   frontend:
     url: ${FRONTEND_URL:http://localhost:5173}
-  api-base-url: ${API_BASE_URL:http://localhost:8080/api}
+  # Public URL (có /api) khi deploy; local: http://localhost:8080
+  api-base-url: ${API_BASE_URL:http://localhost:8080}
   upload:
     # local = lưu disk + phục vụ /uploads/** ; s3 = PutObject lên bucket, trả về URL S3/CDN
     storage: ${UPLOAD_STORAGE:local}

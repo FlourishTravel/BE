@@ -28,10 +28,10 @@ public class OpenApiConfig {
                 .info(apiInfo())
                 .servers(List.of(
                         new Server()
-                                .url("/api")
-                                .description("Current host (Swagger cùng server)"),
+                                .url("/")
+                                .description("Container root (prod: truy cập qua /api/... trên ingress)"),
                         new Server()
-                                .url("http://localhost:" + serverPort + "/api")
+                                .url("http://localhost:" + serverPort)
                                 .description("Local server")
                 ))
                 .addSecurityItem(new SecurityRequirement().addList(SECURITY_SCHEME_NAME))

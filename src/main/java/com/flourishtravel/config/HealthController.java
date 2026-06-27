@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 
 /**
- * Health đơn giản cho load balancer / DigitalOcean (context-path /api → /api/health).
+ * Health cho load balancer / DO. Container: GET /health — public: GET /api/health (ingress strip).
  */
 @RestController
 public class HealthController {

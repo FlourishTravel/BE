@@ -17,7 +17,7 @@ services:
     # 0.5GB hay timeout startup Spring — dùng 1GB nếu vẫn fail health check
     instance_size_slug: apps-s-1vcpu-1gb
     health_check:
-      http_path: /api/health
+      http_path: /health
       initial_delay_seconds: 300
       period_seconds: 20
       timeout_seconds: 15

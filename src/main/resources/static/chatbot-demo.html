@@ -157,7 +157,7 @@
 
   <script>
     (function () {
-      const API_BASE = window.location.origin + '/api';
+      const API_BASE = window.location.origin;
       const sessionId = 'demo-' + Math.random().toString(36).slice(2, 11);
 
       const messagesEl = document.getElementById('messages');
@@ -279,7 +279,7 @@
           })
           .catch(function (e) {
             removeTyping();
-            appendError(e.message || 'Không kết nối được server. Chạy backend và mở trang từ http://localhost:8080/api/chatbot-demo.html');
+            appendError(e.message || 'Không kết nối được server. Chạy backend và mở trang từ http://localhost:8080/chatbot-demo.html');
           })
           .finally(function () { sendBtn.disabled = false; });
       }

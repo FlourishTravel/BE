@@ -32,7 +32,7 @@ public class ChatbotIntent extends BaseEntity {
     @Column(name = "entities_to_extract", columnDefinition = "TEXT")
     private String entitiesToExtract;
 
-    /** JSON: {"type":"database_query","api_endpoint":"/api/tours/search"} */
+    /** JSON: {"type":"database_query","api_endpoint":"/tours/search"} */
     @Column(name = "system_action", columnDefinition = "TEXT")
     private String systemAction;
 

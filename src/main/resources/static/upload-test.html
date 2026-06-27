@@ -113,12 +113,12 @@
 <body>
   <header>
     <h1>Test upload ảnh (BE)</h1>
-    <p>Mở trang này qua server: <code>/api/upload-test.html</code> — API <code>POST /api/upload</code> cần JWT.</p>
+    <p>Mở trang này qua server: <code>/upload-test.html</code> — API <code>POST /upload</code> cần JWT.</p>
   </header>
   <main>
     <div class="field">
       <label for="baseUrl">Base API (context-path)</label>
-      <input type="url" id="baseUrl" value="" placeholder="http://localhost:8080/api">
+      <input type="url" id="baseUrl" value="" placeholder="http://localhost:8080">
       <p class="hint">Để trống = cùng origin với trang này (khuyến nghị).</p>
     </div>
     <div class="field">
@@ -153,9 +153,6 @@
 
       if (!baseInput.value) {
         baseInput.value = window.location.origin + (window.location.pathname.replace(/\/upload-test\.html$/, '') || '');
-        if (!baseInput.value.endsWith('/api')) {
-          baseInput.value = window.location.origin + '/api';
-        }
       }
 
       function showResult(html, isErr) {
@@ -238,7 +235,7 @@
             showResult('<pre>' + JSON.stringify(json, null, 2) + '</pre>', !json || !json.success);
           }
         } catch (e) {
-          showResult('Lỗi mạng / CORS: ' + e.message + '<br><small>Đảm bảo mở trang từ <code>http://localhost:8080/api/upload-test.html</code> và BE đang chạy.</small>', true);
+          showResult('Lỗi mạng / CORS: ' + e.message + '<br><small>Đảm bảo mở trang từ <code>http://localhost:8080/upload-test.html</code> và BE đang chạy.</small>', true);
         } finally {
           btnUpload.disabled = false;
         }

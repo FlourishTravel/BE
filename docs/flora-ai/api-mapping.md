@@ -1,6 +1,6 @@
 # Flora AI — API Mapping
 
-Base path: `/api` (Spring `server.servlet.context-path`).
+Base path: `/` trên container. URL public: `https://<domain>/api/...` (DO ingress strip `/api`).
 
 ## Reused existing APIs
 

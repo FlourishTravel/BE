@@ -62,7 +62,7 @@ git push origin main
 
 **Chỉnh tay (không dùng spec):** Web Service → Source directory **`/`** → Dockerfile **`Dockerfile`** → HTTP port **`8080`**.
 
-**Health check (bắt buộc nếu báo `connection refused` hoặc 404):** Path **`/api/health`** (trả `{"status":"UP"}`), **Initial delay 300s**, Period 20s, Failure threshold 15. Ví dụ domain: `https://flourishtravel-rtdye.ondigitalocean.app/api`. Nếu app tạo trước khi có `.do/app.yaml`, vào **Component → Settings → Health Check** chỉnh tay (spec không tự ghi đè). Instance khuyến nghị **1 GB RAM** (`apps-s-1vcpu-1gb`).
+**Health check:** Container path **`/health`**; public qua ingress **`/api/health`**. Ví dụ: `https://flourishtravel.khanhtn45.id.vn/api/health`.
 
 **Database:** PostgreSQL DO (`application-cloud.yml`, profile `cloud`). Thêm **Trusted sources** cho App Platform vào cluster DB.
 

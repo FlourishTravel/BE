@@ -18,7 +18,7 @@ public class LocalUploadStorageService implements UploadStorageService {
     @Value("${app.upload.dir:uploads}")
     private String uploadDir;
 
-    @Value("${app.api-base-url:http://localhost:8080/api}")
+    @Value("${app.api-base-url:http://localhost:8080}")
     private String apiBaseUrl;
 
     @Override

@@ -23,7 +23,7 @@
       "entities_to_extract": ["budget", "duration", "region", "vibe", "travel_style", "destination"],
       "system_action": {
         "type": "database_query",
-        "api_endpoint": "/api/tours"
+        "api_endpoint": "/tours"
       },
       "response_template": "Chào bạn! Với ngân sách {budget} và thời gian {duration} tại {region}, FlourishTravel có một vài lịch trình cực kỳ phù hợp với phong cách {vibe} của bạn. Bạn muốn xem chi tiết tour nào dưới đây?",
       "context_output": "awaiting_tour_selection"
@@ -122,7 +122,7 @@
       "entities_to_extract": ["destination", "date", "pax", "extra_services", "extension_days"],
       "system_action": {
         "type": "check_realtime_inventory",
-        "api_endpoint": "/api/tours/availability/check"
+        "api_endpoint": "/tours/availability/check"
       },
       "response_template": "Dạ tour có lịch trình qua {destination}. Hiện tại hệ thống báo chỉ còn {remaining_slots} chỗ cho {date}. Phí gia hạn thêm {extension_days} đêm là [Price]. Mình đã thêm yêu cầu {extra_services} vào hệ thống, bạn có muốn mình giữ chỗ trước 15 phút không ạ?",
       "context_output": "booking_in_progress"
@@ -231,7 +231,7 @@
       "context_requirement": "must_have_active_booking_location",
       "system_action": {
         "type": "external_api_call",
-        "api_endpoint": "/api/chatbot/nearby-places"
+        "api_endpoint": "/chatbot/nearby-places"
       },
       "response_template": "Cách khách sạn của bạn khoảng {distance} có một quán {poi_type} tên là {place_name} được người dân địa phương đánh giá rất cao ({rating}). Bạn có muốn mình gửi bản đồ chỉ đường qua luôn không?"
     },
@@ -350,7 +350,7 @@
       "entities_to_extract": ["previous_destination", "preference"],
       "system_action": {
         "type": "database_query",
-        "api_endpoint": "/api/tours"
+        "api_endpoint": "/tours"
       },
       "response_template": "Dạ sau chuyến {previous_destination} bạn có thể cân nhắc {preference} — FlourishTravel có vài tour rất được lòng khách. Bạn xem gợi ý bên dưới, thích tour nào mình tư vấn chi tiết ạ!",
       "context_output": "awaiting_tour_selection"
@@ -429,7 +429,7 @@
       "entities_to_extract": ["destination", "date"],
       "system_action": {
         "type": "external_api_call",
-        "api_endpoint": "/api/chatbot/weather-forecast"
+        "api_endpoint": "/chatbot/weather-forecast"
       },
       "response_template": "Dạ dự báo thời tiết {destination}: {weather_summary} Bạn nên mang theo ô/áo mưa phòng mưa nhẹ. Có cần mình gợi ý tour thay thế nếu thời tiết xấu không ạ?",
       "context_output": "weather_info_given"
