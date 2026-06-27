@@ -27,6 +27,12 @@ public interface SessionParticipantActivityAttendanceRepository
             UUID sessionId, UUID tourActivityId);
 
     @Modifying(flushAutomatically = true)
-    @Query("DELETE FROM SessionParticipantActivityAttendance a WHERE a.tourActivity.itinerary.tour.id = :tourId")
+    @Query(value = """
+            DELETE FROM session_participant_activity_attendance a
+            USING tour_activities ta
+            INNER JOIN tour_itineraries ti ON ti.id = ta.itinerary_id
+            WHERE a.tour_activity_id = ta.id
+              AND ti.tour_id = :tourId
+            """, nativeQuery = true)
     void deleteByTourActivityTourId(@Param("tourId") UUID tourId);
 }
