@@ -49,9 +49,10 @@ public class FloraRecommendationContextBuilder {
             Booking booking) {
 
         boolean hasGps = request.getLatitude() != null && request.getLongitude() != null;
-        boolean locationConsent = privacyService.hasLocationConsent(userId);
+        boolean profileConsent = privacyService.hasLocationConsent(userId);
+        boolean requestConsent = Boolean.TRUE.equals(request.getLocationConsent());
 
-        if (hasGps && locationConsent) {
+        if (hasGps && (profileConsent || requestConsent)) {
             return ResolvedLocation.builder()
                     .latitude(request.getLatitude())
                     .longitude(request.getLongitude())
@@ -63,13 +64,36 @@ public class FloraRecommendationContextBuilder {
         }
 
         FloraActivityDto current = journey != null ? journey.getCurrentActivity() : null;
-        if (current != null && current.getLatitude() != null && current.getLongitude() != null) {
+        FloraActivityDto next = journey != null ? journey.getNextActivity() : null;
+        var meeting = journey != null ? journey.getNextMeeting() : null;
+
+        ResolvedLocation fromCoords = coordsFromActivity(current, FloraRecommendationConstants.LOCATION_ACTIVITY);
+        if (fromCoords != null) return fromCoords;
+
+        fromCoords = coordsFromActivity(next, FloraRecommendationConstants.LOCATION_ACTIVITY);
+        if (fromCoords != null) return fromCoords;
+
+        if (meeting != null && meeting.getLatitude() != null && meeting.getLongitude() != null) {
             return ResolvedLocation.builder()
-                    .latitude(current.getLatitude())
-                    .longitude(current.getLongitude())
+                    .latitude(meeting.getLatitude())
+                    .longitude(meeting.getLongitude())
                     .source(FloraRecommendationConstants.LOCATION_ACTIVITY)
-                    .label(current.getLocationName() != null ? current.getLocationName() : "Điểm hoạt động hiện tại")
+                    .label(meeting.getLocationName() != null ? meeting.getLocationName() : "Điểm tập trung")
                     .build();
+        }
+
+        ResolvedLocation geocoded = geocodeNamedPlace(current != null ? current.getLocationName() : null);
+        if (geocoded != null) return geocoded;
+
+        geocoded = geocodeNamedPlace(next != null ? next.getLocationName() : null);
+        if (geocoded != null) return geocoded;
+
+        geocoded = geocodeNamedPlace(meeting != null ? meeting.getLocationName() : null);
+        if (geocoded != null) return geocoded;
+
+        if (current != null && current.getLocationAddress() != null && !current.getLocationAddress().isBlank()) {
+            geocoded = geocodeNamedPlace(current.getLocationAddress());
+            if (geocoded != null) return geocoded;
         }
 
         Tour tour = booking.getSession() != null ? booking.getSession().getTour() : null;
@@ -89,6 +113,30 @@ public class FloraRecommendationContextBuilder {
         return ResolvedLocation.builder()
                 .source(FloraRecommendationConstants.LOCATION_UNAVAILABLE)
                 .label(null)
+                .build();
+    }
+
+    private static ResolvedLocation coordsFromActivity(FloraActivityDto activity, String source) {
+        if (activity == null || activity.getLatitude() == null || activity.getLongitude() == null) {
+            return null;
+        }
+        return ResolvedLocation.builder()
+                .latitude(activity.getLatitude())
+                .longitude(activity.getLongitude())
+                .source(source)
+                .label(activity.getLocationName() != null ? activity.getLocationName() : "Điểm hoạt động")
+                .build();
+    }
+
+    private ResolvedLocation geocodeNamedPlace(String placeName) {
+        if (placeName == null || placeName.isBlank()) return null;
+        double[] coords = openMeteoClient.geocode(placeName.trim() + " Vietnam");
+        if (coords == null) return null;
+        return ResolvedLocation.builder()
+                .latitude(coords[0])
+                .longitude(coords[1])
+                .source(FloraRecommendationConstants.LOCATION_DESTINATION)
+                .label(placeName.trim())
                 .build();
     }
 

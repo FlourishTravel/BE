@@ -97,6 +97,38 @@ class FloraRecommendationContextBuilderTest {
     }
 
     @Test
+    void userLocationWhenRequestConsentWithoutProfile() {
+        UUID userId = UUID.randomUUID();
+        when(privacyService.hasLocationConsent(userId)).thenReturn(false);
+
+        FloraNearbyRecommendationRequest req = new FloraNearbyRecommendationRequest();
+        req.setLatitude(21.0285);
+        req.setLongitude(105.8542);
+        req.setLocationConsent(true);
+
+        var resolved = builder.resolveLocation(userId, req, null, new Booking());
+        assertEquals(FloraRecommendationConstants.LOCATION_USER, resolved.getSource());
+        assertEquals(21.0285, resolved.getLatitude());
+    }
+
+    @Test
+    void geocodeActivityLocationWhenNoCoordinates() {
+        UUID userId = UUID.randomUUID();
+        when(openMeteoClient.geocode("Khu công nghệ cao Hòa Lạc Vietnam"))
+                .thenReturn(new double[] {21.013, 105.525});
+
+        FloraJourneyDto journey = FloraJourneyDto.builder()
+                .currentActivity(FloraActivityDto.builder()
+                        .locationName("Khu công nghệ cao Hòa Lạc")
+                        .build())
+                .build();
+
+        var resolved = builder.resolveLocation(userId, new FloraNearbyRecommendationRequest(), journey, new Booking());
+        assertEquals(FloraRecommendationConstants.LOCATION_DESTINATION, resolved.getSource());
+        assertEquals(21.013, resolved.getLatitude());
+    }
+
+    @Test
     void userLocationWhenConsentAndGps() {
         UUID userId = UUID.randomUUID();
         when(privacyService.hasLocationConsent(userId)).thenReturn(true);

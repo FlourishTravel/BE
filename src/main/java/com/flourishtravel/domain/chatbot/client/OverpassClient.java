@@ -76,7 +76,7 @@ public class OverpassClient {
       }
       return out;
     } catch (Exception e) {
-      log.debug("Overpass multi query failed: {}", e.getMessage());
+      log.warn("Overpass multi query failed lat={} lon={}: {}", lat, lon, e.getMessage());
     }
     return List.of();
   }
@@ -90,19 +90,36 @@ public class OverpassClient {
     for (String raw : cats) {
       if (raw == null) continue;
       switch (raw.trim().toUpperCase()) {
-        case "RESTAURANT" ->
+        case "RESTAURANT" -> {
             clauses.add("node" + around + "[\"amenity\"~\"restaurant|fast_food\"];");
-        case "CAFE" -> clauses.add("node" + around + "[\"amenity\"=\"cafe\"];");
-        case "ATTRACTION" ->
+            clauses.add("way" + around + "[\"amenity\"~\"restaurant|fast_food\"];");
+        }
+        case "CAFE" -> {
+            clauses.add("node" + around + "[\"amenity\"=\"cafe\"];");
+            clauses.add("way" + around + "[\"amenity\"=\"cafe\"];");
+        }
+        case "ATTRACTION" -> {
             clauses.add("node" + around + "[\"tourism\"~\"attraction|museum\"];");
-        case "PHOTO_SPOT" -> clauses.add("node" + around + "[\"tourism\"=\"viewpoint\"];");
-        case "SHOPPING" -> clauses.add("node" + around + "[\"shop\"];");
-        case "RESTROOM" -> clauses.add("node" + around + "[\"amenity\"=\"toilets\"];");
+            clauses.add("way" + around + "[\"tourism\"~\"attraction|museum\"];");
+        }
+        case "PHOTO_SPOT" -> {
+            clauses.add("node" + around + "[\"tourism\"=\"viewpoint\"];");
+            clauses.add("way" + around + "[\"tourism\"=\"viewpoint\"];");
+        }
+        case "SHOPPING" -> {
+            clauses.add("node" + around + "[\"shop\"];");
+            clauses.add("way" + around + "[\"shop\"];");
+        }
+        case "RESTROOM" -> {
+            clauses.add("node" + around + "[\"amenity\"=\"toilets\"];");
+            clauses.add("way" + around + "[\"amenity\"=\"toilets\"];");
+        }
         default -> {}
       }
     }
     if (clauses.isEmpty()) {
       clauses.add("node" + around + "[\"amenity\"~\"restaurant|cafe|fast_food\"];");
+      clauses.add("way" + around + "[\"amenity\"~\"restaurant|cafe|fast_food\"];");
     }
     return String.join("", clauses);
   }
