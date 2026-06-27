@@ -4,6 +4,7 @@ import com.flourishtravel.common.dto.ApiResponse;
 import com.flourishtravel.domain.tour.dto.AvailabilityCheckDto;
 import com.flourishtravel.domain.tour.dto.GeocodeResultDto;
 import com.flourishtravel.domain.tour.dto.ItineraryRequest;
+import com.flourishtravel.domain.tour.dto.LocationRequest;
 import com.flourishtravel.domain.tour.dto.TourDetailDto;
 import com.flourishtravel.domain.tour.dto.TourRequest;
 import com.flourishtravel.domain.tour.dto.TourSummaryDto;
@@ -154,5 +155,21 @@ public class TourController {
             @PathVariable UUID id,
             @Valid @RequestBody List<ItineraryRequest> days) {
         return ResponseEntity.ok(ApiResponse.ok("Đã lưu lịch trình", tourService.saveItinerary(id, days)));
+    }
+
+    /** Lấy danh sách địa điểm tour (theo ngày lịch trình). */
+    @GetMapping("/admin/{id}/locations")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<TourDetailDto.LocationRef>>> getLocations(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.ok(tourService.getLocations(id)));
+    }
+
+    /** Lưu toàn bộ địa điểm tour (bulk replace). */
+    @PutMapping("/admin/{id}/locations")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<List<TourDetailDto.LocationRef>>> saveLocations(
+            @PathVariable UUID id,
+            @Valid @RequestBody List<@Valid LocationRequest> locations) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã lưu địa điểm", tourService.saveLocations(id, locations)));
     }
 }

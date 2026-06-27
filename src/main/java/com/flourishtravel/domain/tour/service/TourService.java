@@ -5,6 +5,7 @@ import com.flourishtravel.common.exception.ResourceNotFoundException;
 import com.flourishtravel.domain.tour.dto.ActivityRequest;
 import com.flourishtravel.domain.tour.dto.AvailabilityCheckDto;
 import com.flourishtravel.domain.tour.dto.ItineraryRequest;
+import com.flourishtravel.domain.tour.dto.LocationRequest;
 import com.flourishtravel.domain.tour.dto.TourDetailDto;
 import com.flourishtravel.domain.tour.dto.TourRequest;
 import com.flourishtravel.domain.tour.dto.TourSummaryDto;
@@ -611,6 +612,78 @@ public class TourService {
                         Comparator.nullsLast(Comparator.naturalOrder())))
                 .map(this::toItineraryRef)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<TourDetailDto.LocationRef> getLocations(UUID tourId) {
+        Tour tour = getById(tourId);
+        return toLocationRefs(tour);
+    }
+
+    /** Bulk replace toàn bộ địa điểm tour (theo ngày lịch trình). */
+    @Transactional
+    public List<TourDetailDto.LocationRef> saveLocations(UUID tourId, List<LocationRequest> items) {
+        Tour tour = getById(tourId);
+        tour.getLocations().clear();
+        tourRepository.saveAndFlush(tour);
+
+        if (items != null) {
+            int fallbackOrder = 0;
+            for (LocationRequest req : items) {
+                String name = trimToNull(req.getLocationName());
+                if (name == null) {
+                    continue;
+                }
+                TourLocation loc = TourLocation.builder()
+                        .tour(tour)
+                        .dayNumber(req.getDayNumber() != null ? req.getDayNumber() : 1)
+                        .visitOrder(req.getVisitOrder() != null ? req.getVisitOrder() : fallbackOrder++)
+                        .locationName(name)
+                        .latitude(roundCoordinate(req.getLatitude()))
+                        .longitude(roundCoordinate(req.getLongitude()))
+                        .build();
+                validateLocationCoordinates(loc);
+                tour.getLocations().add(loc);
+            }
+        }
+        Tour saved = tourRepository.save(tour);
+        return toLocationRefs(saved);
+    }
+
+    private List<TourDetailDto.LocationRef> toLocationRefs(Tour tour) {
+        if (tour.getLocations() == null || tour.getLocations().isEmpty()) {
+            return List.of();
+        }
+        return tour.getLocations().stream()
+                .sorted(Comparator
+                        .comparing(TourLocation::getDayNumber, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(TourLocation::getVisitOrder, Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(loc -> TourDetailDto.LocationRef.builder()
+                        .id(loc.getId())
+                        .locationName(loc.getLocationName())
+                        .latitude(loc.getLatitude())
+                        .longitude(loc.getLongitude())
+                        .visitOrder(loc.getVisitOrder())
+                        .dayNumber(loc.getDayNumber())
+                        .build())
+                .toList();
+    }
+
+    private static void validateLocationCoordinates(TourLocation loc) {
+        boolean hasLat = loc.getLatitude() != null;
+        boolean hasLon = loc.getLongitude() != null;
+        if (hasLat != hasLon) {
+            throw new BadRequestException("latitude và longitude phải được nhập cùng nhau cho địa điểm"
+                    + (loc.getLocationName() != null ? " (" + loc.getLocationName() + ")" : ""));
+        }
+        if (hasLat) {
+            double lat = loc.getLatitude().doubleValue();
+            double lon = loc.getLongitude().doubleValue();
+            if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+                throw new BadRequestException("Tọa độ GPS không hợp lệ cho địa điểm"
+                        + (loc.getLocationName() != null ? " (" + loc.getLocationName() + ")" : ""));
+            }
+        }
     }
 
     private String safeTrim(String s) {
