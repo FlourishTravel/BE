@@ -2,11 +2,13 @@ package com.flourishtravel.domain.tour.controller;
 
 import com.flourishtravel.common.dto.ApiResponse;
 import com.flourishtravel.domain.tour.dto.AvailabilityCheckDto;
+import com.flourishtravel.domain.tour.dto.GeocodeResultDto;
 import com.flourishtravel.domain.tour.dto.ItineraryRequest;
 import com.flourishtravel.domain.tour.dto.TourDetailDto;
 import com.flourishtravel.domain.tour.dto.TourRequest;
 import com.flourishtravel.domain.tour.dto.TourSummaryDto;
 import com.flourishtravel.domain.tour.entity.Tour;
+import com.flourishtravel.domain.tour.service.GeocodeService;
 import com.flourishtravel.domain.tour.service.TourService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +31,7 @@ import java.util.UUID;
 public class TourController {
 
     private final TourService tourService;
+    private final GeocodeService geocodeService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<Page<TourSummaryDto>>> list(
@@ -61,6 +64,17 @@ public class TourController {
             @RequestParam(defaultValue = "20") int size) {
         Page<TourSummaryDto> result = tourService.adminList(q, status, PageRequest.of(page, size));
         return ResponseEntity.ok(ApiResponse.ok(result));
+    }
+
+    /** Tra cứu tọa độ địa điểm qua VietMap (admin itinerary builder). */
+    @GetMapping("/admin/geocode")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<GeocodeResultDto>> geocodeActivity(
+            @RequestParam(required = false) String locationName,
+            @RequestParam(required = false) String locationAddress,
+            @RequestParam(required = false) String destinationCity) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                geocodeService.resolveActivityCoordinates(locationName, locationAddress, destinationCity)));
     }
 
     /** Chi tiết tour cho admin (full quan hệ: ảnh, video, session, lịch trình, địa điểm). */

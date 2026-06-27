@@ -99,6 +99,9 @@ app:
   google:
     maps-api-key: ${GOOGLE_MAPS_API_KEY:}
 
+  vietmap:
+    api-key: ${VIETMAP_API_KEY:}
+
   # Có hoặc không dấu / cuối đều được (BE chuẩn hóa khi ghép /checkout/...).
   frontend:
     url: ${FRONTEND_URL:http://localhost:5173}

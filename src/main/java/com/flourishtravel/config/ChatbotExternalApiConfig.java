@@ -19,4 +19,9 @@ public class ChatbotExternalApiConfig {
     public WebClient overpassWebClient(WebClient.Builder builder) {
         return builder.build();
     }
+
+    @Bean("vietMapWebClient")
+    public WebClient vietMapWebClient(WebClient.Builder builder) {
+        return builder.build();
+    }
 }
