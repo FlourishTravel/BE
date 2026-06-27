@@ -1,5 +1,6 @@
 package com.flourishtravel.domain.user.service;
 
+import com.flourishtravel.common.exception.BadRequestException;
 import com.flourishtravel.common.exception.ResourceNotFoundException;
 import com.flourishtravel.domain.flora.dto.TravelPreferencesDto;
 import com.flourishtravel.domain.flora.dto.UpdateTravelPreferencesRequest;
@@ -39,7 +40,17 @@ public class UserService {
             user.setPhone(request.getPhone().trim().isEmpty() ? null : request.getPhone().trim());
         }
         if (request.getAvatarUrl() != null) {
-            user.setAvatarUrl(request.getAvatarUrl().trim().isEmpty() ? null : request.getAvatarUrl().trim());
+            String avatar = request.getAvatarUrl().trim();
+            if (avatar.isEmpty()) {
+                user.setAvatarUrl(null);
+            } else if (avatar.regionMatches(true, 0, "data:", 0, 5)) {
+                throw new BadRequestException(
+                        "Ảnh đại diện quá lớn hoặc sai định dạng. Hãy tải ảnh qua API /upload rồi lưu URL.");
+            } else if (avatar.length() > 500) {
+                throw new BadRequestException("avatarUrl tối đa 500 ký tự");
+            } else {
+                user.setAvatarUrl(avatar);
+            }
         }
         if (request.getGender() != null) {
             user.setGender(request.getGender().trim().isEmpty() ? null : request.getGender().trim());
