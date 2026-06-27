@@ -4,6 +4,7 @@ import com.flourishtravel.common.exception.BadRequestException;
 import com.flourishtravel.domain.tour.client.VietMapClient;
 import com.flourishtravel.domain.tour.dto.GeocodeResultDto;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -11,6 +12,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class GeocodeService {
 
     private static final String PROVIDER = "vietmap";
@@ -42,15 +44,19 @@ public class GeocodeService {
         }
 
         for (String query : queries) {
-            var hit = vietMapClient.geocode(query);
-            if (hit.isPresent()) {
-                var h = hit.get();
-                return GeocodeResultDto.builder()
-                        .latitude(h.latitude())
-                        .longitude(h.longitude())
-                        .label(h.label())
-                        .provider(PROVIDER)
-                        .build();
+            try {
+                var hit = vietMapClient.geocode(query);
+                if (hit.isPresent()) {
+                    var h = hit.get();
+                    return GeocodeResultDto.builder()
+                            .latitude(h.latitude())
+                            .longitude(h.longitude())
+                            .label(h.label())
+                            .provider(PROVIDER)
+                            .build();
+                }
+            } catch (Exception e) {
+                log.warn("Geocode query failed for '{}': {}", query, e.getMessage());
             }
         }
 

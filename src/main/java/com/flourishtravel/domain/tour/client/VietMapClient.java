@@ -6,11 +6,11 @@ import com.flourishtravel.domain.tour.config.VietMapProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
-import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
-import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.Optional;
 
@@ -27,15 +27,15 @@ public class VietMapClient {
 
     private final VietMapProperties properties;
     private final ObjectMapper objectMapper;
-    private final WebClient webClient;
+    private final RestClient restClient;
 
     public VietMapClient(
             VietMapProperties properties,
             ObjectMapper objectMapper,
-            @Qualifier("vietMapWebClient") WebClient webClient) {
+            @Qualifier("vietMapRestClient") RestClient restClient) {
         this.properties = properties;
         this.objectMapper = objectMapper;
-        this.webClient = webClient;
+        this.restClient = restClient;
     }
 
     public boolean isConfigured() {
@@ -47,15 +47,8 @@ public class VietMapClient {
             return Optional.empty();
         }
         try {
-            URI uri = UriComponentsBuilder.fromHttpUrl(SEARCH_V4)
-                    .queryParam("apikey", properties.getApiKey())
-                    .queryParam("text", text.trim())
-                    .queryParam("display_type", 6)
-                    .build()
-                    .encode()
-                    .toUri();
-
-            String raw = fetchBody(uri);
+            String url = buildUrl(SEARCH_V4, "text", text.trim(), true);
+            String raw = fetchBody(url);
             if (raw == null || raw.isBlank()) {
                 return Optional.empty();
             }
@@ -95,14 +88,8 @@ public class VietMapClient {
 
     private Optional<VietMapGeocodeHit> resolvePlace(String refId, String fallbackLabel) {
         try {
-            URI uri = UriComponentsBuilder.fromHttpUrl(PLACE_V4)
-                    .queryParam("apikey", properties.getApiKey())
-                    .queryParam("refid", refId)
-                    .build()
-                    .encode()
-                    .toUri();
-
-            String raw = fetchBody(uri);
+            String url = buildUrl(PLACE_V4, "refid", refId, false);
+            String raw = fetchBody(url);
             if (raw == null || raw.isBlank()) {
                 return Optional.empty();
             }
@@ -126,6 +113,37 @@ public class VietMapClient {
         } catch (Exception e) {
             log.warn("VietMap place failed for refId={}: {}", refId, e.getMessage());
             return Optional.empty();
+        }
+    }
+
+    private String buildUrl(String base, String paramName, String paramValue, boolean includeDisplayType) {
+        String encodedKey = URLEncoder.encode(properties.getApiKey().trim(), StandardCharsets.UTF_8);
+        String encodedValue = URLEncoder.encode(paramValue, StandardCharsets.UTF_8);
+        StringBuilder sb = new StringBuilder(base)
+                .append("?apikey=")
+                .append(encodedKey)
+                .append('&')
+                .append(paramName)
+                .append('=')
+                .append(encodedValue);
+        if (includeDisplayType) {
+            sb.append("&display_type=6");
+        }
+        return sb.toString();
+    }
+
+    private String fetchBody(String url) {
+        try {
+            return restClient.get()
+                    .uri(url)
+                    .retrieve()
+                    .body(String.class);
+        } catch (RestClientResponseException e) {
+            log.warn("VietMap HTTP {}: {}", e.getStatusCode().value(), e.getResponseBodyAsString());
+            return null;
+        } catch (Exception e) {
+            log.warn("VietMap request failed: {}", e.getMessage());
+            return null;
         }
     }
 
@@ -183,19 +201,6 @@ public class VietMapClient {
             }
         }
         return null;
-    }
-
-    private String fetchBody(URI uri) {
-        try {
-            return webClient.get()
-                    .uri(uri)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .block();
-        } catch (WebClientResponseException e) {
-            log.warn("VietMap HTTP {} for {}: {}", e.getStatusCode().value(), uri.getPath(), e.getResponseBodyAsString());
-            return null;
-        }
     }
 
     private static boolean hasErrorCode(JsonNode root) {
