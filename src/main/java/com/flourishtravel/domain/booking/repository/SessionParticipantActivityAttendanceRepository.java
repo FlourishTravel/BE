@@ -2,6 +2,9 @@ package com.flourishtravel.domain.booking.repository;
 
 import com.flourishtravel.domain.booking.entity.SessionParticipantActivityAttendance;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
@@ -22,4 +25,8 @@ public interface SessionParticipantActivityAttendanceRepository
 
     long countBySessionParticipant_Session_IdAndTourActivity_IdAndCheckInAtIsNotNull(
             UUID sessionId, UUID tourActivityId);
+
+    @Modifying
+    @Query("DELETE FROM SessionParticipantActivityAttendance a WHERE a.tourActivity.itinerary.tour.id = :tourId")
+    void deleteByTourActivityTourId(@Param("tourId") UUID tourId);
 }

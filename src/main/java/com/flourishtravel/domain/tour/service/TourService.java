@@ -17,8 +17,10 @@ import com.flourishtravel.domain.tour.entity.TourLocation;
 import com.flourishtravel.domain.tour.entity.TourSession;
 import com.flourishtravel.domain.tour.entity.TourVideo;
 import com.flourishtravel.domain.user.entity.User;
+import com.flourishtravel.domain.booking.repository.SessionParticipantActivityAttendanceRepository;
 import com.flourishtravel.domain.tour.repository.CategoryRepository;
 import com.flourishtravel.domain.tour.repository.TourRepository;
+import com.flourishtravel.domain.tour.repository.TourSessionActivityOverrideRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -27,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.text.Normalizer;
 import java.time.LocalDate;
 import java.util.Comparator;
@@ -46,6 +49,8 @@ public class TourService {
 
     private final TourRepository tourRepository;
     private final CategoryRepository categoryRepository;
+    private final TourSessionActivityOverrideRepository sessionActivityOverrideRepository;
+    private final SessionParticipantActivityAttendanceRepository sessionParticipantActivityAttendanceRepository;
 
     @Transactional(readOnly = true)
     public Page<Tour> search(String destination, BigDecimal minPrice, BigDecimal maxPrice,
@@ -537,6 +542,10 @@ public class TourService {
     public List<TourDetailDto.ItineraryRef> saveItinerary(UUID tourId, List<ItineraryRequest> days) {
         Tour tour = getById(tourId);
 
+        // Xoá attendance + session overrides trước — FK tới tour_activities chặn orphanRemoval.
+        sessionActivityOverrideRepository.deleteByTourActivityTourId(tourId);
+        sessionParticipantActivityAttendanceRepository.deleteByTourActivityTourId(tourId);
+
         tour.getItineraries().clear();
         // flush để Hibernate xoá hết các row con trước khi insert mới, tránh xung đột unique
         tourRepository.saveAndFlush(tour);
@@ -570,8 +579,8 @@ public class TourService {
                                 .description(trimToNull(a.getDescription()))
                                 .activityType(trimToNull(a.getActivityType()))
                                 .locationName(trimToNull(a.getLocationName()))
-                                .latitude(a.getLatitude())
-                                .longitude(a.getLongitude())
+                                .latitude(roundCoordinate(a.getLatitude()))
+                                .longitude(roundCoordinate(a.getLongitude()))
                                 .imageUrl(trimToNull(a.getImageUrl()))
                                 .costEstimate(a.getCostEstimate())
                                 .costIncluded(a.getCostIncluded() != null ? a.getCostIncluded() : Boolean.TRUE)
@@ -596,6 +605,13 @@ public class TourService {
 
     private String safeTrim(String s) {
         return s == null ? null : s.trim();
+    }
+
+    private static BigDecimal roundCoordinate(BigDecimal value) {
+        if (value == null) {
+            return null;
+        }
+        return value.setScale(7, RoundingMode.HALF_UP);
     }
 
     private static String normalizeScheduleStatus(String raw) {
