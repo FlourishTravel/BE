@@ -540,12 +540,17 @@ public class TourService {
      */
     @Transactional
     public List<TourDetailDto.ItineraryRef> saveItinerary(UUID tourId, List<ItineraryRequest> days) {
-        Tour tour = getById(tourId);
+        if (!tourRepository.existsById(tourId)) {
+            throw new ResourceNotFoundException("Tour", tourId);
+        }
 
         // Xoá attendance + session overrides trước — FK tới tour_activities chặn orphanRemoval.
-        sessionActivityOverrideRepository.deleteByTourActivityTourId(tourId);
         sessionParticipantActivityAttendanceRepository.deleteByTourActivityTourId(tourId);
+        sessionActivityOverrideRepository.deleteByTourActivityTourId(tourId);
+        tourRepository.flush();
 
+        Tour tour = tourRepository.findByIdWithItinerariesAndActivities(tourId)
+                .orElseThrow(() -> new ResourceNotFoundException("Tour", tourId));
         tour.getItineraries().clear();
         // flush để Hibernate xoá hết các row con trước khi insert mới, tránh xung đột unique
         tourRepository.saveAndFlush(tour);
@@ -600,7 +605,12 @@ public class TourService {
             }
         }
         Tour saved = tourRepository.save(tour);
-        return getItinerary(saved.getId());
+        return saved.getItineraries().stream()
+                .sorted(Comparator.comparing(
+                        TourItinerary::getDayNumber,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .map(this::toItineraryRef)
+                .toList();
     }
 
     private String safeTrim(String s) {

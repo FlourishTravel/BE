@@ -26,7 +26,7 @@ public interface SessionParticipantActivityAttendanceRepository
     long countBySessionParticipant_Session_IdAndTourActivity_IdAndCheckInAtIsNotNull(
             UUID sessionId, UUID tourActivityId);
 
-    @Modifying
+    @Modifying(flushAutomatically = true)
     @Query("DELETE FROM SessionParticipantActivityAttendance a WHERE a.tourActivity.itinerary.tour.id = :tourId")
     void deleteByTourActivityTourId(@Param("tourId") UUID tourId);
 }
