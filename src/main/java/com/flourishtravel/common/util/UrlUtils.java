@@ -1,11 +1,24 @@
 package com.flourishtravel.common.util;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+
 /**
  * Ghép base (có thể kết thúc bằng /) với path — tránh {@code https://host/FE//checkout/...}.
  */
 public final class UrlUtils {
 
     private UrlUtils() {}
+
+    /** Gắn thêm một query param (encode UTF-8). */
+    public static String appendQueryParam(String url, String name, String value) {
+        if (url == null || url.isBlank() || name == null || name.isBlank() || value == null) {
+            return url;
+        }
+        String encoded = URLEncoder.encode(value, StandardCharsets.UTF_8);
+        String sep = url.contains("?") ? "&" : "?";
+        return url + sep + name + "=" + encoded;
+    }
 
     /**
      * Gộp origin/base với path bắt đầu bằng /, rồi gộp các dấu / thừa (không phá {@code https://}).

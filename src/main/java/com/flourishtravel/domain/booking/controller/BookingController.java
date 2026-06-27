@@ -5,6 +5,7 @@ import com.flourishtravel.domain.booking.dto.CreateBookingResponse;
 import com.flourishtravel.domain.booking.dto.GuestInputDto;
 import com.flourishtravel.domain.booking.dto.MomoPayUrlResponse;
 import com.flourishtravel.domain.booking.dto.MomoSyncFromReturnRequest;
+import com.flourishtravel.domain.booking.dto.PayOSSyncFromReturnRequest;
 import com.flourishtravel.domain.booking.dto.UserBookingDetailDto;
 import com.flourishtravel.domain.booking.dto.UserBookingSummaryDto;
 import com.flourishtravel.domain.booking.dto.ValidateSessionRequest;
@@ -134,11 +135,12 @@ public class BookingController {
     @PostMapping("/payos/sync-from-return")
     public ResponseEntity<ApiResponse<Void>> syncPayOSFromReturn(
             @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody MomoSyncFromReturnRequest body) {
+            @Valid @RequestBody PayOSSyncFromReturnRequest body) {
         if (principal == null) {
             return ResponseEntity.status(401).build();
         }
-        bookingService.syncPayOSPaymentAfterReturn(principal.getId(), body.getOrderId());
+        bookingService.syncPayOSPaymentAfterReturn(
+                principal.getId(), body.getOrderId(), body.getOrderCode());
         return ResponseEntity.ok(ApiResponse.ok("Đã cập nhật trạng thái thanh toán", null));
     }
 

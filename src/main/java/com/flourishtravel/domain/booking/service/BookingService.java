@@ -181,7 +181,10 @@ public class BookingService {
         if (b.getStatus() != null && "pending".equalsIgnoreCase(b.getStatus()) && latest != null
                 && latest.getOrderId() != null
                 && latest.getStatus() != null && "pending".equalsIgnoreCase(latest.getStatus())) {
-            continuePaymentUrl = UrlUtils.joinBaseAndPath(frontendUrl, "/checkout/result?bookingId=" + b.getId() + "&momo=1");
+            String gatewayFlag = latest.getProvider() != null && "payos".equalsIgnoreCase(latest.getProvider())
+                    ? "payos=1" : "momo=1";
+            continuePaymentUrl = UrlUtils.joinBaseAndPath(frontendUrl,
+                    "/checkout/result?bookingId=" + b.getId() + "&" + gatewayFlag);
         }
 
         List<UserBookingGuestLineDto> guestLines = b.getBookingGuests() == null ? List.of() :
@@ -468,13 +471,28 @@ public class BookingService {
         long orderCode = Long.parseLong(p.getPartnerCode().trim());
         long amountVnd = p.getAmount().setScale(0, RoundingMode.HALF_UP).longValue();
         String payUrl = payOSPaymentService.createPaymentUrl(
-                orderCode, amountVnd, "FlourishTravel " + p.getOrderId());
+                orderCode, amountVnd, "FlourishTravel " + p.getOrderId(),
+                p.getOrderId(), bookingId);
         return MomoPayUrlResponse.builder().paymentUrl(payUrl).build();
     }
 
     /**
      * Sau khi PayOS redirect về: tra cứu trạng thái link thanh toán rồi cập nhật booking/payment.
      */
+    @Transactional
+    public void syncPayOSPaymentAfterReturn(UUID userId, String orderId, String orderCode) {
+        String oid = orderId != null ? orderId.trim() : "";
+        if (oid.isBlank()) {
+            if (orderCode == null || orderCode.isBlank()) {
+                throw new BadRequestException("Thiếu orderId hoặc orderCode");
+            }
+            Payment byCode = paymentRepository.findByProviderAndPartnerCode("payos", orderCode.trim())
+                    .orElseThrow(() -> new ResourceNotFoundException("Payment", orderCode.trim()));
+            oid = byCode.getOrderId();
+        }
+        syncPayOSPaymentAfterReturn(userId, oid);
+    }
+
     @Transactional
     public void syncPayOSPaymentAfterReturn(UUID userId, String orderId) {
         if (orderId == null || orderId.isBlank()) {
@@ -519,7 +537,7 @@ public class BookingService {
         if ("payos".equals(paymentMethod)) {
             if (payOSPaymentService.isConfigured() && payosOrderCode != null) {
                 return payOSPaymentService.createPaymentUrl(
-                        payosOrderCode, amountVnd, "FlourishTravel " + orderId);
+                        payosOrderCode, amountVnd, "FlourishTravel " + orderId, orderId, bookingId);
             }
             log.warn("PayOS credentials missing — redirecting to /checkout/result without gateway");
             return UrlUtils.joinBaseAndPath(frontendUrl, "/checkout/result?bookingId=" + bookingId + "&pending=1");

@@ -12,6 +12,7 @@ import vn.payos.model.v2.paymentRequests.CreatePaymentLinkResponse;
 import vn.payos.model.v2.paymentRequests.PaymentLink;
 import vn.payos.core.ClientOptions;
 
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -58,6 +59,11 @@ public class PayOSPaymentService {
      * Tạo link thanh toán PayOS và trả về checkoutUrl.
      */
     public String createPaymentUrl(long orderCode, long amountVnd, String description) {
+        return createPaymentUrl(orderCode, amountVnd, description, null, null);
+    }
+
+    public String createPaymentUrl(long orderCode, long amountVnd, String description,
+                                   String orderId, UUID bookingId) {
         if (!isConfigured()) {
             throw new IllegalStateException("PayOS is not configured");
         }
@@ -68,10 +74,12 @@ public class PayOSPaymentService {
         String safeDescription = truncateDescription(
                 description != null && !description.isBlank() ? description.trim() : "Thanh toan don hang");
 
-        String redirectUrl = UrlUtils.squashDuplicateSlashesExceptScheme(
-                returnUrl == null ? "" : returnUrl.trim());
-        String cancel = UrlUtils.squashDuplicateSlashesExceptScheme(
-                cancelUrl == null ? "" : cancelUrl.trim());
+        String redirectUrl = withReturnContext(
+                UrlUtils.squashDuplicateSlashesExceptScheme(returnUrl == null ? "" : returnUrl.trim()),
+                orderId, bookingId);
+        String cancel = withReturnContext(
+                UrlUtils.squashDuplicateSlashesExceptScheme(cancelUrl == null ? "" : cancelUrl.trim()),
+                orderId, bookingId);
 
         CreatePaymentLinkRequest paymentData = CreatePaymentLinkRequest.builder()
                 .orderCode(orderCode)
@@ -132,5 +140,16 @@ public class PayOSPaymentService {
             return description;
         }
         return description.substring(0, MAX_DESCRIPTION_LENGTH);
+    }
+
+    private static String withReturnContext(String base, String orderId, UUID bookingId) {
+        String url = base == null ? "" : base;
+        if (orderId != null && !orderId.isBlank()) {
+            url = UrlUtils.appendQueryParam(url, "orderId", orderId.trim());
+        }
+        if (bookingId != null) {
+            url = UrlUtils.appendQueryParam(url, "bookingId", bookingId.toString());
+        }
+        return url;
     }
 }
