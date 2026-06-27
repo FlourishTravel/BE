@@ -81,6 +81,15 @@ app:
     store-id: ${MOMO_STORE_ID:MomoTestStore}
     lang: vi
 
+  # PayOS — credentials từ my.payos.vn; set trong BE/.env
+  payos:
+    client-id: ${PAYOS_CLIENT_ID:}
+    api-key: ${PAYOS_API_KEY:}
+    checksum-key: ${PAYOS_CHECKSUM_KEY:}
+    webhook-url: ${PAYOS_WEBHOOK_URL:http://localhost:8080/api/payments/payos/webhook}
+    return-url: ${PAYOS_RETURN_URL:http://localhost:5173/checkout/result}
+    cancel-url: ${PAYOS_CANCEL_URL:http://localhost:5173/checkout/result}
+
   openrouter:
     api-key: ${OPENROUTER_API_KEY:}
     model: ${OPENROUTER_MODEL:google/gemini-3-flash-preview}

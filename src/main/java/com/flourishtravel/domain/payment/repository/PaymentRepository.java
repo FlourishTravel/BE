@@ -23,6 +23,8 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
 
     Optional<Payment> findByOrderId(String orderId);
 
+    Optional<Payment> findByProviderAndPartnerCode(String provider, String partnerCode);
+
     Page<Payment> findByStatusOrderByCreatedAtDesc(String status, Pageable pageable);
 
     Page<Payment> findAllByOrderByCreatedAtDesc(Pageable pageable);

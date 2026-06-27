@@ -22,6 +22,7 @@ import com.flourishtravel.domain.payment.repository.PaymentRepository;
 import com.flourishtravel.domain.payment.service.MomoPaymentCompletionService;
 import com.flourishtravel.domain.payment.service.MomoPaymentService;
 import com.flourishtravel.domain.payment.service.MomoPaymentService.MomoGatewayQueryResult;
+import com.flourishtravel.domain.payment.service.PayOSPaymentService;
 import com.flourishtravel.domain.payment.entity.Refund;
 import com.flourishtravel.domain.payment.repository.RefundRepository;
 import com.flourishtravel.domain.tour.entity.Tour;
@@ -35,6 +36,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vn.payos.model.v2.paymentRequests.PaymentLinkStatus;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -61,6 +63,7 @@ public class BookingService {
     private final BookingGuestRepository bookingGuestRepository;
     private final MomoPaymentService momoPaymentService;
     private final MomoPaymentCompletionService momoPaymentCompletionService;
+    private final PayOSPaymentService payOSPaymentService;
 
     @Value("${app.frontend.url:http://localhost:5173}")
     private String frontendUrl;
@@ -353,18 +356,25 @@ public class BookingService {
         String requestId = UUID.randomUUID().toString();
         long amountVnd = booking.getTotalAmount().setScale(0, RoundingMode.HALF_UP).longValue();
 
+        String pm = paymentMethod == null || paymentMethod.isBlank() ? "ewallet" : paymentMethod.trim().toLowerCase();
+        boolean usePayOS = "payos".equals(pm);
+        Long payosOrderCode = null;
+        if (usePayOS) {
+            payosOrderCode = payOSPaymentService.generateOrderCode();
+        }
+
         Payment payment = Payment.builder()
                 .booking(booking)
                 .orderId(orderId)
                 .requestId(requestId)
                 .amount(booking.getTotalAmount())
                 .status("pending")
-                .provider("momo")
+                .provider(usePayOS ? "payos" : "momo")
+                .partnerCode(usePayOS ? String.valueOf(payosOrderCode) : null)
                 .build();
         paymentRepository.save(payment);
 
-        String pm = paymentMethod == null || paymentMethod.isBlank() ? "ewallet" : paymentMethod.trim().toLowerCase();
-        String paymentUrl = resolveCheckoutPaymentUrl(booking.getId(), orderId, amountVnd, requestId, pm);
+        String paymentUrl = resolveCheckoutPaymentUrl(booking.getId(), orderId, amountVnd, requestId, pm, payosOrderCode);
         return CreateBookingResponse.builder()
                 .bookingId(booking.getId())
                 .orderId(orderId)
@@ -433,7 +443,87 @@ public class BookingService {
         momoPaymentCompletionService.applyPaidByOrderId(oid, q.transId());
     }
 
-    private String resolveCheckoutPaymentUrl(UUID bookingId, String orderId, long amountVnd, String requestId, String paymentMethod) {
+    /**
+     * Lấy lại link thanh toán PayOS cho đơn đang pending.
+     */
+    @Transactional
+    public MomoPayUrlResponse resumePayOSPaymentUrl(UUID bookingId, UUID userId) {
+        Booking b = getById(bookingId, userId);
+        if (!"pending".equalsIgnoreCase(b.getStatus())) {
+            throw new BadRequestException("Đơn không còn chờ thanh toán");
+        }
+        Payment p = latestPayment(b);
+        if (p == null || !"payos".equalsIgnoreCase(p.getProvider())) {
+            throw new BadRequestException("Đơn không dùng PayOS");
+        }
+        if (p.getPartnerCode() == null || p.getPartnerCode().isBlank()) {
+            throw new BadRequestException("Không tìm thấy mã đơn PayOS");
+        }
+        if (p.getStatus() != null && !"pending".equalsIgnoreCase(p.getStatus())) {
+            throw new BadRequestException("Giao dịch không còn ở trạng thái chờ thanh toán");
+        }
+        if (!payOSPaymentService.isConfigured()) {
+            throw new BadRequestException("Chưa cấu hình PayOS (PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY)");
+        }
+        long orderCode = Long.parseLong(p.getPartnerCode().trim());
+        long amountVnd = p.getAmount().setScale(0, RoundingMode.HALF_UP).longValue();
+        String payUrl = payOSPaymentService.createPaymentUrl(
+                orderCode, amountVnd, "FlourishTravel " + p.getOrderId());
+        return MomoPayUrlResponse.builder().paymentUrl(payUrl).build();
+    }
+
+    /**
+     * Sau khi PayOS redirect về: tra cứu trạng thái link thanh toán rồi cập nhật booking/payment.
+     */
+    @Transactional
+    public void syncPayOSPaymentAfterReturn(UUID userId, String orderId) {
+        if (orderId == null || orderId.isBlank()) {
+            throw new BadRequestException("Thiếu orderId");
+        }
+        String oid = orderId.trim();
+        Payment p = paymentRepository.findByOrderId(oid)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment", oid));
+        Booking b = p.getBooking();
+        if (!b.getUser().getId().equals(userId)) {
+            throw new ResourceNotFoundException("Payment", oid);
+        }
+        if ("paid".equalsIgnoreCase(b.getStatus())) {
+            return;
+        }
+        if (!"payos".equalsIgnoreCase(p.getProvider())) {
+            throw new BadRequestException("Giao dịch không phải PayOS");
+        }
+        if (p.getPartnerCode() == null || p.getPartnerCode().isBlank()) {
+            throw new BadRequestException("Thiếu mã đơn PayOS");
+        }
+        if (!payOSPaymentService.isConfigured()) {
+            throw new BadRequestException("Chưa cấu hình PayOS trên server");
+        }
+        long orderCode = Long.parseLong(p.getPartnerCode().trim());
+        var link = payOSPaymentService.getPaymentLink(orderCode);
+        PaymentLinkStatus status = link.getStatus();
+        if (PaymentLinkStatus.PAID.equals(status)) {
+            momoPaymentCompletionService.applyPaidByOrderId(oid, link.getId());
+            return;
+        }
+        if (PaymentLinkStatus.CANCELLED.equals(status) || PaymentLinkStatus.EXPIRED.equals(status)) {
+            momoPaymentCompletionService.applyFailedByOrderId(oid);
+            throw new BadRequestException("Giao dịch PayOS đã hủy hoặc hết hạn");
+        }
+        throw new BadRequestException("PayOS chưa xác nhận thanh toán thành công (trạng thái: "
+                + (status != null ? status.name() : "unknown") + ")");
+    }
+
+    private String resolveCheckoutPaymentUrl(UUID bookingId, String orderId, long amountVnd, String requestId,
+                                             String paymentMethod, Long payosOrderCode) {
+        if ("payos".equals(paymentMethod)) {
+            if (payOSPaymentService.isConfigured() && payosOrderCode != null) {
+                return payOSPaymentService.createPaymentUrl(
+                        payosOrderCode, amountVnd, "FlourishTravel " + orderId);
+            }
+            log.warn("PayOS credentials missing — redirecting to /checkout/result without gateway");
+            return UrlUtils.joinBaseAndPath(frontendUrl, "/checkout/result?bookingId=" + bookingId + "&pending=1");
+        }
         if ("ewallet".equals(paymentMethod)) {
             if (momoPaymentService.isConfigured()) {
                 return momoPaymentService.createPaymentUrl(orderId, amountVnd, "FlourishTravel " + orderId, requestId);

@@ -120,6 +120,28 @@ public class BookingController {
         return ResponseEntity.ok(ApiResponse.ok("Đã cập nhật trạng thái thanh toán", null));
     }
 
+    @PostMapping("/{id}/payos-pay-url")
+    public ResponseEntity<ApiResponse<MomoPayUrlResponse>> payosPayUrl(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID id) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        MomoPayUrlResponse body = bookingService.resumePayOSPaymentUrl(id, principal.getId());
+        return ResponseEntity.ok(ApiResponse.ok(body));
+    }
+
+    @PostMapping("/payos/sync-from-return")
+    public ResponseEntity<ApiResponse<Void>> syncPayOSFromReturn(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody MomoSyncFromReturnRequest body) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        bookingService.syncPayOSPaymentAfterReturn(principal.getId(), body.getOrderId());
+        return ResponseEntity.ok(ApiResponse.ok("Đã cập nhật trạng thái thanh toán", null));
+    }
+
     @PostMapping("/{id}/cancel")
     public ResponseEntity<ApiResponse<Void>> cancel(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -176,7 +198,7 @@ public class BookingController {
         private String emergencyContactName;
         /** Liên hệ khẩn cấp – SĐT người thân. */
         private String emergencyContactPhone;
-        /** ewallet | bank | card — ewallet dùng MoMo (sandbox/prod theo cấu hình). */
+        /** ewallet | payos | bank | card — ewallet dùng MoMo; payos dùng PayOS. */
         private String paymentMethod;
     }
 

@@ -605,7 +605,8 @@ public class DemoDataSeeder {
 
     private String pickProvider(Random rnd) {
         double r = rnd.nextDouble();
-        if (r < 0.45) return "momo";
+        if (r < 0.40) return "momo";
+        if (r < 0.55) return "payos";
         if (r < 0.70) return "vnpay";
         if (r < 0.85) return "bank_transfer";
         if (r < 0.95) return "credit_card";
@@ -616,6 +617,7 @@ public class DemoDataSeeder {
         if (amount == null || amount.signum() == 0) return BigDecimal.ZERO;
         BigDecimal rate = switch (provider == null ? "" : provider) {
             case "momo" -> new BigDecimal("0.015");        // 1.5%
+            case "payos" -> new BigDecimal("0.012");       // 1.2%
             case "vnpay" -> new BigDecimal("0.018");       // 1.8%
             case "credit_card" -> new BigDecimal("0.025"); // 2.5%
             case "bank_transfer" -> new BigDecimal("0.005"); // 0.5%

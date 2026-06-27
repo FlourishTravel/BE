@@ -21,7 +21,7 @@ public class Payment extends BaseEntity {
     @JoinColumn(name = "booking_id", nullable = false)
     private Booking booking;
 
-    /** Nhà cung cấp / cổng thanh toán: momo | vnpay | bank_transfer | manual | credit_card ... */
+    /** Nhà cung cấp / cổng thanh toán: momo | payos | vnpay | bank_transfer | manual | credit_card ... */
     @Column(nullable = false, length = 50)
     @Builder.Default
     private String provider = "momo";
