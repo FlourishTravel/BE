@@ -28,6 +28,7 @@ public class VietMapClient {
     private final VietMapProperties properties;
     private final ObjectMapper objectMapper;
     private final RestClient restClient;
+    private boolean lastAuthError;
 
     public VietMapClient(
             VietMapProperties properties,
@@ -39,13 +40,18 @@ public class VietMapClient {
     }
 
     public boolean isConfigured() {
-        return properties.getApiKey() != null && !properties.getApiKey().isBlank();
+        return properties.isConfigured();
+    }
+
+    public boolean hadAuthError() {
+        return lastAuthError;
     }
 
     public Optional<VietMapGeocodeHit> geocode(String text) {
         if (!isConfigured() || text == null || text.isBlank()) {
             return Optional.empty();
         }
+        lastAuthError = false;
         try {
             String url = buildUrl(SEARCH_V4, "text", text.trim(), true);
             String raw = fetchBody(url);
@@ -64,13 +70,27 @@ public class VietMapClient {
                 return Optional.empty();
             }
 
-            JsonNode first = results.get(0);
+            int limit = Math.min(results.size(), 3);
+            for (int i = 0; i < limit; i++) {
+                Optional<VietMapGeocodeHit> hit = hitFromSearchResult(results.get(i), text.trim());
+                if (hit.isPresent()) {
+                    return hit;
+                }
+            }
+            return Optional.empty();
+        } catch (Exception e) {
+            log.warn("VietMap search failed for '{}': {}", text, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private Optional<VietMapGeocodeHit> hitFromSearchResult(JsonNode first, String fallbackText) {
             Double lat = readCoordinate(first, "lat", "latitude");
             Double lng = readCoordinate(first, "lng", "longitude", "lon");
             String refId = readText(first, "ref_id", "refid");
             String label = readText(first, "name", "display", "address");
             if (label == null || label.isBlank()) {
-                label = text.trim();
+                label = fallbackText;
             }
 
             if (lat != null && lng != null) {
@@ -80,10 +100,6 @@ public class VietMapClient {
                 return resolvePlace(refId, label);
             }
             return Optional.empty();
-        } catch (Exception e) {
-            log.warn("VietMap search failed for '{}': {}", text, e.getMessage());
-            return Optional.empty();
-        }
     }
 
     private Optional<VietMapGeocodeHit> resolvePlace(String refId, String fallbackLabel) {
@@ -117,7 +133,7 @@ public class VietMapClient {
     }
 
     private String buildUrl(String base, String paramName, String paramValue, boolean includeDisplayType) {
-        String encodedKey = URLEncoder.encode(properties.getApiKey().trim(), StandardCharsets.UTF_8);
+        String encodedKey = URLEncoder.encode(properties.getApiKey(), StandardCharsets.UTF_8);
         String encodedValue = URLEncoder.encode(paramValue, StandardCharsets.UTF_8);
         StringBuilder sb = new StringBuilder(base)
                 .append("?apikey=")
@@ -139,7 +155,11 @@ public class VietMapClient {
                     .retrieve()
                     .body(String.class);
         } catch (RestClientResponseException e) {
-            log.warn("VietMap HTTP {}: {}", e.getStatusCode().value(), e.getResponseBodyAsString());
+            int status = e.getStatusCode().value();
+            if (status == 401 || status == 403) {
+                lastAuthError = true;
+            }
+            log.warn("VietMap HTTP {}: {}", status, e.getResponseBodyAsString());
             return null;
         } catch (Exception e) {
             log.warn("VietMap request failed: {}", e.getMessage());
