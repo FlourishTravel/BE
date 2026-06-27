@@ -64,6 +64,7 @@ public class BookingService {
     private final MomoPaymentService momoPaymentService;
     private final MomoPaymentCompletionService momoPaymentCompletionService;
     private final PayOSPaymentService payOSPaymentService;
+    private final BookingRefundEligibility bookingRefundEligibility;
 
     @Value("${app.frontend.url:http://localhost:5173}")
     private String frontendUrl;
@@ -250,6 +251,7 @@ public class BookingService {
                 .paymentStatus(payStatus)
                 .paymentOrderId(orderId)
                 .refundPending(refundPending)
+                .refundEligible(bookingRefundEligibility.canRequestRefund(b))
                 .promotionCode(promotionCode)
                 .specialRequests(b.getSpecialRequests())
                 .contactPhone(b.getContactPhone())
@@ -657,8 +659,9 @@ public class BookingService {
     @Transactional
     public Refund requestRefund(UUID bookingId, UUID userId, String reason) {
         Booking b = getById(bookingId, userId);
-        if (!"paid".equals(b.getStatus())) {
-            throw new BadRequestException("Chỉ có thể yêu cầu hoàn tiền cho đơn đã thanh toán");
+        String refusal = bookingRefundEligibility.refusalReason(b);
+        if (refusal != null) {
+            throw new BadRequestException(refusal);
         }
         Refund refund = Refund.builder()
                 .booking(b)

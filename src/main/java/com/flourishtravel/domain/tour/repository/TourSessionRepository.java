@@ -79,4 +79,12 @@ public interface TourSessionRepository extends JpaRepository<TourSession, UUID> 
                                       @Param("excludeSessionId") UUID excludeSessionId,
                                       @Param("start") LocalDate start,
                                       @Param("end") LocalDate end);
+
+    @Query("""
+            SELECT s FROM TourSession s
+            WHERE LOWER(s.status) = 'scheduled'
+              AND s.endDate IS NOT NULL
+              AND s.endDate <= :lastEndedDate
+            """)
+    List<TourSession> findScheduledSessionsEndedBefore(@Param("lastEndedDate") LocalDate lastEndedDate);
 }

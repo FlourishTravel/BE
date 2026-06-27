@@ -262,4 +262,15 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             """)
     List<Booking> findRecentlyCompletedForFlora(@Param("yesterday") LocalDate yesterday,
                                                 @Param("statuses") Set<String> statuses);
+
+    /** Đơn đã qua ngày kết thúc chuyến (endDate &lt; hôm nay) nhưng booking chưa đóng. */
+    @Query("""
+            SELECT DISTINCT b FROM Booking b
+            JOIN FETCH b.session s
+            WHERE LOWER(b.status) IN :statuses
+              AND s.endDate IS NOT NULL
+              AND s.endDate <= :lastEndedDate
+            """)
+    List<Booking> findEndedBookingsWithStatuses(@Param("lastEndedDate") LocalDate lastEndedDate,
+                                                @Param("statuses") Set<String> statuses);
 }

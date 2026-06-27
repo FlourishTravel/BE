@@ -49,6 +49,8 @@ public class UserBookingDetailDto {
     private String paymentStatus;
     private String paymentOrderId;
     private boolean refundPending;
+    /** Khách có thể gửi yêu cầu hoàn tiền (chỉ đơn paid, trước ngày khởi hành). */
+    private boolean refundEligible;
 
     /** Mã khuyến mãi đã áp dụng (nếu có). */
     private String promotionCode;
