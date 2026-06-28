@@ -4,6 +4,7 @@ import com.flourishtravel.domain.tour.entity.Tour;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -100,4 +101,8 @@ public interface TourRepository extends JpaRepository<Tour, UUID> {
             WHERE t.id = :id
             """)
     Optional<Tour> findByIdWithItinerariesAndActivities(@Param("id") UUID id);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "DELETE FROM tour_itineraries WHERE tour_id = :tourId", nativeQuery = true)
+    void deleteItinerariesByTourId(@Param("tourId") UUID tourId);
 }

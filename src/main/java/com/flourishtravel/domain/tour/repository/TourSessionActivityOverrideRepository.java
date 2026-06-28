@@ -18,7 +18,7 @@ public interface TourSessionActivityOverrideRepository extends JpaRepository<Tou
 
     Optional<TourSessionActivityOverride> findByTourSession_IdAndTourActivity_Id(UUID sessionId, UUID activityId);
 
-    @Modifying(flushAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query(value = """
             DELETE FROM tour_session_activity_overrides o
             USING tour_activities ta

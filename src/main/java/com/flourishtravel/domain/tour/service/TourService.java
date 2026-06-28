@@ -20,6 +20,7 @@ import com.flourishtravel.domain.tour.entity.TourVideo;
 import com.flourishtravel.domain.user.entity.User;
 import com.flourishtravel.domain.booking.repository.SessionParticipantActivityAttendanceRepository;
 import com.flourishtravel.domain.tour.repository.CategoryRepository;
+import com.flourishtravel.domain.tour.repository.TourActivityRepository;
 import com.flourishtravel.domain.tour.repository.TourRepository;
 import com.flourishtravel.domain.tour.repository.TourSessionActivityOverrideRepository;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +51,7 @@ public class TourService {
 
     private final TourRepository tourRepository;
     private final CategoryRepository categoryRepository;
+    private final TourActivityRepository tourActivityRepository;
     private final TourSessionActivityOverrideRepository sessionActivityOverrideRepository;
     private final SessionParticipantActivityAttendanceRepository sessionParticipantActivityAttendanceRepository;
 
@@ -545,16 +547,17 @@ public class TourService {
             throw new ResourceNotFoundException("Tour", tourId);
         }
 
-        // Xoá attendance + session overrides trước — FK tới tour_activities chặn orphanRemoval.
+        // Xoá attendance + overrides + activities + itineraries (native SQL, tránh FK / stale persistence context).
         sessionParticipantActivityAttendanceRepository.deleteByTourActivityTourId(tourId);
         sessionActivityOverrideRepository.deleteByTourActivityTourId(tourId);
-        tourRepository.flush();
+        tourActivityRepository.deleteByTourId(tourId);
+        tourRepository.deleteItinerariesByTourId(tourId);
 
-        Tour tour = tourRepository.findByIdWithItinerariesAndActivities(tourId)
+        Tour tour = tourRepository.findById(tourId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tour", tourId));
-        tour.getItineraries().clear();
-        // flush để Hibernate xoá hết các row con trước khi insert mới, tránh xung đột unique
-        tourRepository.saveAndFlush(tour);
+        if (tour.getItineraries() != null) {
+            tour.getItineraries().clear();
+        }
 
         if (days != null) {
             for (ItineraryRequest d : days) {
@@ -624,7 +627,11 @@ public class TourService {
     @Transactional
     public List<TourDetailDto.LocationRef> saveLocations(UUID tourId, List<LocationRequest> items) {
         Tour tour = getById(tourId);
-        tour.getLocations().clear();
+        if (tour.getLocations() == null) {
+            tour.setLocations(new java.util.ArrayList<>());
+        } else {
+            tour.getLocations().clear();
+        }
         tourRepository.saveAndFlush(tour);
 
         if (items != null) {

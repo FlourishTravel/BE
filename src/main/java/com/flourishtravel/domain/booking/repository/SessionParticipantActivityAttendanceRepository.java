@@ -26,7 +26,7 @@ public interface SessionParticipantActivityAttendanceRepository
     long countBySessionParticipant_Session_IdAndTourActivity_IdAndCheckInAtIsNotNull(
             UUID sessionId, UUID tourActivityId);
 
-    @Modifying(flushAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query(value = """
             DELETE FROM session_participant_activity_attendance a
             USING tour_activities ta

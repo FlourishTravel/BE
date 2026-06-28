@@ -19,6 +19,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.InvalidDataAccessResourceUsageException;
 
 @RestControllerAdvice
 @Slf4j
@@ -76,9 +77,16 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrity(DataIntegrityViolationException e) {
-        log.warn("Data integrity violation: {}", e.getMostSpecificCause().getMessage());
+        log.warn("Data integrity violation: {}", e.getMostSpecificCause() != null ? e.getMostSpecificCause().getMessage() : e.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error("Không thể lưu do dữ liệu liên quan (booking/session). Thử tải lại trang hoặc liên hệ hỗ trợ."));
+    }
+
+    @ExceptionHandler(InvalidDataAccessResourceUsageException.class)
+    public ResponseEntity<ApiResponse<Void>> handleInvalidSql(InvalidDataAccessResourceUsageException e) {
+        log.error("SQL usage error", e);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error("Lỗi truy vấn cơ sở dữ liệu khi lưu. Vui lòng thử lại hoặc liên hệ hỗ trợ."));
     }
 
     @ExceptionHandler(Exception.class)
