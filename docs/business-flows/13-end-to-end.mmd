@@ -1,0 +1,39 @@
+flowchart TB
+    subgraph Phase1["① Admin chuẩn bị"]
+        A1["Tạo Tour"] --> A2["Tạo Session"]
+        A2 --> A3["Itinerary + Locations"]
+        A3 --> A4["Gán HDV"]
+        A4 --> A5["CMS / Promo / Destinations"]
+    end
+
+    subgraph Phase2["② User đặt tour"]
+        U1["Browse /tours"] --> U2["TourDetail"]
+        U2 --> U3["Checkout"]
+        U3 --> U4["Thanh toán"]
+        U4 --> U5["Booking = paid"]
+    end
+
+    subgraph Phase3["③ Trong chuyến"]
+        G1["Guide check-in"] --> G2["Chat nhóm"]
+        G2 --> G3["Flora journey companion"]
+        U6["User /my-journey"] --> G2
+    end
+
+    subgraph Phase4["④ Sau chuyến"]
+        S1["Tour completed"] --> S2["User POST /reviews"]
+        S2 --> S3["Admin publish"]
+        S3 --> S4["Featured trang chủ"]
+        S4 --> S5["Flora cập nhật preferences"]
+    end
+
+    Phase1 --> Phase2
+    Phase2 --> Phase3
+    Phase3 --> Phase4
+
+    A5 -.-> U1
+    A4 -.-> G1
+
+    style Phase1 fill:#fef3c7
+    style Phase2 fill:#dbeafe
+    style Phase3 fill:#dcfce7
+    style Phase4 fill:#f3e8ff

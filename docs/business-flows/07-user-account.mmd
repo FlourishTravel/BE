@@ -1,0 +1,19 @@
+flowchart TB
+    subgraph Profile["Menu Profile (navConfig)"]
+        P1["/profile"] --> API1["GET/PATCH /users/me"]
+        P2["/my-journey"] --> API2["GET /bookings/me"]
+        P3["/tours?wishlist=1"] --> API3["GET /favorites"]
+        P4["/my-wallet"] --> API2
+        P5["/my-vouchers"] --> API4["GET /promotions/active"]
+        P6["/my-reviews"] --> API5["GET /reviews/me"]
+        P7["/my-points"] --> PLACE["Placeholder\n(chưa có API)"]
+        P8["/privacy-settings"] --> API6["travel-preferences"]
+        P9["/notifications"] --> API7["GET /notifications"]
+    end
+
+    subgraph Public["Không cần login"]
+        P5
+        HOME["/ FeaturedReviews"] --> API8["GET /reviews/featured"]
+    end
+
+    style PLACE fill:#fef2f2,stroke:#ef4444

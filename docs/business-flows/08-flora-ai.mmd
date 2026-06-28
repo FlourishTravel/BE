@@ -1,0 +1,32 @@
+flowchart TB
+    subgraph FAB["Flora FAB (FloatingChatbot)"]
+        F1["Mọi trang trừ\n/admin /guide /chat/*"]
+        F2["POST /chatbot/message"]
+        F3["Quick actions\nnavConfig.FLORA_QUICK_ACTIONS"]
+    end
+
+    subgraph Companion["Flora Companion (BookingDetail)"]
+        C1["/my-journey/booking/:id"]
+        C2["GET /flora/bookings/{id}/journey"]
+        C3["POST .../nearby-recommendations"]
+        C4["GET .../post-tour-feedback"]
+        C5["POST /reviews"]
+        C6["PATCH /flora/preferences/me"]
+    end
+
+    subgraph ChatHDV["Chat HDV (không qua chatbot)"]
+        H1["/chat/:bookingId"]
+        H2["GET/POST /chat/bookings/{id}/messages"]
+    end
+
+    USER((User)) --> FAB
+    USER --> Companion
+    USER --> ChatHDV
+
+    F1 --> F2
+    F1 --> F3
+    C1 --> C2 & C3 & C4 & C5 & C6
+
+    style FAB fill:#f0fdf4
+    style Companion fill:#ecfdf5
+    style ChatHDV fill:#dbeafe

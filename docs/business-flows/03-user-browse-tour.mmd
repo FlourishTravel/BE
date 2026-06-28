@@ -1,0 +1,33 @@
+flowchart TD
+    START(["User vào website"])
+
+    START --> HOME["/ Trang chủ"]
+    START --> LIST["/tours"]
+
+    HOME --> API1["GET /tours?size=10"]
+    LIST --> FILTERS{"Bộ lọc"}
+
+    FILTERS --> F1["?segment=domestic\ninternational\nschool\|corporate"]
+    FILTERS --> F2["?destination=slug"]
+    FILTERS --> F3["categoryId + min/maxPrice"]
+    FILTERS --> F4["?wishlist=1"]
+
+    F1 --> API2["GET /tours?segment=..."]
+    F2 --> API2
+    F3 --> API2
+    F4 --> API2b["GET /favorites\n→ lọc client"]
+
+    API1 --> CARDS["Tour cards"]
+    API2 --> CARDS
+    API2b --> CARDS
+
+    CARDS --> FAV{"Bấm ♥?"}
+    FAV -->|Chưa login| ALERT["Alert đăng nhập"]
+    FAV -->|Đã login| API3["POST/DELETE /favorites"]
+
+    CARDS --> DETAIL["/tours/:id"]
+    DETAIL --> API4["GET /tours/{id}"]
+    DETAIL --> API5["GET /tours/{id}/similar"]
+
+    style START fill:#f0fdf4
+    style DETAIL fill:#dbeafe

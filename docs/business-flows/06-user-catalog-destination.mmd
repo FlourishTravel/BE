@@ -1,0 +1,26 @@
+flowchart LR
+    subgraph Vé["Vé & Hoạt động"]
+        A1["/activities"] --> A2["GET /catalog/tickets?category"]
+        A3["/activities/:slug"] --> A4["GET /catalog/tickets/{slug}"]
+        A5["?type=ticket"] --> CAT1["category=attraction"]
+        A6["?type=combo"] --> CAT2["category=combo"]
+        A7["?type=event"] --> CAT3["category=show"]
+    end
+
+    subgraph DD["Điểm đến"]
+        D1["/destinations"] --> D2["GET /destinations"]
+        D3["/destinations/:slug"] --> D4["GET /destinations/{slug}"]
+        D4 --> D5["/tours?destination=slug"]
+    end
+
+    subgraph CMS["Nội dung CMS"]
+        C1["/news /stories /help\ntravel-guide /careers"] --> C2["GET /content?type="]
+        C3["/content/:slug"] --> C4["GET /content/{slug}"]
+        C5["/our-guides"] --> C6["GET /guides"]
+    end
+
+    subgraph Contact["Liên hệ"]
+        H1["/help form"] --> H2["POST /contact-requests"]
+        F1["Footer newsletter"] --> F2["POST /contact-requests/newsletter"]
+        H2 --> ADM["Admin /admin/contact-requests"]
+    end

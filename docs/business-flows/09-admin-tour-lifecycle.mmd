@@ -1,0 +1,30 @@
+flowchart TD
+    A1["/admin/tours\nCreateTourModal"] --> A2["POST /tours\n+ marketSegment\n+ destinationCity"]
+    A2 --> A3["POST /admin/sessions\n(lịch khởi hành)"]
+    A3 --> A4["/admin/tours/itinerary/:tourId"]
+
+    A4 --> A5["PUT /tours/admin/{id}/itinerary\nngày + activities"]
+    A4 --> A6["PUT /tours/admin/{id}/locations\nđịa điểm theo ngày"]
+    A4 --> A7["GET geocode\nVietMap"]
+
+    A5 --> PUB["Tour public\nGET /tours"]
+    A6 --> PUB
+
+    subgraph Dispatch["Điều hành"]
+        D1["/admin/dispatch"] --> D2["GET /tour-operations/sessions"]
+        D2 --> D3["PUT .../guide\nGán TOUR_GUIDE"]
+        D3 --> D4["Guide portal\nGET /guide/sessions"]
+    end
+
+    PUB --> D1
+
+    subgraph Content["Nội dung marketing"]
+        M1["/admin/destinations"]
+        M2["/admin/catalog-tickets"]
+        M3["/admin/promotions"]
+        M4["/admin/content CMS"]
+    end
+
+    style A1 fill:#fef3c7
+    style PUB fill:#dcfce7
+    style D4 fill:#bbf7d0

@@ -298,9 +298,8 @@ File `.env` đã được thêm vào **BE/.gitignore** để không bị commit 
 
 ## Tài liệu liên quan
 
-- Luồng & API: **docs/FLOWS.md**
-- ERD bổ sung: **docs/ERD-SUPPLEMENT.md**
-- Chatbot: **docs/CHATBOT-FLOW.md**
+- **Sơ đồ luồng nghiệp vụ (Mermaid):** [docs/BUSINESS_FLOWS.md](docs/BUSINESS_FLOWS.md) · file nguồn [docs/business-flows/](docs/business-flows/)
+- Flora AI: [docs/flora-ai/overview.md](docs/flora-ai/overview.md)
 
 ## Việc còn lại (TODO)
 

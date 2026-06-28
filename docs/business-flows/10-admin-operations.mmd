@@ -1,0 +1,24 @@
+flowchart LR
+    subgraph Bookings["Quản lý đặt chỗ"]
+        B1["/admin/bookings"] --> B2["GET /bookings/admin"]
+        B2 --> B3["PATCH status"]
+        B2 --> B4["POST mark-paid"]
+        B2 --> B5["Approve/Reject refund"]
+    end
+
+    subgraph Finance["Tài chính"]
+        F1["/admin/financials"] --> F2["GET /finance/admin/overview"]
+        F2 --> F3["Transactions + Export CSV"]
+    end
+
+    subgraph People["Con người"]
+        P1["/admin/customers"] --> P2["TRAVELER users"]
+        P3["/admin/staff"] --> P4["ADMIN/GUIDE/STAFF"]
+        P5["/admin/reviews"] --> P6["Publish / Featured"]
+        P7["/admin/notifications"] --> P8["Broadcast"]
+    end
+
+    subgraph Expense["Chi phí HDV"]
+        E1["Guide POST expenses"] --> E2["/admin/guide-expenses"]
+        E2 --> E3["Approve / Reject"]
+    end

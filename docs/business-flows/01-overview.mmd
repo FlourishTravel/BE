@@ -1,0 +1,37 @@
+flowchart TB
+    subgraph Clients["Client (React)"]
+        WEB["Website User\n/"]
+        ADMIN["Admin Panel\n/admin/*"]
+        GUIDE["Guide Portal\n/guide/*"]
+    end
+
+    subgraph API["REST API /api"]
+        AUTH["/auth"]
+        TOUR["/tours"]
+        BOOK["/bookings"]
+        CAT["/catalog"]
+        DEST["/destinations"]
+        CHAT["/chat"]
+        FLORA["/chatbot + /flora"]
+        CMS["/content"]
+    end
+
+    subgraph BE["Spring Boot Services"]
+        SVC["Controller → Service → Repository"]
+    end
+
+    DB[(PostgreSQL)]
+
+    WEB --> AUTH & TOUR & BOOK & CAT & DEST & CHAT & FLORA & CMS
+    ADMIN --> TOUR & BOOK & CMS
+    GUIDE --> CHAT
+
+    AUTH & TOUR & BOOK & CAT & DEST & CHAT & FLORA & CMS --> SVC
+    SVC --> DB
+
+    classDef user fill:#e0f2fe,stroke:#0284c7
+    classDef admin fill:#fef3c7,stroke:#d97706
+    classDef guide fill:#dcfce7,stroke:#16a34a
+    class WEB user
+    class ADMIN admin
+    class GUIDE guide

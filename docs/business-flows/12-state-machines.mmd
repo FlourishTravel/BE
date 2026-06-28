@@ -1,0 +1,39 @@
+stateDiagram-v2
+    direction LR
+
+    state "Booking" as booking {
+        [*] --> pending
+        pending --> paid: Thanh toán / admin mark-paid
+        pending --> cancelled: User cancel / admin
+        paid --> confirmed: Admin xác nhận
+        paid --> completed: Kết thúc tour
+        paid --> cancelled: Hủy / refund approved
+        confirmed --> completed: Ngày kết thúc
+        confirmed --> cancelled: Hủy / refund
+        completed --> [*]
+        cancelled --> [*]
+    }
+
+    state "Payment" as payment {
+        [*] --> p_pending: Tạo booking
+        p_pending --> p_paid: MoMo/PayOS IPN
+        p_pending --> p_failed: Timeout/lỗi
+        p_paid --> [*]
+        p_failed --> [*]
+    }
+
+    state "Refund" as refund {
+        [*] --> r_pending: User request-refund
+        r_pending --> r_approved: Admin approve
+        r_pending --> r_rejected: Admin reject
+        r_approved --> [*]: booking cancelled
+        r_rejected --> [*]
+    }
+
+    state "Review" as review {
+        [*] --> draft: POST /reviews
+        draft --> published: Admin publish
+        published --> featured: Admin featured
+        featured --> [*]
+        published --> [*]
+    }

@@ -1,415 +1,556 @@
-# Flourish Travel — Bản đồ luồng nghiệp vụ
+# Flourish Travel — Sơ đồ luồng nghiệp vụ
 
-> Tài liệu suy ra từ code thực tế (FE `Client/FE/website`, BE `Server/BE`).  
-> Cập nhật: 2026-06-27 · Commit tham chiếu: BE `8a71a25`, FE `da46136`
+> Tài liệu trực quan suy ra từ code FE + BE.  
+> File nguồn Mermaid: [`docs/business-flows/*.mmd`](./business-flows/)  
+> Cập nhật: 2026-06-27
+
+**Cách xem:** GitHub/GitLab render Mermaid trực tiếp. VS Code/Cursor: cài extension *Markdown Preview Mermaid Support* hoặc mở file `.mmd` trên [mermaid.live](https://mermaid.live).
 
 ---
 
 ## Mục lục
 
-1. [Kiến trúc tổng quan](#1-kiến-trúc-tổng-quan)
-2. [Xác thực & phân quyền](#2-xác-thực--phân-quyền)
-3. [Luồng User — Khám phá & đặt tour](#3-luồng-user--khám-phá--đặt-tour)
-4. [Luồng User — Chuyến đi & chat](#4-luồng-user--chuyến-đi--chat)
-5. [Luồng User — Vé, điểm đến, nội dung](#5-luồng-user--vé-điểm-đến-nội-dung)
-6. [Luồng User — Tài khoản & khuyến mãi](#6-luồng-user--tài-khoản--khuyến-mãi)
-7. [Luồng Flora AI](#7-luồng-flora-ai)
-8. [Luồng Admin](#8-luồng-admin)
-9. [Luồng Guide (HDV)](#9-luồng-guide-hdv)
-10. [Luồng end-to-end](#10-luồng-end-to-end-từ-tạo-tour--hoàn-chuyến)
-11. [Máy trạng thái](#11-máy-trạng-thái-state-machines)
-12. [Bảng tra API](#12-bảng-tra-api-theo-luồng)
-13. [Entity chính](#13-entity-chính)
-14. [Gap & hạn chế](#14-gap--hạn-chế-hiện-tại)
+| # | Sơ đồ | File nguồn |
+|---|--------|------------|
+| 1 | [Kiến trúc tổng quan](#1-kiến-trúc-tổng-quan) | `01-overview.mmd` |
+| 2 | [Auth & phân quyền](#2-auth--phân-quyền) | `02-auth-roles.mmd` |
+| 3 | [User — Khám phá tour](#3-user--khám-phá-tour) | `03-user-browse-tour.mmd` |
+| 4 | [User — Đặt tour & thanh toán](#4-user--đặt-tour--thanh-toán) | `04-user-booking-payment.mmd` |
+| 5 | [User — Chuyến đi của tôi](#5-user--chuyến-đi-của-tôi) | `05-user-my-journey.mmd` |
+| 6 | [User — Vé, điểm đến, CMS](#6-user--vé-điểm-đến-cms) | `06-user-catalog-destination.mmd` |
+| 7 | [User — Tài khoản](#7-user--tài-khoản) | `07-user-account.mmd` |
+| 8 | [Flora AI](#8-flora-ai) | `08-flora-ai.mmd` |
+| 9 | [Admin — Vòng đời tour](#9-admin--vòng-đời-tour) | `09-admin-tour-lifecycle.mmd` |
+| 10 | [Admin — Vận hành](#10-admin--vận-hành) | `10-admin-operations.mmd` |
+| 11 | [Guide — Portal HDV](#11-guide--portal-hdv) | `11-guide-portal.mmd` |
+| 12 | [Máy trạng thái](#12-máy-trạng-thái) | `12-state-machines.mmd` |
+| 13 | [End-to-end](#13-end-to-end) | `13-end-to-end.mmd` |
+| 14 | [Quan hệ entity](#14-quan-hệ-entity) | `14-entity-relations.mmd` |
 
 ---
 
 ## 1. Kiến trúc tổng quan
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Client (React)          API Base: /api                           │
-│  Client/FE/website/src   VITE_API_URL → flourish backend         │
-└───────────────┬─────────────────────────────────────────────────┘
-                │ REST + JWT Bearer
-                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Server/BE — Spring Boot                                         │
-│  domain/* → Controller → Service → Repository → PostgreSQL       │
-└─────────────────────────────────────────────────────────────────┘
-```
+Ba portal FE kết nối REST API `/api`, xử lý bởi Spring Boot → PostgreSQL.
 
-| Portal | Route prefix | Role BE | Role FE |
-|--------|--------------|---------|---------|
-| Website user | `/`, `/tours`, `/my-journey`, … | `TRAVELER` | `user` |
-| Admin | `/admin/*` | `ADMIN` | `admin` |
-| Guide | `/guide/*` | `TOUR_GUIDE` | `guide` |
+```mermaid
+flowchart TB
+    subgraph Clients["Client (React)"]
+        WEB["Website User\n/"]
+        ADMIN["Admin Panel\n/admin/*"]
+        GUIDE["Guide Portal\n/guide/*"]
+    end
 
-**Repo Git:** `FlourishTravel/BE`, `FlourishTravel/FE`.
+    subgraph API["REST API /api"]
+        AUTH["/auth"]
+        TOUR["/tours"]
+        BOOK["/bookings"]
+        CAT["/catalog"]
+        DEST["/destinations"]
+        CHAT["/chat"]
+        FLORA["/chatbot + /flora"]
+        CMS["/content"]
+    end
 
----
+    subgraph BE["Spring Boot Services"]
+        SVC["Controller → Service → Repository"]
+    end
 
-## 2. Xác thực & phân quyền
+    DB[(PostgreSQL)]
 
-### Đăng nhập
+    WEB --> AUTH & TOUR & BOOK & CAT & DEST & CHAT & FLORA & CMS
+    ADMIN --> TOUR & BOOK & CMS
+    GUIDE --> CHAT
 
-| API | Mô tả |
-|-----|--------|
-| `POST /auth/register` | Tạo TRAVELER |
-| `POST /auth/login` | JWT + user.role |
-| `POST /auth/refresh` | Làm mới token |
+    AUTH & TOUR & BOOK & CAT & DEST & CHAT & FLORA & CMS --> SVC
+    SVC --> DB
 
-Sau login: `ADMIN` → `/admin` · `TOUR_GUIDE` → `/guide/dashboard` · `TRAVELER` → `/`
-
-### SecurityConfig (tóm tắt)
-
-| Pattern | Quyền |
-|---------|--------|
-| `GET /tours`, `/destinations`, `/catalog`, `/content`, `/guides`, `/reviews/public`, `/promotions/active` | Public |
-| `POST /contact-requests`, `/contact-requests/newsletter` | Public |
-| `POST /bookings/validate-session`, `/bookings/validate-promo` | Public |
-| `POST /chatbot/message` | Public (rate limit) |
-| `/admin/**` | `ROLE_ADMIN` |
-| `/guide/**` | `ADMIN` hoặc `TOUR_GUIDE` |
-| Còn lại | JWT |
-
----
-
-## 3. Luồng User — Khám phá & đặt tour
-
-### Sơ đồ
-
-```
-/ hoặc /tours
-  → GET /tours (+ segment, destination, categoryId, price)
-  → /tours/:id
-  → POST /bookings/validate-session
-  → /checkout/:tourId
-  → POST /bookings/validate-promo (optional)
-  → POST /bookings
-  → MoMo / PayOS redirect
-  → sync-from-return / webhook
-  → Booking = paid
-  → /my-journey
-```
-
-### Browse
-
-| Route | API | BE |
-|-------|-----|-----|
-| `/tours` | `GET /tours?segment&destination&categoryId&minPrice&maxPrice` | `TourService.publicCatalogBrowse` |
-| `/tours?segment=domestic\|international\|school\|corporate` | query `segment` | `Tour.marketSegment` |
-| `/tours?wishlist=1` | `GET /favorites` + lọc client | `FavoriteController` |
-| `/tours/:id` | `GET /tours/{id}`, `/similar` | `TourService.getPublicDetail` |
-
-**FE:** `TourListing.jsx`, `TourDetail.jsx`, `Checkout.jsx`  
-**BE:** `TourController`, `BookingController`, `BookingService`
-
-### Thanh toán
-
-| Method | Gateway |
-|--------|---------|
-| `ewallet` | MoMo — `POST /bookings/{id}/momo-pay-url` |
-| `payos` | PayOS — `POST /bookings/{id}/payos-pay-url` |
-| `bank`, `card` | Placeholder → `/checkout/result` |
-
-**BookingService.create:** validate session → Booking pending → Payment pending → tăng `currentParticipants` → trả `paymentUrl`.
-
----
-
-## 4. Luồng User — Chuyến đi & chat
-
-| Route | API | Chức năng |
-|-------|-----|-----------|
-| `/my-journey` | `GET /bookings/me` | Danh sách đơn |
-| `/my-journey/booking/:id` | `GET /bookings/{id}` | Chi tiết |
-| | `POST /bookings/{id}/cancel` | Hủy (pending) |
-| | `POST /bookings/{id}/request-refund` | Hoàn tiền |
-| `/chat/:bookingId` | `GET/POST /chat/bookings/{id}/messages` | Chat nhóm |
-
-**Filter My Journey** (`navConfig.getTripFilterPhase`): upcoming / ongoing / completed / cancelled theo ngày session + status.
-
-**Chat:** chỉ khi booking ∈ `{ paid, confirmed, completed }`. BE tạo `ChatRoom` theo `TourSession`.
-
-**Flora companion (BookingDetail):**
-- `GET /flora/bookings/{id}/journey`
-- `POST /flora/bookings/{id}/nearby-recommendations`
-- `POST /reviews` (feedback sau tour)
-
----
-
-## 5. Luồng User — Vé, điểm đến, nội dung
-
-### Vé
-
-```
-/activities?type=ticket|combo|event → category BE
-GET /catalog/tickets?category
-/activities/:slug → GET /catalog/tickets/{slug}
-Admin: /admin/catalog-tickets → POST /admin/catalog/tickets
-```
-
-### Điểm đến
-
-```
-/destinations → GET /destinations
-/destinations/:slug → GET /destinations/{slug}
-Admin: /admin/destinations
-```
-
-### CMS
-
-| Route | API type |
-|-------|----------|
-| `/news` | `GET /content?type=news` |
-| `/stories` | `story` |
-| `/travel-guide` | `guide` |
-| `/help` | `help` + `POST /contact-requests` |
-| `/careers` | `career` |
-| `/content/:slug` | `GET /content/{slug}` |
-| `/our-guides` | `GET /guides` |
-
-**CMS types:** `news`, `story`, `career`, `help`, `guide`
-
-### Liên hệ
-
-| API | Payload |
-|-----|---------|
-| `POST /contact-requests` | `{ name, email, phone?, message, tourId? }` |
-| `POST /contact-requests/newsletter` | `{ email }` |
-
-Admin xử lý: `/admin/contact-requests`
-
----
-
-## 6. Luồng User — Tài khoản & khuyến mãi
-
-| Route | API |
-|-------|-----|
-| `/profile` | `GET/PATCH /users/me` |
-| `/privacy-settings` | `GET/PATCH /users/me/travel-preferences` |
-| `/my-wallet` | `GET /bookings/me` (tổng hợp client) |
-| `/my-vouchers` | `GET /promotions/active` |
-| `/my-reviews` | `GET /reviews/me` |
-| `/my-points` | **Chưa có API** (placeholder) |
-| `/notifications` | `GET/PATCH /notifications` |
-
-**Đánh giá:** trang chủ `GET /reviews/featured` · gửi `POST /reviews` · admin duyệt `/admin/reviews`
-
----
-
-## 7. Luồng Flora AI
-
-### FAB toàn site (`FloatingChatbot`)
-
-- Route: mọi trang trừ `/admin`, `/guide`, `/chat/*`
-- API: `POST /chatbot/message`
-- Quick actions: `navConfig.FLORA_QUICK_ACTIONS`
-
-### Flora đồng hành
-
-Gắn `bookingId` — xem mục 4.
-
-### Chat HDV
-
-REST `/chat/bookings/{id}/*` — không qua chatbot.
-
----
-
-## 8. Luồng Admin
-
-### Tạo tour end-to-end
-
-```
-POST /tours
-POST /admin/sessions (optional)
-PUT /tours/admin/{id}/itinerary
-PUT /tours/admin/{id}/locations
-PUT /tour-operations/sessions/{id}/guide
-```
-
-### Bảng màn hình
-
-| Route | API chính |
-|-------|-----------|
-| `/admin` | `/finance/admin/overview`, `/users/admin/stats` |
-| `/admin/tours` | CRUD `/tours`, `/tours/admin` |
-| `/admin/tours/itinerary/:id` | itinerary + locations + geocode |
-| `/admin/categories` | `/categories` |
-| `/admin/dispatch` | `/tour-operations/*` |
-| `/admin/bookings` | `/bookings/admin`, refund approve |
-| `/admin/customers` | `/users/admin/customers` |
-| `/admin/financials` | `/finance/admin/*` |
-| `/admin/promotions` | `/admin/promotions` |
-| `/admin/catalog-tickets` | `/admin/catalog/tickets` |
-| `/admin/destinations` | `/admin/destinations` |
-| `/admin/content` | `/admin/content` |
-| `/admin/reviews` | `/admin/reviews` |
-| `/admin/notifications` | broadcast |
-| `/admin/contact-requests` | PATCH status |
-| `/admin/guide-expenses` | duyệt chi phí HDV |
-| `/admin/staff` | `/users/admin/staff` |
-
-### Hoàn tiền
-
-```
-User POST /bookings/{id}/request-refund → Refund pending
-Admin approve → booking cancelled, trả slot session
+    classDef user fill:#e0f2fe,stroke:#0284c7
+    classDef admin fill:#fef3c7,stroke:#d97706
+    classDef guide fill:#dcfce7,stroke:#16a34a
+    class WEB user
+    class ADMIN admin
+    class GUIDE guide
 ```
 
 ---
 
-## 9. Luồng Guide (HDV)
+## 2. Auth & phân quyền
 
-| Route | API |
-|-------|-----|
-| `/guide/dashboard` | `GET /guide/sessions` |
-| `/guide/tours/:tourId`* | `GET /guide/sessions/{id}`, schedule, check-in |
-| `/guide/guests` | guests, check-in/out |
-| `/guide/communication` | `/chat/bookings/{id}/messages` |
-| `/guide/operations` | schedule read-only |
-| `/guide/expenses` | `POST .../expenses` → admin duyệt |
+| Role BE | Role FE | Sau login |
+|---------|---------|-----------|
+| `ADMIN` | `admin` | `/admin` |
+| `TOUR_GUIDE` | `guide` | `/guide/dashboard` |
+| `TRAVELER` | `user` | `/` |
 
-*Param `:tourId` thực tế là **sessionId** (UUID).
+```mermaid
+flowchart LR
+    subgraph Login["POST /auth/login"]
+        L1["email + password"]
+    end
 
----
+    subgraph Roles["JWT + Role"]
+        R1["ADMIN"]
+        R2["TOUR_GUIDE"]
+        R3["TRAVELER"]
+    end
 
-## 10. Luồng end-to-end: từ tạo tour → hoàn chuyến
+    subgraph Redirect["FE Redirect"]
+        D1["/admin"]
+        D2["/guide/dashboard"]
+        D3["/"]
+    end
 
+    L1 --> R1 & R2 & R3
+    R1 --> D1
+    R2 --> D2
+    R3 --> D3
+
+    subgraph Guards["Route Guards"]
+        G1["ProtectedAdminRoute"]
+        G2["ProtectedGuideRoute"]
+        G3["AuthContext user"]
+    end
+
+    D1 --> G1
+    D2 --> G2
+    D3 --> G3
 ```
-[ADMIN]  Tạo tour → session → itinerary → gán HDV → CMS/promo/destinations
-[USER]   Browse → checkout → paid → my-journey → chat
-[GUIDE]  Check-in → schedule → chat → chi phí
-[USER]   POST /reviews
-[ADMIN]  Duyệt review → featured trang chủ
-[FLORA]  PATCH preferences → cá nhân hóa lần sau
+
+---
+
+## 3. User — Khám phá tour
+
+```mermaid
+flowchart TD
+    START(["User vào website"])
+
+    START --> HOME["/ Trang chủ"]
+    START --> LIST["/tours"]
+
+    HOME --> API1["GET /tours?size=10"]
+    LIST --> FILTERS{"Bộ lọc"}
+
+    FILTERS --> F1["?segment=domestic\ninternational\nschool\|corporate"]
+    FILTERS --> F2["?destination=slug"]
+    FILTERS --> F3["categoryId + min/maxPrice"]
+    FILTERS --> F4["?wishlist=1"]
+
+    F1 --> API2["GET /tours?segment=..."]
+    F2 --> API2
+    F3 --> API2
+    F4 --> API2b["GET /favorites\n→ lọc client"]
+
+    API1 --> CARDS["Tour cards"]
+    API2 --> CARDS
+    API2b --> CARDS
+
+    CARDS --> FAV{"Bấm ♥?"}
+    FAV -->|Chưa login| ALERT["Alert đăng nhập"]
+    FAV -->|Đã login| API3["POST/DELETE /favorites"]
+
+    CARDS --> DETAIL["/tours/:id"]
+    DETAIL --> API4["GET /tours/{id}"]
+    DETAIL --> API5["GET /tours/{id}/similar"]
 ```
 
 ---
 
-## 11. Máy trạng thái (state machines)
+## 4. User — Đặt tour & thanh toán
 
-### Booking
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant TD as TourDetail
+    participant CK as Checkout
+    participant BE as BookingService
+    participant GW as MoMo / PayOS
+    participant MJ as My Journey
 
+    U->>TD: Chọn session + số khách
+    TD->>BE: POST /bookings/validate-session
+    BE-->>TD: valid ✓
+
+    U->>CK: /checkout/:tourId
+    CK->>BE: POST /bookings/validate-promo (optional)
+    U->>CK: Submit đặt tour
+    CK->>BE: POST /bookings
+
+    Note over BE: Booking status=pending<br/>Payment status=pending<br/>session.currentParticipants++
+
+    BE-->>CK: paymentUrl
+
+    alt ewallet (MoMo)
+        CK->>GW: Redirect MoMo
+    else payos
+        CK->>GW: Redirect PayOS
+    else bank/card
+        CK->>CK: /checkout/result (placeholder)
+    end
+
+    GW->>BE: Webhook / sync-from-return
+    Note over BE: Booking status=paid
+
+    U->>MJ: /my-journey
+    MJ->>BE: GET /bookings/me
 ```
-pending → paid → confirmed → completed
-   │        │         │
-   └────────┴─────────┴──→ cancelled
+
+---
+
+## 5. User — Chuyến đi của tôi
+
+```mermaid
+flowchart TD
+    MJ["/my-journey"] --> API["GET /bookings/me"]
+    API --> LIST["Danh sách booking"]
+
+    LIST --> FILTER{"Filter chip"}
+    FILTER --> UP["Sắp khởi hành"]
+    FILTER --> ON["Đang diễn ra"]
+    FILTER --> DONE["Đã hoàn thành"]
+    FILTER --> CAN["Đã hủy"]
+
+    LIST --> DETAIL["/my-journey/booking/:id"]
+    DETAIL --> API2["GET /bookings/{id}"]
+
+    DETAIL --> ACT{"Hành động"}
+    ACT --> CANCEL["POST .../cancel\n(chỉ pending)"]
+    ACT --> REFUND["POST .../request-refund\n(paid, trước ngày đi)"]
+    ACT --> FLORA["Flora Companion\nGET /flora/.../journey"]
+    ACT --> REVIEW["POST /reviews\n(feedback sau tour)"]
+
+    DETAIL --> CHAT{"Status paid/confirmed/completed?"}
+    CHAT -->|Yes| CHATPAGE["/chat/:bookingId"]
+    CHATPAGE --> MSG["GET/POST /chat/bookings/{id}/messages"]
+
+    CANCEL --> S1["Booking → cancelled\ntrả slot session"]
+    REFUND --> S2["Refund → pending\nAdmin duyệt sau"]
 ```
 
-| From | To |
-|------|-----|
-| pending | paid, cancelled |
-| paid | confirmed, cancelled, completed |
-| confirmed | completed, cancelled |
+---
 
-### Payment
+## 6. User — Vé, điểm đến, CMS
 
-`pending` → `paid` (MoMo/PayOS/admin mark-paid)
+```mermaid
+flowchart LR
+    subgraph Vé["Vé & Hoạt động"]
+        A1["/activities"] --> A2["GET /catalog/tickets?category"]
+        A3["/activities/:slug"] --> A4["GET /catalog/tickets/{slug}"]
+        A5["?type=ticket"] --> CAT1["category=attraction"]
+        A6["?type=combo"] --> CAT2["category=combo"]
+        A7["?type=event"] --> CAT3["category=show"]
+    end
 
-### Refund
+    subgraph DD["Điểm đến"]
+        D1["/destinations"] --> D2["GET /destinations"]
+        D3["/destinations/:slug"] --> D4["GET /destinations/{slug}"]
+        D4 --> D5["/tours?destination=slug"]
+    end
 
-`(none)` → `pending` → `approved` | `rejected`
+    subgraph CMS["Nội dung CMS"]
+        C1["/news /stories /help\ntravel-guide /careers"] --> C2["GET /content?type="]
+        C3["/content/:slug"] --> C4["GET /content/{slug}"]
+        C5["/our-guides"] --> C6["GET /guides"]
+    end
 
-### TourSession
-
-`scheduled` → `completed` | `cancelled`
-
-### Review
-
-`isPublished=false` → admin publish → public / featured
-
-### ContactRequest
-
-`new` → `in_progress` → `resolved`
-
-### GuideSessionExpense
-
-`pending` → `approved` | `rejected`
+    subgraph Contact["Liên hệ"]
+        H1["/help form"] --> H2["POST /contact-requests"]
+        F1["Footer newsletter"] --> F2["POST /contact-requests/newsletter"]
+        H2 --> ADM["Admin /admin/contact-requests"]
+    end
+```
 
 ---
 
-## 12. Bảng tra API theo luồng
+## 7. User — Tài khoản
 
-### User — Tour & Booking
+```mermaid
+flowchart TB
+    subgraph Profile["Menu Profile (navConfig)"]
+        P1["/profile"] --> API1["GET/PATCH /users/me"]
+        P2["/my-journey"] --> API2["GET /bookings/me"]
+        P3["/tours?wishlist=1"] --> API3["GET /favorites"]
+        P4["/my-wallet"] --> API2
+        P5["/my-vouchers"] --> API4["GET /promotions/active"]
+        P6["/my-reviews"] --> API5["GET /reviews/me"]
+        P7["/my-points"] --> PLACE["Placeholder\n(chưa có API)"]
+        P8["/privacy-settings"] --> API6["travel-preferences"]
+        P9["/notifications"] --> API7["GET /notifications"]
+    end
 
-| API | Auth |
-|-----|------|
-| `GET /tours`, `/tours/{id}` | Public |
-| `GET/POST/DELETE /favorites` | JWT |
-| `POST /bookings/validate-session`, `/validate-promo` | Public |
-| `POST /bookings`, `GET /bookings/me`, `GET /bookings/{id}` | JWT |
-| `POST /bookings/{id}/cancel`, `/request-refund` | JWT |
-
-### Catalog & Destination
-
-| API | Auth |
-|-----|------|
-| `GET /catalog/tickets`, `/catalog/tickets/{slug}` | Public |
-| `GET /destinations`, `/destinations/{slug}` | Public |
-
-### Account & Content
-
-| API | Auth |
-|-----|------|
-| `POST /auth/login` | Public |
-| `GET/PATCH /users/me` | JWT |
-| `GET /promotions/active`, `/reviews/featured` | Public |
-| `GET /reviews/me`, `POST /reviews` | JWT |
-| `GET /content?type=`, `/guides` | Public |
-| `POST /contact-requests` | Public |
+    subgraph Public["Không cần login"]
+        P5
+        HOME["/ FeaturedReviews"] --> API8["GET /reviews/featured"]
+    end
+```
 
 ---
 
-## 13. Entity chính
+## 8. Flora AI
 
-| Entity | Vai trò |
-|--------|---------|
-| `Tour` | Sản phẩm (marketSegment, destinationCity) |
-| `TourSession` | Lịch khởi hành |
-| `TourItinerary` | Lịch trình ngày + activities |
-| `Booking` | Đơn đặt user |
-| `Payment` | Thanh toán |
-| `Refund` | Hoàn tiền |
-| `Promotion` | Mã giảm giá |
-| `Favorite` | Wishlist |
-| `Destination` | Điểm đến marketing |
-| `TravelTicket` | Vé catalog |
-| `SiteContent` | CMS |
-| `Review` | Đánh giá |
-| `Notification` | Thông báo |
-| `ContactRequest` | Liên hệ / newsletter |
-| `ChatRoom`, `Message` | Chat nhóm |
-| `GuideSessionExpense` | Chi phí HDV |
-| `User` | TRAVELER / TOUR_GUIDE / ADMIN / STAFF |
+Hai kênh tách biệt: **FAB toàn site** (chatbot) và **Companion gắn booking**.
 
-**Quan hệ chính:** Tour → TourSession → Booking → Payment. TourSession → ChatRoom. User → Favorite → Tour. Booking → Review.
+```mermaid
+flowchart TB
+    subgraph FAB["Flora FAB (FloatingChatbot)"]
+        F1["Mọi trang trừ\n/admin /guide /chat/*"]
+        F2["POST /chatbot/message"]
+        F3["Quick actions\nnavConfig.FLORA_QUICK_ACTIONS"]
+    end
 
----
+    subgraph Companion["Flora Companion (BookingDetail)"]
+        C1["/my-journey/booking/:id"]
+        C2["GET /flora/bookings/{id}/journey"]
+        C3["POST .../nearby-recommendations"]
+        C4["GET .../post-tour-feedback"]
+        C5["POST /reviews"]
+        C6["PATCH /flora/preferences/me"]
+    end
 
-## 14. Gap & hạn chế hiện tại
+    subgraph ChatHDV["Chat HDV (không qua chatbot)"]
+        H1["/chat/:bookingId"]
+        H2["GET/POST /chat/bookings/{id}/messages"]
+    end
 
-| # | Mục | Trạng thái |
-|---|-----|------------|
-| 1 | Điểm thưởng `/my-points` | Chưa có API BE |
-| 2 | Thanh toán bank/card | Placeholder |
-| 3 | Guide settings route | Chưa define trong App.jsx |
-| 4 | Admin Settings | Placeholder → dùng CMS |
-| 5 | Waitlist | BE có, FE chưa |
-| 6 | Planner `/planner/*` | BE public, FE chưa wire |
+    USER((User)) --> FAB
+    USER --> Companion
+    USER --> ChatHDV
 
-### Đã hoàn thiện luồng (2026-06-27)
+    F1 --> F2
+    F1 --> F3
+    C1 --> C2 & C3 & C4 & C5 & C6
+```
 
-| Gap | Fix |
-|-----|-----|
-| Contact API path | `contact.js` → `/contact-requests`, map `fullName` → `name` |
-| Reviews API thiếu | `reviews.js` → `listFeaturedReviews`, `createReview` |
+Chi tiết Flora MVP: [`docs/flora-ai/use-case-diagram.mmd`](../flora-ai/use-case-diagram.mmd)
 
 ---
 
-## Phụ lục: Route map FE
+## 9. Admin — Vòng đời tour
 
-### User
+```mermaid
+flowchart TD
+    A1["/admin/tours\nCreateTourModal"] --> A2["POST /tours\n+ marketSegment\n+ destinationCity"]
+    A2 --> A3["POST /admin/sessions\n(lịch khởi hành)"]
+    A3 --> A4["/admin/tours/itinerary/:tourId"]
+
+    A4 --> A5["PUT /tours/admin/{id}/itinerary\nngày + activities"]
+    A4 --> A6["PUT /tours/admin/{id}/locations\nđịa điểm theo ngày"]
+    A4 --> A7["GET geocode\nVietMap"]
+
+    A5 --> PUB["Tour public\nGET /tours"]
+    A6 --> PUB
+
+    subgraph Dispatch["Điều hành"]
+        D1["/admin/dispatch"] --> D2["GET /tour-operations/sessions"]
+        D2 --> D3["PUT .../guide\nGán TOUR_GUIDE"]
+        D3 --> D4["Guide portal\nGET /guide/sessions"]
+    end
+
+    PUB --> D1
+
+    subgraph Content["Nội dung marketing"]
+        M1["/admin/destinations"]
+        M2["/admin/catalog-tickets"]
+        M3["/admin/promotions"]
+        M4["/admin/content CMS"]
+    end
+```
+
+---
+
+## 10. Admin — Vận hành
+
+```mermaid
+flowchart LR
+    subgraph Bookings["Quản lý đặt chỗ"]
+        B1["/admin/bookings"] --> B2["GET /bookings/admin"]
+        B2 --> B3["PATCH status"]
+        B2 --> B4["POST mark-paid"]
+        B2 --> B5["Approve/Reject refund"]
+    end
+
+    subgraph Finance["Tài chính"]
+        F1["/admin/financials"] --> F2["GET /finance/admin/overview"]
+        F2 --> F3["Transactions + Export CSV"]
+    end
+
+    subgraph People["Con người"]
+        P1["/admin/customers"] --> P2["TRAVELER users"]
+        P3["/admin/staff"] --> P4["ADMIN/GUIDE/STAFF"]
+        P5["/admin/reviews"] --> P6["Publish / Featured"]
+        P7["/admin/notifications"] --> P8["Broadcast"]
+    end
+
+    subgraph Expense["Chi phí HDV"]
+        E1["Guide POST expenses"] --> E2["/admin/guide-expenses"]
+        E2 --> E3["Approve / Reject"]
+    end
+```
+
+---
+
+## 11. Guide — Portal HDV
+
+```mermaid
+flowchart TD
+    ADMIN["Admin /admin/dispatch\nGán HDV"] --> SESSION["TourSession\n.tourGuide = HDV"]
+
+    SESSION --> GD["/guide/dashboard"]
+    GD --> API["GET /guide/sessions"]
+
+    API --> TOURS["/guide/tours"]
+    API --> GUESTS["/guide/guests"]
+    API --> OPS["/guide/operations"]
+    API --> EXP["/guide/expenses"]
+    API --> COMM["/guide/communication"]
+
+    TOURS --> TD["/guide/tours/:sessionId"]
+    TD --> S1["GET session detail"]
+    TD --> S2["Schedule CRUD"]
+    TD --> S3["Guide check-in"]
+
+    GUESTS --> G1["GET .../guests"]
+    G1 --> G2["Participant check-in/out"]
+    G1 --> G3["Activity check-in/out"]
+
+    COMM --> C1["GET/POST /chat/bookings/{id}/messages"]
+
+    EXP --> E1["POST .../expenses\nstatus=pending"]
+    E1 --> E2["Admin duyệt\n/admin/guide-expenses"]
+```
+
+---
+
+## 12. Máy trạng thái
+
+```mermaid
+stateDiagram-v2
+    direction LR
+
+    state "Booking" as booking {
+        [*] --> pending
+        pending --> paid: Thanh toán / admin mark-paid
+        pending --> cancelled: User cancel / admin
+        paid --> confirmed: Admin xác nhận
+        paid --> completed: Kết thúc tour
+        paid --> cancelled: Hủy / refund approved
+        confirmed --> completed: Ngày kết thúc
+        confirmed --> cancelled: Hủy / refund
+        completed --> [*]
+        cancelled --> [*]
+    }
+
+    state "Payment" as payment {
+        [*] --> p_pending: Tạo booking
+        p_pending --> p_paid: MoMo/PayOS IPN
+        p_pending --> p_failed: Timeout/lỗi
+        p_paid --> [*]
+        p_failed --> [*]
+    }
+
+    state "Refund" as refund {
+        [*] --> r_pending: User request-refund
+        r_pending --> r_approved: Admin approve
+        r_pending --> r_rejected: Admin reject
+        r_approved --> [*]: booking cancelled
+        r_rejected --> [*]
+    }
+
+    state "Review" as review {
+        [*] --> draft: POST /reviews
+        draft --> published: Admin publish
+        published --> featured: Admin featured
+        featured --> [*]
+        published --> [*]
+    }
+```
+
+---
+
+## 13. End-to-end
+
+Luồng đầy đủ từ admin tạo tour đến user đánh giá sau chuyến.
+
+```mermaid
+flowchart TB
+    subgraph Phase1["① Admin chuẩn bị"]
+        A1["Tạo Tour"] --> A2["Tạo Session"]
+        A2 --> A3["Itinerary + Locations"]
+        A3 --> A4["Gán HDV"]
+        A4 --> A5["CMS / Promo / Destinations"]
+    end
+
+    subgraph Phase2["② User đặt tour"]
+        U1["Browse /tours"] --> U2["TourDetail"]
+        U2 --> U3["Checkout"]
+        U3 --> U4["Thanh toán"]
+        U4 --> U5["Booking = paid"]
+    end
+
+    subgraph Phase3["③ Trong chuyến"]
+        G1["Guide check-in"] --> G2["Chat nhóm"]
+        G2 --> G3["Flora journey companion"]
+        U6["User /my-journey"] --> G2
+    end
+
+    subgraph Phase4["④ Sau chuyến"]
+        S1["Tour completed"] --> S2["User POST /reviews"]
+        S2 --> S3["Admin publish"]
+        S3 --> S4["Featured trang chủ"]
+        S4 --> S5["Flora cập nhật preferences"]
+    end
+
+    Phase1 --> Phase2
+    Phase2 --> Phase3
+    Phase3 --> Phase4
+
+    A5 -.-> U1
+    A4 -.-> G1
+```
+
+---
+
+## 14. Quan hệ entity
+
+```mermaid
+erDiagram
+    User ||--o{ Booking : places
+    User ||--o{ Favorite : saves
+    User ||--o{ Review : writes
+    User ||--o{ Notification : receives
+
+    Tour ||--o{ TourSession : has
+    Tour ||--o{ TourItinerary : has
+    Tour }o--|| Category : belongs
+    Tour ||--o{ Favorite : referenced
+
+    TourSession ||--o{ Booking : receives
+    TourSession |o--o| User : tourGuide
+    TourSession ||--o| ChatRoom : has
+    TourSession ||--o{ GuideSessionExpense : has
+
+    Booking ||--o{ BookingGuest : has
+    Booking ||--o| Payment : has
+    Booking ||--o| Refund : may_have
+    Booking ||--o| Review : generates
+
+    ChatRoom ||--o{ Message : contains
+    ChatRoom ||--o{ ChatMember : has
+
+    Promotion }o--o{ Booking : applied
+    Destination ||--o{ Tour : suggests
+    TravelTicket }o--|| Catalog : listed
+    SiteContent }o--|| CMS : typed
+    ContactRequest }o--o| User : from
+```
+
+---
+
+## Phụ lục — Route map
+
+<details>
+<summary>User routes (click mở)</summary>
 
 ```
 /  /help  /login  /register  /profile  /privacy-settings
@@ -422,7 +563,10 @@ pending → paid → confirmed → completed
 /news  /stories  /content/:slug  /careers  /about  /policies...
 ```
 
-### Admin
+</details>
+
+<details>
+<summary>Admin routes</summary>
 
 ```
 /admin  /admin/tours  /admin/tours/itinerary/:tourId
@@ -433,13 +577,18 @@ pending → paid → confirmed → completed
 /admin/guide-expenses  /admin/staff  /admin/settings
 ```
 
-### Guide
+</details>
+
+<details>
+<summary>Guide routes</summary>
 
 ```
 /guide/dashboard  /guide/tours  /guide/tours/:tourId
 /guide/guests  /guide/communication  /guide/operations  /guide/expenses
 ```
 
+</details>
+
 ---
 
-*Tham chiếu thêm: `STRUCTURE.md`, `docs/flora-ai/overview.md`*
+*Tham chiếu: [`STRUCTURE.md`](../../STRUCTURE.md) · [`docs/flora-ai/overview.md`](../flora-ai/overview.md)*

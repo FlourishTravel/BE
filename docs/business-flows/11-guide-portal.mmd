@@ -1,0 +1,28 @@
+flowchart TD
+    ADMIN["Admin /admin/dispatch\nGán HDV"] --> SESSION["TourSession\n.tourGuide = HDV"]
+
+    SESSION --> GD["/guide/dashboard"]
+    GD --> API["GET /guide/sessions"]
+
+    API --> TOURS["/guide/tours"]
+    API --> GUESTS["/guide/guests"]
+    API --> OPS["/guide/operations"]
+    API --> EXP["/guide/expenses"]
+    API --> COMM["/guide/communication"]
+
+    TOURS --> TD["/guide/tours/:sessionId"]
+    TD --> S1["GET session detail"]
+    TD --> S2["Schedule CRUD"]
+    TD --> S3["Guide check-in"]
+
+    GUESTS --> G1["GET .../guests"]
+    G1 --> G2["Participant check-in/out"]
+    G1 --> G3["Activity check-in/out"]
+
+    COMM --> C1["GET/POST /chat/bookings/{id}/messages"]
+
+    EXP --> E1["POST .../expenses\nstatus=pending"]
+    E1 --> E2["Admin duyệt\n/admin/guide-expenses"]
+
+    style ADMIN fill:#fef3c7
+    style GD fill:#dcfce7

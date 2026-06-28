@@ -1,0 +1,35 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant TD as TourDetail
+    participant CK as Checkout
+    participant BE as BookingService
+    participant GW as MoMo / PayOS
+    participant MJ as My Journey
+
+    U->>TD: Chọn session + số khách
+    TD->>BE: POST /bookings/validate-session
+    BE-->>TD: valid ✓
+
+    U->>CK: /checkout/:tourId
+    CK->>BE: POST /bookings/validate-promo (optional)
+    U->>CK: Submit đặt tour
+    CK->>BE: POST /bookings
+
+    Note over BE: Booking status=pending<br/>Payment status=pending<br/>session.currentParticipants++
+
+    BE-->>CK: paymentUrl
+
+    alt ewallet (MoMo)
+        CK->>GW: Redirect MoMo
+    else payos
+        CK->>GW: Redirect PayOS
+    else bank/card
+        CK->>CK: /checkout/result (placeholder)
+    end
+
+    GW->>BE: Webhook / sync-from-return
+    Note over BE: Booking status=paid
+
+    U->>MJ: /my-journey
+    MJ->>BE: GET /bookings/me

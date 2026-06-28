@@ -1,0 +1,31 @@
+flowchart LR
+    subgraph Login["POST /auth/login"]
+        L1["email + password"]
+    end
+
+    subgraph Roles["JWT + Role"]
+        R1["ADMIN"]
+        R2["TOUR_GUIDE"]
+        R3["TRAVELER"]
+    end
+
+    subgraph Redirect["FE Redirect"]
+        D1["/admin"]
+        D2["/guide/dashboard"]
+        D3["/"]
+    end
+
+    L1 --> R1 & R2 & R3
+    R1 --> D1
+    R2 --> D2
+    R3 --> D3
+
+    subgraph Guards["Route Guards"]
+        G1["ProtectedAdminRoute"]
+        G2["ProtectedGuideRoute"]
+        G3["AuthContext user"]
+    end
+
+    D1 --> G1
+    D2 --> G2
+    D3 --> G3

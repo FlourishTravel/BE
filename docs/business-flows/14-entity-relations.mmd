@@ -1,0 +1,29 @@
+erDiagram
+    User ||--o{ Booking : places
+    User ||--o{ Favorite : saves
+    User ||--o{ Review : writes
+    User ||--o{ Notification : receives
+
+    Tour ||--o{ TourSession : has
+    Tour ||--o{ TourItinerary : has
+    Tour }o--|| Category : belongs
+    Tour ||--o{ Favorite : referenced
+
+    TourSession ||--o{ Booking : receives
+    TourSession |o--o| User : tourGuide
+    TourSession ||--o| ChatRoom : has
+    TourSession ||--o{ GuideSessionExpense : has
+
+    Booking ||--o{ BookingGuest : has
+    Booking ||--o| Payment : has
+    Booking ||--o| Refund : may_have
+    Booking ||--o| Review : generates
+
+    ChatRoom ||--o{ Message : contains
+    ChatRoom ||--o{ ChatMember : has
+
+    Promotion }o--o{ Booking : applied
+    Destination ||--o{ Tour : suggests
+    TravelTicket }o--|| Catalog : listed
+    SiteContent }o--|| CMS : typed
+    ContactRequest }o--o| User : from

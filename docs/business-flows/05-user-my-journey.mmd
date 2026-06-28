@@ -1,0 +1,28 @@
+flowchart TD
+    MJ["/my-journey"] --> API["GET /bookings/me"]
+    API --> LIST["Danh sách booking"]
+
+    LIST --> FILTER{"Filter chip"}
+    FILTER --> UP["Sắp khởi hành"]
+    FILTER --> ON["Đang diễn ra"]
+    FILTER --> DONE["Đã hoàn thành"]
+    FILTER --> CAN["Đã hủy"]
+
+    LIST --> DETAIL["/my-journey/booking/:id"]
+    DETAIL --> API2["GET /bookings/{id}"]
+
+    DETAIL --> ACT{"Hành động"}
+    ACT --> CANCEL["POST .../cancel\n(chỉ pending)"]
+    ACT --> REFUND["POST .../request-refund\n(paid, trước ngày đi)"]
+    ACT --> FLORA["Flora Companion\nGET /flora/.../journey"]
+    ACT --> REVIEW["POST /reviews\n(feedback sau tour)"]
+
+    DETAIL --> CHAT{"Status paid/confirmed/completed?"}
+    CHAT -->|Yes| CHATPAGE["/chat/:bookingId"]
+    CHATPAGE --> MSG["GET/POST /chat/bookings/{id}/messages"]
+
+    CANCEL --> S1["Booking → cancelled\ntrả slot session"]
+    REFUND --> S2["Refund → pending\nAdmin duyệt sau"]
+
+    style MJ fill:#ecfdf5
+    style CHATPAGE fill:#dbeafe
