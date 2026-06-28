@@ -42,7 +42,7 @@ public class ActivityRequest {
 
     private BigDecimal longitude;
 
-    @Size(max = 500)
+    @Size(max = 2000)
     private String imageUrl;
 
     @DecimalMin(value = "0.0", inclusive = true)
@@ -53,7 +53,7 @@ public class ActivityRequest {
     @Size(max = 500)
     private String tags;
 
-    @Size(max = 500)
+    @Size(max = 2000)
     private String locationAddress;
 
     private Boolean isGatheringEvent;

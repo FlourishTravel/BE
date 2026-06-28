@@ -37,7 +37,7 @@ public class TourItinerary extends BaseEntity {
     private String summary;
 
     /** Ảnh đại diện cho ngày — Instagram-style cover. */
-    @Column(name = "cover_image_url", length = 500)
+    @Column(name = "cover_image_url", length = 2000)
     private String coverImageUrl;
 
     /** Tên khách sạn / homestay / resort lưu trú. */

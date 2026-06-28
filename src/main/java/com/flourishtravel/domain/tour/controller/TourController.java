@@ -153,7 +153,7 @@ public class TourController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<List<TourDetailDto.ItineraryRef>>> saveItinerary(
             @PathVariable UUID id,
-            @Valid @RequestBody List<ItineraryRequest> days) {
+            @Valid @RequestBody List<@Valid ItineraryRequest> days) {
         return ResponseEntity.ok(ApiResponse.ok("Đã lưu lịch trình", tourService.saveItinerary(id, days)));
     }
 

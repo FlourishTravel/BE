@@ -64,7 +64,7 @@ public class TourActivity extends BaseEntity {
     @Column(precision = 10, scale = 7)
     private BigDecimal longitude;
 
-    @Column(name = "image_url", length = 500)
+    @Column(name = "image_url", length = 2000)
     private String imageUrl;
 
     @Column(name = "cost_estimate", precision = 15, scale = 2)
@@ -80,7 +80,7 @@ public class TourActivity extends BaseEntity {
     private String tags;
 
     /** Địa chỉ chi tiết (khác tên địa điểm). */
-    @Column(name = "location_address", length = 500)
+    @Column(name = "location_address", length = 2000)
     private String locationAddress;
 
     /** Hoạt động tập trung / lên xe / họp đoàn — dùng cho Flora reminders. */

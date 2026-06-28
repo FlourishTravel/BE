@@ -272,6 +272,15 @@ public class TourService {
         return t.isEmpty() ? null : t;
     }
 
+    /** Trim chuỗi; nếu dài hơn maxLen thì cắt bớt (tránh lỗi DB khi URL S3 quá dài). */
+    private static String trimToMax(String value, int maxLen) {
+        if (value == null) return null;
+        String t = value.trim();
+        if (t.isEmpty()) return null;
+        if (t.length() <= maxLen) return t;
+        return t.substring(0, maxLen);
+    }
+
     private TourSummaryDto toSummary(Tour tour) {
         TourSummaryDto.CategoryRef catRef = null;
         if (tour.getCategory() != null) {
@@ -553,9 +562,11 @@ public class TourService {
         tourActivityRepository.deleteByTourId(tourId);
         tourRepository.deleteItinerariesByTourId(tourId);
 
-        Tour tour = tourRepository.findById(tourId)
+        Tour tour = tourRepository.findByIdWithItinerariesAndActivities(tourId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tour", tourId));
-        if (tour.getItineraries() != null) {
+        if (tour.getItineraries() == null) {
+            tour.setItineraries(new java.util.ArrayList<>());
+        } else {
             tour.getItineraries().clear();
         }
 
@@ -567,7 +578,7 @@ public class TourService {
                         .title(safeTrim(d.getTitle()))
                         .description(trimToNull(d.getDescription()))
                         .summary(trimToNull(d.getSummary()))
-                        .coverImageUrl(trimToNull(d.getCoverImageUrl()))
+                        .coverImageUrl(trimToMax(d.getCoverImageUrl(), 2000))
                         .accommodation(trimToNull(d.getAccommodation()))
                         .transport(trimToNull(d.getTransport()))
                         .mealsIncluded(trimToNull(d.getMealsIncluded()))
@@ -590,11 +601,11 @@ public class TourService {
                                 .locationName(trimToNull(a.getLocationName()))
                                 .latitude(roundCoordinate(a.getLatitude()))
                                 .longitude(roundCoordinate(a.getLongitude()))
-                                .imageUrl(trimToNull(a.getImageUrl()))
+                                .imageUrl(trimToMax(a.getImageUrl(), 2000))
                                 .costEstimate(a.getCostEstimate())
                                 .costIncluded(a.getCostIncluded() != null ? a.getCostIncluded() : Boolean.TRUE)
-                                .tags(trimToNull(a.getTags()))
-                                .locationAddress(trimToNull(a.getLocationAddress()))
+                                .tags(trimToMax(a.getTags(), 500))
+                                .locationAddress(trimToMax(a.getLocationAddress(), 2000))
                                 .isGatheringEvent(Boolean.TRUE.equals(a.getIsGatheringEvent()))
                                 .gatheringEventType(trimToNull(a.getGatheringEventType()))
                                 .scheduleStatus(normalizeScheduleStatus(a.getScheduleStatus()))
@@ -608,8 +619,14 @@ public class TourService {
                 tour.getItineraries().add(it);
             }
         }
-        Tour saved = tourRepository.save(tour);
-        return saved.getItineraries().stream()
+        tourRepository.saveAndFlush(tour);
+
+        Tour reloaded = tourRepository.findByIdWithItinerariesAndActivities(tourId)
+                .orElseThrow(() -> new ResourceNotFoundException("Tour", tourId));
+        if (reloaded.getItineraries() == null || reloaded.getItineraries().isEmpty()) {
+            return List.of();
+        }
+        return reloaded.getItineraries().stream()
                 .sorted(Comparator.comparing(
                         TourItinerary::getDayNumber,
                         Comparator.nullsLast(Comparator.naturalOrder())))

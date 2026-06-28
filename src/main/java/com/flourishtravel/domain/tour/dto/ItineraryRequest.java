@@ -25,7 +25,7 @@ public class ItineraryRequest {
 
     private String summary;
 
-    @Size(max = 500)
+    @Size(max = 2000)
     private String coverImageUrl;
 
     @Size(max = 255)
