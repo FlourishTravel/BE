@@ -13,6 +13,8 @@ public interface DestinationRepository extends JpaRepository<Destination, UUID> 
 
     Optional<Destination> findBySlugAndPublishedTrue(String slug);
 
+    boolean existsBySlugIgnoreCase(String slug);
+
     @Query("""
             SELECT d FROM Destination d
             WHERE d.published = true

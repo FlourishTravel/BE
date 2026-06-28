@@ -46,4 +46,13 @@ public interface ReviewRepository extends JpaRepository<Review, UUID> {
             ORDER BY r.createdAt DESC
             """)
     List<Review> findFeaturedPublic();
+
+    @Query("""
+            SELECT r FROM Review r
+            LEFT JOIN FETCH r.tour
+            LEFT JOIN FETCH r.booking
+            WHERE r.user.id = :userId
+            ORDER BY r.createdAt DESC
+            """)
+    List<Review> findByUserId(@Param("userId") UUID userId);
 }

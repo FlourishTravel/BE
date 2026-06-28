@@ -109,6 +109,13 @@ public class ReviewService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<ReviewViewDto> listMine(UUID userId) {
+        return reviewRepository.findByUserId(userId).stream()
+                .map(this::toDto)
+                .toList();
+    }
+
     private ReviewViewDto toDto(Review review) {
         return ReviewViewDto.builder()
                 .id(review.getId())

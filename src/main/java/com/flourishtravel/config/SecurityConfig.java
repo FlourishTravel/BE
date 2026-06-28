@@ -50,6 +50,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/categories").permitAll()
                 .requestMatchers(HttpMethod.GET, "/guides", "/guides/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/reviews/public", "/reviews/featured").permitAll()
+                .requestMatchers(HttpMethod.GET, "/promotions/active").permitAll()
                 .requestMatchers(HttpMethod.GET, "/content", "/content/**").permitAll()
                 .requestMatchers("/chatbot/message").permitAll()
                 .requestMatchers("/chatbot/config", "/chatbot/config/**").permitAll()

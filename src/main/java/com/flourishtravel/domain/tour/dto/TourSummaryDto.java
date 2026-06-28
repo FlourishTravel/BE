@@ -30,6 +30,11 @@ public class TourSummaryDto {
     private Integer durationDays;
     private Integer durationNights;
 
+    private String destinationCity;
+
+    /** domestic | international | school | corporate */
+    private String marketSegment;
+
     private String thumbnailUrl;
 
     private CategoryRef category;

@@ -39,6 +39,10 @@ public class Tour extends BaseEntity {
     @Column(name = "destination_city", length = 80)
     private String destinationCity;
 
+    /** domestic | international | school | corporate — phân loại menu Tour */
+    @Column(name = "market_segment", length = 30)
+    private String marketSegment;
+
     @Column(precision = 3, scale = 2)
     private BigDecimal rating;
 

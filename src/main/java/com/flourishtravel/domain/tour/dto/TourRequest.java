@@ -43,6 +43,17 @@ public class TourRequest {
 
     private UUID categoryId;
 
+    /** domestic | international | school | corporate */
+    @Pattern(
+            regexp = "^$|^(domestic|international|school|corporate)$",
+            message = "marketSegment phải là domestic, international, school hoặc corporate"
+    )
+    @Size(max = 30)
+    private String marketSegment;
+
+    @Size(max = 80)
+    private String destinationCity;
+
     /** URL ảnh đại diện (thêm vào tour_images khi tạo). */
     private String thumbnailUrl;
 }

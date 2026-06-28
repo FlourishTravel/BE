@@ -21,7 +21,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class SiteContentService {
 
-    private static final Set<String> ALLOWED_TYPES = Set.of("news", "story", "career", "help");
+    private static final Set<String> ALLOWED_TYPES = Set.of("news", "story", "career", "help", "guide");
 
     private final SiteContentRepository siteContentRepository;
 

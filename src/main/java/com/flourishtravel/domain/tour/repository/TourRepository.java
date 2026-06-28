@@ -64,6 +64,7 @@ public interface TourRepository extends JpaRepository<Tour, UUID> {
           AND (:minPrice IS NULL OR t.basePrice >= :minPrice)
           AND (:maxPrice IS NULL OR t.basePrice <= :maxPrice)
           AND (:categoryId IS NULL OR t.category.id = :categoryId)
+          AND (:marketSegment IS NULL OR :marketSegment = '' OR t.marketSegment = :marketSegment)
         ORDER BY t.featured DESC NULLS LAST, t.createdAt DESC
         """,
         countQuery = """
@@ -73,12 +74,14 @@ public interface TourRepository extends JpaRepository<Tour, UUID> {
           AND (:minPrice IS NULL OR t.basePrice >= :minPrice)
           AND (:maxPrice IS NULL OR t.basePrice <= :maxPrice)
           AND (:categoryId IS NULL OR t.category.id = :categoryId)
+          AND (:marketSegment IS NULL OR :marketSegment = '' OR t.marketSegment = :marketSegment)
         """
     )
     Page<Tour> searchForSuggestion(@Param("destinationPattern") String destinationPattern,
                                    @Param("minPrice") BigDecimal minPrice,
                                    @Param("maxPrice") BigDecimal maxPrice,
                                    @Param("categoryId") UUID categoryId,
+                                   @Param("marketSegment") String marketSegment,
                                    Pageable pageable);
 
     Page<Tour> findByCategory_IdAndIdNotOrderByCreatedAtDesc(UUID categoryId, UUID excludeId, Pageable pageable);

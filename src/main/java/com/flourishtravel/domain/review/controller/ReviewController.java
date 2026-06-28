@@ -41,6 +41,15 @@ public class ReviewController {
         return ResponseEntity.ok(ApiResponse.ok("Đã gửi đánh giá", review));
     }
 
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<List<ReviewViewDto>>> listMine(
+            @AuthenticationPrincipal UserPrincipal principal) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        return ResponseEntity.ok(ApiResponse.ok(reviewService.listMine(principal.getId())));
+    }
+
     @GetMapping("/public")
     public ResponseEntity<ApiResponse<List<ReviewViewDto>>> listPublic(
             @RequestParam(required = false) UUID tourId) {

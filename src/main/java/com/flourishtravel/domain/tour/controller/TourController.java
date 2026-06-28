@@ -41,13 +41,14 @@ public class TourController {
             @RequestParam(required = false) BigDecimal maxPrice,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) UUID categoryId,
+            @RequestParam(required = false) String segment,
             @RequestParam(required = false, defaultValue = "date_asc") String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size) {
         Page<TourSummaryDto> tours = startDate != null
                 ? tourService.publicCatalog(destination, minPrice, maxPrice, startDate, categoryId,
                         PageRequest.of(page, size))
-                : tourService.publicCatalogBrowse(destination, minPrice, maxPrice, categoryId,
+                : tourService.publicCatalogBrowse(destination, minPrice, maxPrice, categoryId, segment,
                         PageRequest.of(page, size));
         return ResponseEntity.ok(ApiResponse.ok(tours));
     }

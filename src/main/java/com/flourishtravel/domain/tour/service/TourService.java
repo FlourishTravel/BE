@@ -75,10 +75,16 @@ public class TourService {
     /** Danh sách catalog (không bắt buộc còn chỗ session) — trang Tour & Vé. */
     @Transactional(readOnly = true)
     public Page<TourSummaryDto> publicCatalogBrowse(String destination, BigDecimal minPrice, BigDecimal maxPrice,
-                                                   UUID categoryId, Pageable pageable) {
+                                                   UUID categoryId, String marketSegment, Pageable pageable) {
         return tourRepository.searchForSuggestion(
-                        destinationLikePattern(destination), minPrice, maxPrice, categoryId, pageable)
+                        destinationLikePattern(destination), minPrice, maxPrice, categoryId,
+                        normalizeMarketSegment(marketSegment), pageable)
                 .map(this::toSummary);
+    }
+
+    private static String normalizeMarketSegment(String segment) {
+        if (segment == null || segment.isBlank()) return null;
+        return segment.trim().toLowerCase(Locale.ROOT);
     }
 
     /** Postgres: không truyền null vào LOWER(LIKE) — dùng %% (match all). */
@@ -194,6 +200,8 @@ public class TourService {
         tour.setDurationDays(req.getDurationDays());
         tour.setDurationNights(req.getDurationNights());
         tour.setCategory(resolveCategory(req.getCategoryId()));
+        tour.setDestinationCity(trimToNull(req.getDestinationCity()));
+        tour.setMarketSegment(normalizeMarketSegment(req.getMarketSegment()));
 
         if (req.getThumbnailUrl() != null && !req.getThumbnailUrl().isBlank()) {
             tour.getImages().add(TourImage.builder()
@@ -219,6 +227,8 @@ public class TourService {
         tour.setDurationDays(req.getDurationDays());
         tour.setDurationNights(req.getDurationNights());
         tour.setCategory(resolveCategory(req.getCategoryId()));
+        tour.setDestinationCity(trimToNull(req.getDestinationCity()));
+        tour.setMarketSegment(normalizeMarketSegment(req.getMarketSegment()));
         return tourRepository.save(tour);
     }
 
@@ -334,6 +344,8 @@ public class TourService {
                 .basePrice(tour.getBasePrice())
                 .durationDays(tour.getDurationDays())
                 .durationNights(tour.getDurationNights())
+                .destinationCity(tour.getDestinationCity())
+                .marketSegment(tour.getMarketSegment())
                 .thumbnailUrl(thumb)
                 .category(catRef)
                 .earliestSession(earliest)
