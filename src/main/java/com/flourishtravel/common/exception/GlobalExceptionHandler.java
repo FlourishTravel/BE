@@ -12,6 +12,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -60,6 +61,13 @@ public class GlobalExceptionHandler {
             errors.put(field, message);
         });
         return ResponseEntity.badRequest().body(ApiResponse.error("Dữ liệu không hợp lệ", errors));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        String param = e.getName() != null ? e.getName() : "tham số";
+        log.warn("Invalid request parameter {}: {}", param, e.getMessage());
+        return ResponseEntity.badRequest().body(ApiResponse.error("Tham số " + param + " không hợp lệ"));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

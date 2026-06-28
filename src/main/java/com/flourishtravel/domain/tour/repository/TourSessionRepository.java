@@ -82,6 +82,32 @@ public interface TourSessionRepository extends JpaRepository<TourSession, UUID> 
 
     @Query("""
             SELECT s FROM TourSession s
+            WHERE LOWER(s.status) IN ('scheduled', 'ongoing')
+              AND s.endDate IS NOT NULL
+              AND s.endDate < :today
+            """)
+    List<TourSession> findActiveSessionsEndedBefore(@Param("today") LocalDate today);
+
+    @Query("""
+            SELECT s FROM TourSession s
+            WHERE LOWER(s.status) = 'scheduled'
+              AND s.startDate IS NOT NULL
+              AND s.endDate IS NOT NULL
+              AND s.startDate <= :today
+              AND s.endDate >= :today
+            """)
+    List<TourSession> findScheduledSessionsInProgress(@Param("today") LocalDate today);
+
+    @Query("""
+            SELECT s FROM TourSession s
+            WHERE LOWER(s.status) = 'ongoing'
+              AND s.startDate IS NOT NULL
+              AND s.startDate > :today
+            """)
+    List<TourSession> findOngoingSessionsBeforeStart(@Param("today") LocalDate today);
+
+    @Query("""
+            SELECT s FROM TourSession s
             WHERE LOWER(s.status) = 'scheduled'
               AND s.endDate IS NOT NULL
               AND s.endDate <= :lastEndedDate

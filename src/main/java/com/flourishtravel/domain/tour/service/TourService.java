@@ -25,6 +25,7 @@ import com.flourishtravel.domain.tour.repository.TourActivityRepository;
 import com.flourishtravel.domain.tour.repository.TourRepository;
 import com.flourishtravel.domain.tour.repository.TourSessionActivityOverrideRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -54,6 +55,13 @@ public class TourService {
     private final CategoryRepository categoryRepository;
     private final TourActivityRepository tourActivityRepository;
     private final TourSessionActivityOverrideRepository sessionActivityOverrideRepository;
+
+    @Value("${app.flora.timezone:Asia/Ho_Chi_Minh}")
+    private String tourTimezone;
+
+    private LocalDate todayInTourZone() {
+        return TourSessionStatusResolver.todayInZone(tourTimezone);
+    }
     private final SessionParticipantActivityAttendanceRepository sessionParticipantActivityAttendanceRepository;
 
     @Transactional(readOnly = true)
@@ -375,15 +383,16 @@ public class TourService {
                     .min(Comparator.comparing(TourSession::getStartDate));
             if (earliestOpt.isPresent()) {
                 TourSession s = earliestOpt.get();
+                LocalDate today = todayInTourZone();
                 earliest = TourSummaryDto.SessionRef.builder()
                         .id(s.getId())
                         .startDate(s.getStartDate())
                         .endDate(s.getEndDate())
                         .maxParticipants(s.getMaxParticipants())
                         .currentParticipants(s.getCurrentParticipants())
-                        .status(s.getStatus())
+                        .status(TourSessionStatusResolver.resolveEffectiveStatus(s, today))
                         .build();
-                status = computeStatus(tour.getSessions());
+                status = computeStatus(tour.getSessions(), today);
             }
         }
 
@@ -488,13 +497,14 @@ public class TourService {
                                 }
                                 guideRef = gb.build();
                             }
+                            LocalDate today = todayInTourZone();
                             return TourDetailDto.SessionDetail.builder()
                                     .id(s.getId())
                                     .startDate(s.getStartDate())
                                     .endDate(s.getEndDate())
                                     .maxParticipants(s.getMaxParticipants())
                                     .currentParticipants(s.getCurrentParticipants())
-                                    .status(s.getStatus())
+                                    .status(TourSessionStatusResolver.resolveEffectiveStatus(s, today))
                                     .tourGuide(guideRef)
                                     .build();
                         })
@@ -502,7 +512,7 @@ public class TourService {
 
         String status = (tour.getSessions() == null || tour.getSessions().isEmpty())
                 ? "draft"
-                : computeStatus(tour.getSessions());
+                : computeStatus(tour.getSessions(), todayInTourZone());
 
         String thumbnailUrl = images.isEmpty() ? null : images.get(0).getImageUrl();
 
@@ -811,28 +821,54 @@ public class TourService {
     }
 
     /**
-     * Suy luận status hiển thị cho admin:
-     *   - full     : có ít nhất 1 session scheduled nhưng tất cả scheduled đều hết chỗ
-     *   - upcoming : tất cả scheduled còn chỗ và start_date >= today + 30 ngày
-     *   - active   : trường hợp còn lại có scheduled
+     * Suy luận status hiển thị cho admin / public:
+     *   - ongoing  : có session đang diễn ra (start ≤ hôm nay ≤ end)
+     *   - completed: mọi session đã kết thúc hoặc huỷ (không còn scheduled/ongoing)
+     *   - full     : session scheduled tương lai đều hết chỗ
+     *   - upcoming : tất cả scheduled còn chỗ và start_date &gt; today + 30 ngày
+     *   - active   : còn session scheduled có thể đặt
      *   - draft    : không có session
      */
-    private String computeStatus(List<TourSession> sessions) {
-        LocalDate today = LocalDate.now();
-        List<TourSession> scheduled = sessions.stream()
-                .filter(s -> "scheduled".equalsIgnoreCase(s.getStatus()))
-                .toList();
-        if (scheduled.isEmpty()) return "draft";
+    private String computeStatus(List<TourSession> sessions, LocalDate today) {
+        if (sessions == null || sessions.isEmpty()) {
+            return "draft";
+        }
 
-        boolean allFull = scheduled.stream().allMatch(s ->
+        List<String> effective = sessions.stream()
+                .map(s -> TourSessionStatusResolver.resolveEffectiveStatus(s, today))
+                .toList();
+
+        if (effective.stream().anyMatch(TourSessionStatusResolver.ONGOING::equals)) {
+            return "ongoing";
+        }
+
+        boolean anyBookableFuture = sessions.stream().anyMatch(s -> {
+            String eff = TourSessionStatusResolver.resolveEffectiveStatus(s, today);
+            return TourSessionStatusResolver.SCHEDULED.equals(eff);
+        });
+        if (!anyBookableFuture) {
+            boolean anyCompleted = effective.stream().anyMatch(TourSessionStatusResolver.COMPLETED::equals);
+            return anyCompleted ? "completed" : "draft";
+        }
+
+        List<TourSession> scheduledFuture = sessions.stream()
+                .filter(s -> TourSessionStatusResolver.SCHEDULED.equals(
+                        TourSessionStatusResolver.resolveEffectiveStatus(s, today)))
+                .toList();
+
+        boolean allFull = scheduledFuture.stream().allMatch(s ->
                 s.getMaxParticipants() != null
                 && s.getCurrentParticipants() != null
                 && s.getCurrentParticipants() >= s.getMaxParticipants());
-        if (allFull) return "full";
+        if (allFull && !scheduledFuture.isEmpty()) {
+            return "full";
+        }
 
-        boolean allUpcoming = scheduled.stream().allMatch(s ->
+        boolean allUpcoming = scheduledFuture.stream().allMatch(s ->
                 s.getStartDate() != null && s.getStartDate().isAfter(today.plusDays(30)));
-        if (allUpcoming) return "upcoming";
+        if (allUpcoming && !scheduledFuture.isEmpty()) {
+            return "upcoming";
+        }
 
         return "active";
     }

@@ -17,8 +17,8 @@ import lombok.NoArgsConstructor;
 public class SessionStatusRequest {
 
     @NotBlank
-    @Pattern(regexp = "^(scheduled|cancelled|completed)$",
-             message = "status phải là scheduled, cancelled hoặc completed")
+    @Pattern(regexp = "^(scheduled|ongoing|cancelled|completed)$",
+             message = "status phải là scheduled, ongoing, cancelled hoặc completed")
     private String status;
 
     private String note;

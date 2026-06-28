@@ -65,7 +65,7 @@ public interface TourRepository extends JpaRepository<Tour, UUID> {
           AND (:maxPrice IS NULL OR t.basePrice <= :maxPrice)
           AND (:categoryId IS NULL OR t.category.id = :categoryId)
           AND (:marketSegment IS NULL OR :marketSegment = '' OR t.marketSegment = :marketSegment)
-        ORDER BY t.featured DESC NULLS LAST, t.createdAt DESC
+        ORDER BY t.featured DESC, t.createdAt DESC
         """,
         countQuery = """
         SELECT COUNT(t.id) FROM Tour t

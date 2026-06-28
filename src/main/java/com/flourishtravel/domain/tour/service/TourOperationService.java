@@ -14,6 +14,7 @@ import com.flourishtravel.domain.user.entity.User;
 import com.flourishtravel.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +43,9 @@ public class TourOperationService {
 
     private static final String ROLE_TOUR_GUIDE = "TOUR_GUIDE";
     private static final int URGENT_DAYS = 3;
+
+    @Value("${app.flora.timezone:Asia/Ho_Chi_Minh}")
+    private String tourTimezone;
 
     private final TourSessionRepository tourSessionRepository;
     private final UserRepository userRepository;
@@ -223,8 +227,9 @@ public class TourOperationService {
         }
 
         String code = buildTourCode(t);
-        String status = (s.getStatus() == null) ? "scheduled" : s.getStatus().toLowerCase(Locale.ROOT);
-        if ("scheduled".equals(status) && max > 0 && curr >= max) {
+        LocalDate today = TourSessionStatusResolver.todayInZone(tourTimezone);
+        String status = TourSessionStatusResolver.resolveEffectiveStatus(s, today);
+        if (TourSessionStatusResolver.SCHEDULED.equals(status) && max > 0 && curr >= max) {
             status = "full";
         }
 
