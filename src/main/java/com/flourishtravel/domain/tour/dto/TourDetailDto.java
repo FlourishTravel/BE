@@ -32,7 +32,7 @@ public class TourDetailDto {
 
     private TourSummaryDto.CategoryRef category;
 
-    /** Trạng thái suy luận: draft | active | upcoming | full */
+    /** Trạng thái suy luận: draft | departing_soon | active | upcoming | ongoing | completed | full */
     private String status;
 
     private List<ImageRef> images;

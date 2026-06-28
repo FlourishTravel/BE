@@ -14,7 +14,7 @@ import java.util.UUID;
  * Payload tóm tắt 1 tour cho danh sách (đặc biệt cho admin).
  * - Đính kèm category, ảnh đại diện và session sớm nhất để FE hiển thị
  *   mà không cần lazy-load các quan hệ @JsonIgnore trên Tour entity.
- * - `status` được suy ra phía BE (draft / active / upcoming / full).
+ * - `status` được suy ra phía BE (draft / departing_soon / active / upcoming / ongoing / completed / full).
  */
 @Data
 @Builder
@@ -42,7 +42,7 @@ public class TourSummaryDto {
     private SessionRef earliestSession;
     private Integer sessionsCount;
 
-    /** draft | active | upcoming | full */
+    /** draft | departing_soon | active | upcoming | ongoing | completed | full */
     private String status;
 
     private Instant createdAt;

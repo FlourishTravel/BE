@@ -39,6 +39,7 @@ import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -48,6 +49,10 @@ import java.util.regex.Pattern;
 public class TourService {
 
     private static final Pattern NON_LATIN = Pattern.compile("[^\\w-]");
+    /** Session scheduled sớm nhất khởi hành trong ≤ ngày này → tour {@code departing_soon}. */
+    private static final int DEPARTING_SOON_DAYS = 14;
+    /** Session scheduled sớm nhất khởi hành trong (14, 30] ngày → tour {@code active}. */
+    private static final int ACTIVE_HORIZON_DAYS = 30;
     private static final Pattern WHITESPACE = Pattern.compile("[\\s]+");
     private static final Pattern EDGE_DASHES = Pattern.compile("(^-+)|(-+$)");
 
@@ -821,13 +826,14 @@ public class TourService {
     }
 
     /**
-     * Suy luận status hiển thị cho admin / public:
-     *   - ongoing  : có session đang diễn ra (start ≤ hôm nay ≤ end)
-     *   - completed: mọi session đã kết thúc hoặc huỷ (không còn scheduled/ongoing)
-     *   - full     : session scheduled tương lai đều hết chỗ
-     *   - upcoming : tất cả scheduled còn chỗ và start_date &gt; today + 30 ngày
-     *   - active   : còn session scheduled có thể đặt
-     *   - draft    : không có session
+     * Suy luận status hiển thị cho admin / public (theo session scheduled sớm nhất còn chỗ):
+     *   - ongoing        : có session đang diễn ra (start ≤ hôm nay ≤ end)
+     *   - completed      : mọi session đã kết thúc hoặc huỷ
+     *   - full           : mọi session scheduled tương lai đều hết chỗ
+     *   - departing_soon : khởi hành trong ≤ {@value #DEPARTING_SOON_DAYS} ngày
+     *   - active         : khởi hành trong ({@value #DEPARTING_SOON_DAYS}, {@value #ACTIVE_HORIZON_DAYS}] ngày
+     *   - upcoming       : khởi hành &gt; {@value #ACTIVE_HORIZON_DAYS} ngày (mở bán xa)
+     *   - draft          : không có session
      */
     private String computeStatus(List<TourSession> sessions, LocalDate today) {
         if (sessions == null || sessions.isEmpty()) {
@@ -864,12 +870,21 @@ public class TourService {
             return "full";
         }
 
-        boolean allUpcoming = scheduledFuture.stream().allMatch(s ->
-                s.getStartDate() != null && s.getStartDate().isAfter(today.plusDays(30)));
-        if (allUpcoming && !scheduledFuture.isEmpty()) {
-            return "upcoming";
+        Optional<LocalDate> earliestStart = scheduledFuture.stream()
+                .map(TourSession::getStartDate)
+                .filter(Objects::nonNull)
+                .min(Comparator.naturalOrder());
+        if (earliestStart.isEmpty()) {
+            return "active";
         }
 
-        return "active";
+        LocalDate start = earliestStart.get();
+        if (!start.isAfter(today.plusDays(DEPARTING_SOON_DAYS))) {
+            return "departing_soon";
+        }
+        if (!start.isAfter(today.plusDays(ACTIVE_HORIZON_DAYS))) {
+            return "active";
+        }
+        return "upcoming";
     }
 }
