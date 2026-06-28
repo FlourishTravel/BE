@@ -32,7 +32,7 @@ public class CatalogService {
         String ticketCategory = mapCatalogTypeToTicketCategory(catalogType);
 
         Page<TourSummaryDto> tourPageResult = tourService.publicCatalogBrowse(
-                dest, null, null, null, PageRequest.of(tourPage, Math.min(tourSize, 24)));
+                dest, null, null, null, null, PageRequest.of(tourPage, Math.min(tourSize, 24)));
 
         List<TourCardDto> tours = tourPageResult.getContent().stream()
                 .map(this::toTourCard)
@@ -158,7 +158,7 @@ public class CatalogService {
 
     private FloraTourRecommendDto buildFloraSuggestion(Long budgetVnd, String destination) {
         String dest = destination != null ? destination : "Bangkok";
-        Page<TourSummaryDto> page = tourService.publicCatalogBrowse(dest, null, null, null, PageRequest.of(0, 20));
+        Page<TourSummaryDto> page = tourService.publicCatalogBrowse(dest, null, null, null, null, PageRequest.of(0, 20));
         TourSummaryDto pick = page.getContent().stream()
                 .filter(t -> t.getTitle() != null && t.getTitle().toLowerCase().contains("pattaya"))
                 .findFirst()
