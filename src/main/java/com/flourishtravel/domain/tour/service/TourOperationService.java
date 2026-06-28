@@ -190,7 +190,7 @@ public class TourOperationService {
         User guide = s.getTourGuide();
         boolean hasGuideIssue = (guide == null) || !Boolean.TRUE.equals(guide.getIsActive());
 
-        LocalDate today = LocalDate.now();
+        LocalDate today = TourSessionStatusResolver.todayInZone(tourTimezone);
         boolean isFutureWithin3 = s.getStartDate() != null
                 && !s.getStartDate().isBefore(today)
                 && !s.getStartDate().isAfter(today.plusDays(URGENT_DAYS));
@@ -227,7 +227,6 @@ public class TourOperationService {
         }
 
         String code = buildTourCode(t);
-        LocalDate today = TourSessionStatusResolver.todayInZone(tourTimezone);
         String status = TourSessionStatusResolver.resolveEffectiveStatus(s, today);
         if (TourSessionStatusResolver.SCHEDULED.equals(status) && max > 0 && curr >= max) {
             status = "full";
