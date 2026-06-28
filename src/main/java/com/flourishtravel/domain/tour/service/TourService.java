@@ -9,6 +9,7 @@ import com.flourishtravel.domain.tour.dto.LocationRequest;
 import com.flourishtravel.domain.tour.dto.TourDetailDto;
 import com.flourishtravel.domain.tour.dto.TourRequest;
 import com.flourishtravel.domain.tour.dto.TourSummaryDto;
+import com.flourishtravel.domain.tour.dto.TourVideoRequest;
 import com.flourishtravel.domain.tour.entity.Category;
 import com.flourishtravel.domain.tour.entity.Tour;
 import com.flourishtravel.domain.tour.entity.TourActivity;
@@ -203,14 +204,8 @@ public class TourService {
         tour.setDestinationCity(trimToNull(req.getDestinationCity()));
         tour.setMarketSegment(normalizeMarketSegment(req.getMarketSegment()));
 
-        if (req.getThumbnailUrl() != null && !req.getThumbnailUrl().isBlank()) {
-            tour.getImages().add(TourImage.builder()
-                    .tour(tour)
-                    .imageUrl(req.getThumbnailUrl().trim())
-                    .caption(tour.getTitle())
-                    .sortOrder(0)
-                    .build());
-        }
+        applyImages(tour, req);
+        applyVideos(tour, req);
         return tourRepository.save(tour);
     }
 
@@ -229,7 +224,63 @@ public class TourService {
         tour.setCategory(resolveCategory(req.getCategoryId()));
         tour.setDestinationCity(trimToNull(req.getDestinationCity()));
         tour.setMarketSegment(normalizeMarketSegment(req.getMarketSegment()));
+
+        if (req.getImageUrls() != null) {
+            tour.getImages().clear();
+            applyImages(tour, req);
+        }
+        if (req.getVideos() != null) {
+            tour.getVideos().clear();
+            applyVideos(tour, req);
+        }
         return tourRepository.save(tour);
+    }
+
+    private void applyImages(Tour tour, TourRequest req) {
+        java.util.List<String> urls = new java.util.ArrayList<>();
+        if (req.getImageUrls() != null) {
+            for (String raw : req.getImageUrls()) {
+                String u = trimToMax(raw, 500);
+                if (u != null) {
+                    urls.add(u);
+                }
+            }
+        }
+        if (urls.isEmpty() && req.getThumbnailUrl() != null && !req.getThumbnailUrl().isBlank()) {
+            String u = trimToMax(req.getThumbnailUrl(), 500);
+            if (u != null) {
+                urls.add(u);
+            }
+        }
+        int order = 0;
+        for (String url : urls) {
+            tour.getImages().add(TourImage.builder()
+                    .tour(tour)
+                    .imageUrl(url)
+                    .caption(order == 0 ? tour.getTitle() : null)
+                    .sortOrder(order++)
+                    .build());
+        }
+    }
+
+    private void applyVideos(Tour tour, TourRequest req) {
+        if (req.getVideos() == null) {
+            return;
+        }
+        int order = 0;
+        for (TourVideoRequest v : req.getVideos()) {
+            if (v == null || v.getVideoUrl() == null || v.getVideoUrl().isBlank()) {
+                continue;
+            }
+            tour.getVideos().add(TourVideo.builder()
+                    .tour(tour)
+                    .videoUrl(trimToMax(v.getVideoUrl(), 500))
+                    .thumbnailUrl(trimToMax(v.getThumbnailUrl(), 500))
+                    .title(trimToNull(v.getTitle()))
+                    .durationSeconds(v.getDurationSeconds())
+                    .sortOrder(order++)
+                    .build());
+        }
     }
 
     @Transactional

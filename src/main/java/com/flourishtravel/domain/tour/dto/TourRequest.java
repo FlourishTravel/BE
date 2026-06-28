@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -56,4 +57,10 @@ public class TourRequest {
 
     /** URL ảnh đại diện (thêm vào tour_images khi tạo). */
     private String thumbnailUrl;
+
+    /** Gallery ảnh (ưu tiên hơn thumbnailUrl đơn). */
+    private List<String> imageUrls;
+
+    /** Video giới thiệu tour. */
+    private List<TourVideoRequest> videos;
 }
