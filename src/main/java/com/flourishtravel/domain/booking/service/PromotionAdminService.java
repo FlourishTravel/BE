@@ -81,6 +81,9 @@ public class PromotionAdminService {
         if (request.getDiscountType() != null) {
             validateDiscountType(request.getDiscountType());
             promotion.setDiscountType(request.getDiscountType().trim().toLowerCase(Locale.ROOT));
+            if ("amount".equals(promotion.getDiscountType())) {
+                promotion.setMaxDiscountAmount(request.getMaxDiscountAmount());
+            }
         }
         if (request.getDiscountValue() != null) {
             promotion.setDiscountValue(request.getDiscountValue());
