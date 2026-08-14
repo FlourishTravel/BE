@@ -219,7 +219,7 @@ public class PromotionAdminService {
         Instant now = Instant.now();
         List<PromotionDto> visible = new ArrayList<>();
         for (Promotion p : promotionRepository.findAll()) {
-            if (!isCurrentlyValid(p, now)) {
+            if (!isListable(p, now)) {
                 continue;
             }
             boolean isPublic = p.getIsPublic() == null || Boolean.TRUE.equals(p.getIsPublic());
@@ -232,7 +232,7 @@ public class PromotionAdminService {
         }
         for (PromotionAssignment a : assignmentRepository.findWithPromotionByUserId(userIdOrNull)) {
             Promotion p = a.getPromotion();
-            if (!isCurrentlyValid(p, now)) {
+            if (!isListable(p, now)) {
                 continue;
             }
             boolean isPublic = p.getIsPublic() == null || Boolean.TRUE.equals(p.getIsPublic());
@@ -244,11 +244,9 @@ public class PromotionAdminService {
         return visible;
     }
 
-    private boolean isCurrentlyValid(Promotion p, Instant now) {
+    /** Đang bật và chưa hết hạn — gồm cả mã sắp tới ngày bắt đầu. */
+    private boolean isListable(Promotion p, Instant now) {
         if (!Boolean.TRUE.equals(p.getIsActive())) {
-            return false;
-        }
-        if (p.getValidFrom() == null || p.getValidFrom().isAfter(now)) {
             return false;
         }
         return p.getValidTo() != null && p.getValidTo().isAfter(now);

@@ -31,6 +31,8 @@ public class PromotionDto {
     private Long assignedCount;
     /** true khi mã này được tặng riêng cho tài khoản đang xem. */
     private Boolean gifted;
+    /** true khi chưa tới validFrom — hiện trên trang Voucher nhưng chưa dùng được lúc checkout. */
+    private Boolean upcoming;
 
     public static PromotionDto from(Promotion p) {
         return from(p, false, null);
@@ -40,6 +42,8 @@ public class PromotionDto {
         if (p == null) {
             return null;
         }
+        Instant now = Instant.now();
+        boolean upcoming = p.getValidFrom() != null && p.getValidFrom().isAfter(now);
         return PromotionDto.builder()
                 .id(p.getId())
                 .code(p.getCode())
@@ -56,6 +60,7 @@ public class PromotionDto {
                 .isPublic(p.getIsPublic() == null || Boolean.TRUE.equals(p.getIsPublic()))
                 .assignedCount(assignedCount)
                 .gifted(gifted)
+                .upcoming(upcoming)
                 .build();
     }
 }
