@@ -2,6 +2,9 @@ package com.flourishtravel.domain.booking.controller;
 
 import com.flourishtravel.common.dto.ApiResponse;
 import com.flourishtravel.domain.booking.dto.CreatePromotionRequest;
+import com.flourishtravel.domain.booking.dto.GrantPromotionRequest;
+import com.flourishtravel.domain.booking.dto.GrantPromotionResultDto;
+import com.flourishtravel.domain.booking.dto.PromotionAssigneeDto;
 import com.flourishtravel.domain.booking.dto.PromotionDto;
 import com.flourishtravel.domain.booking.dto.UpdatePromotionRequest;
 import com.flourishtravel.domain.booking.service.PromotionAdminService;
@@ -47,5 +50,27 @@ public class AdminPromotionController {
     @PostMapping("/{id}/deactivate")
     public ResponseEntity<ApiResponse<PromotionDto>> deactivate(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.ok("Đã ngưng khuyến mãi", promotionAdminService.deactivate(id)));
+    }
+
+    @GetMapping("/{id}/grants")
+    public ResponseEntity<ApiResponse<List<PromotionAssigneeDto>>> listGrants(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.ok(promotionAdminService.listAssignees(id)));
+    }
+
+    @PostMapping("/{id}/grants")
+    public ResponseEntity<ApiResponse<GrantPromotionResultDto>> grant(
+            @PathVariable UUID id,
+            @Valid @RequestBody GrantPromotionRequest request) {
+        GrantPromotionResultDto result = promotionAdminService.grant(id, request.getUserIds());
+        String message = result.getGranted() > 0
+                ? "Đã tặng mã cho " + result.getGranted() + " khách"
+                : "Không tặng thêm được khách nào (đã có mã hoặc không hợp lệ)";
+        return ResponseEntity.ok(ApiResponse.ok(message, result));
+    }
+
+    @DeleteMapping("/{id}/grants/{userId}")
+    public ResponseEntity<ApiResponse<Void>> revoke(@PathVariable UUID id, @PathVariable UUID userId) {
+        promotionAdminService.revoke(id, userId);
+        return ResponseEntity.ok(ApiResponse.ok("Đã thu hồi mã", null));
     }
 }

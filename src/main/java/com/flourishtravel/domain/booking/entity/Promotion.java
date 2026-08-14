@@ -3,6 +3,7 @@ package com.flourishtravel.domain.booking.entity;
 import com.flourishtravel.common.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.ColumnDefault;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -50,4 +51,13 @@ public class Promotion extends BaseEntity {
     @Column(name = "is_active", nullable = false)
     @Builder.Default
     private Boolean isActive = true;
+
+    /**
+     * true = hiện trên trang Voucher công khai, ai cũng nhập được khi checkout.
+     * false = mã tặng riêng, chỉ tài khoản được gán (promotion_assignments) mới thấy và dùng.
+     */
+    @ColumnDefault("true")
+    @Column(name = "is_public", nullable = false)
+    @Builder.Default
+    private Boolean isPublic = true;
 }

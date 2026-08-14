@@ -263,6 +263,15 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     List<Booking> findRecentlyCompletedForFlora(@Param("yesterday") LocalDate yesterday,
                                                 @Param("statuses") Set<String> statuses);
 
+    @Query("""
+            SELECT COUNT(b) FROM Booking b
+            WHERE b.user.id = :userId
+              AND b.promotion.id = :promotionId
+              AND LOWER(b.status) <> 'cancelled'
+            """)
+    long countNonCancelledByUserAndPromotion(@Param("userId") UUID userId,
+                                             @Param("promotionId") UUID promotionId);
+
     /** Đơn đã qua ngày kết thúc chuyến (endDate &lt; hôm nay) nhưng booking chưa đóng. */
     @Query("""
             SELECT DISTINCT b FROM Booking b

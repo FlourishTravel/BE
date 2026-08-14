@@ -18,4 +18,5 @@ public class UpdatePromotionRequest {
     private Integer usageLimit;
     private Integer usedCount;
     private Boolean isActive;
+    private Boolean isPublic;
 }

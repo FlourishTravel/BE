@@ -1,5 +1,6 @@
 package com.flourishtravel.domain.booking.dto;
 
+import com.flourishtravel.domain.booking.entity.Promotion;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -26,4 +27,35 @@ public class PromotionDto {
     private Integer usageLimit;
     private Integer usedCount;
     private Boolean isActive;
+    private Boolean isPublic;
+    private Long assignedCount;
+    /** true khi mã này được tặng riêng cho tài khoản đang xem. */
+    private Boolean gifted;
+
+    public static PromotionDto from(Promotion p) {
+        return from(p, false, null);
+    }
+
+    public static PromotionDto from(Promotion p, boolean gifted, Long assignedCount) {
+        if (p == null) {
+            return null;
+        }
+        return PromotionDto.builder()
+                .id(p.getId())
+                .code(p.getCode())
+                .name(p.getName())
+                .discountType(p.getDiscountType())
+                .discountValue(p.getDiscountValue())
+                .minOrderAmount(p.getMinOrderAmount())
+                .maxDiscountAmount(p.getMaxDiscountAmount())
+                .validFrom(p.getValidFrom())
+                .validTo(p.getValidTo())
+                .usageLimit(p.getUsageLimit())
+                .usedCount(p.getUsedCount())
+                .isActive(p.getIsActive())
+                .isPublic(p.getIsPublic() == null || Boolean.TRUE.equals(p.getIsPublic()))
+                .assignedCount(assignedCount)
+                .gifted(gifted)
+                .build();
+    }
 }

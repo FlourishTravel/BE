@@ -16,6 +16,7 @@ import com.flourishtravel.domain.booking.entity.BookingGuest;
 import com.flourishtravel.domain.booking.entity.Promotion;
 import com.flourishtravel.domain.booking.repository.BookingGuestRepository;
 import com.flourishtravel.domain.booking.repository.BookingRepository;
+import com.flourishtravel.domain.booking.repository.PromotionAssignmentRepository;
 import com.flourishtravel.domain.booking.repository.PromotionRepository;
 import com.flourishtravel.domain.payment.entity.Payment;
 import com.flourishtravel.domain.payment.repository.PaymentRepository;
@@ -58,6 +59,7 @@ public class BookingService {
     private final UserRepository userRepository;
     private final TourSessionRepository sessionRepository;
     private final PromotionRepository promotionRepository;
+    private final PromotionAssignmentRepository assignmentRepository;
     private final PaymentRepository paymentRepository;
     private final RefundRepository refundRepository;
     private final BookingGuestRepository bookingGuestRepository;
@@ -287,16 +289,14 @@ public class BookingService {
         BigDecimal discountAmount = BigDecimal.ZERO;
         Promotion promotion = null;
         if (promotionCode != null && !promotionCode.isBlank()) {
-            promotion = findActivePromotion(promotionCode).orElse(null);
-            if (promotion != null && Instant.now().isAfter(promotion.getValidFrom()) && Instant.now().isBefore(promotion.getValidTo())) {
-                if (promotion.getMinOrderAmount() == null || totalAmount.compareTo(promotion.getMinOrderAmount()) >= 0) {
-                    BigDecimal discount = computePromotionDiscount(promotion, totalAmount);
-                    discountAmount = discount;
-                    totalAmount = totalAmount.subtract(discountAmount);
-                }
-            } else {
-                promotion = null;
+            promotion = findActivePromotion(promotionCode)
+                    .orElseThrow(() -> new BadRequestException("Mã không hợp lệ hoặc đã hết hạn"));
+            String refusal = promoRefusalReason(promotion, totalAmount, userId);
+            if (refusal != null) {
+                throw new BadRequestException(refusal);
             }
+            discountAmount = computePromotionDiscount(promotion, totalAmount);
+            totalAmount = totalAmount.subtract(discountAmount);
         }
         if (totalAmount.compareTo(BigDecimal.ZERO) < 0) totalAmount = BigDecimal.ZERO;
 
@@ -355,6 +355,10 @@ public class BookingService {
         if (promotion != null) {
             promotion.setUsedCount(promotion.getUsedCount() + 1);
             promotionRepository.save(promotion);
+            assignmentRepository.findByPromotion_IdAndUser_Id(promotion.getId(), userId).ifPresent(a -> {
+                a.setUsedAt(Instant.now());
+                assignmentRepository.save(a);
+            });
         }
 
         String orderId = "FT-" + booking.getId().toString().substring(0, 8);
@@ -565,6 +569,16 @@ public class BookingService {
         TourSession session = b.getSession();
         session.setCurrentParticipants(Math.max(0, session.getCurrentParticipants() - b.getGuestCount()));
         sessionRepository.save(session);
+        Promotion cancelledPromo = b.getPromotion();
+        if (cancelledPromo != null) {
+            int used = cancelledPromo.getUsedCount() == null ? 0 : cancelledPromo.getUsedCount();
+            cancelledPromo.setUsedCount(Math.max(0, used - 1));
+            promotionRepository.save(cancelledPromo);
+            assignmentRepository.findByPromotion_IdAndUser_Id(cancelledPromo.getId(), userId).ifPresent(a -> {
+                a.setUsedAt(null);
+                assignmentRepository.save(a);
+            });
+        }
     }
 
     /**
@@ -609,21 +623,47 @@ public class BookingService {
             return new ValidatePromoResult(false, BigDecimal.ZERO, "Mã không hợp lệ hoặc đã hết hạn");
         }
         Promotion p = promoOpt.get();
-        Instant now = Instant.now();
-        if (!now.isAfter(p.getValidFrom()) || !now.isBefore(p.getValidTo())) {
-            return new ValidatePromoResult(false, BigDecimal.ZERO, "Mã đã hết hạn hoặc chưa có hiệu lực");
-        }
-        if (p.getUsageLimit() != null && p.getUsedCount() >= p.getUsageLimit()) {
-            return new ValidatePromoResult(false, BigDecimal.ZERO, "Mã đã hết lượt sử dụng");
-        }
-        if (p.getMinOrderAmount() != null && totalAmount.compareTo(p.getMinOrderAmount()) < 0) {
-            return new ValidatePromoResult(
-                    false,
-                    BigDecimal.ZERO,
-                    "Đơn tối thiểu " + p.getMinOrderAmount().stripTrailingZeros().toPlainString() + " VND để dùng mã này");
+        String refusal = promoRefusalReason(p, totalAmount, userIdOrNull);
+        if (refusal != null) {
+            return new ValidatePromoResult(false, BigDecimal.ZERO, refusal);
         }
         BigDecimal discount = computePromotionDiscount(p, totalAmount);
         return new ValidatePromoResult(true, discount, "Áp dụng thành công");
+    }
+
+    /**
+     * null = được phép dùng. Mã riêng (!isPublic) chỉ tài khoản được tặng;
+     * mỗi người chỉ dùng 1 lần trên mã tặng riêng (đơn chưa hủy).
+     */
+    private String promoRefusalReason(Promotion p, BigDecimal orderAmount, UUID userIdOrNull) {
+        Instant now = Instant.now();
+        if (p.getValidFrom() != null && p.getValidFrom().isAfter(now)) {
+            return "Mã đã hết hạn hoặc chưa có hiệu lực";
+        }
+        if (p.getValidTo() != null && !p.getValidTo().isAfter(now)) {
+            return "Mã đã hết hạn hoặc chưa có hiệu lực";
+        }
+        int usedCount = p.getUsedCount() == null ? 0 : p.getUsedCount();
+        if (p.getUsageLimit() != null && usedCount >= p.getUsageLimit()) {
+            return "Mã đã hết lượt sử dụng";
+        }
+        if (p.getMinOrderAmount() != null && orderAmount.compareTo(p.getMinOrderAmount()) < 0) {
+            return "Đơn tối thiểu " + p.getMinOrderAmount().stripTrailingZeros().toPlainString() + " VND để dùng mã này";
+        }
+        boolean isPublic = p.getIsPublic() == null || Boolean.TRUE.equals(p.getIsPublic());
+        if (!isPublic) {
+            if (userIdOrNull == null) {
+                return "Đăng nhập để dùng mã này";
+            }
+            if (!assignmentRepository.existsByPromotion_IdAndUser_Id(p.getId(), userIdOrNull)) {
+                return "Mã không dành cho tài khoản này";
+            }
+            long personalUses = bookingRepository.countNonCancelledByUserAndPromotion(userIdOrNull, p.getId());
+            if (personalUses > 0) {
+                return "Bạn đã dùng mã này rồi";
+            }
+        }
+        return null;
     }
 
     private String normalizePromoCode(String code) {

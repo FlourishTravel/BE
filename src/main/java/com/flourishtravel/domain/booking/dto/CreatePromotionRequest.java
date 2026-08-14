@@ -24,4 +24,5 @@ public class CreatePromotionRequest {
     private Instant validTo;
     private Integer usageLimit;
     private Boolean isActive;
+    private Boolean isPublic;
 }
