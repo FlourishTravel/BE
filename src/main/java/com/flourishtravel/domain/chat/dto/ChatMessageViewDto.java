@@ -20,6 +20,8 @@ public class ChatMessageViewDto {
     private Instant createdAt;
     private UUID senderId;
     private String senderName;
+    /** Ảnh đại diện người gửi (có thể là path /uploads/...). */
+    private String senderAvatarUrl;
     /** ADMIN | TOUR_GUIDE | TRAVELER | ... */
     private String senderRole;
     private Boolean isPinned;

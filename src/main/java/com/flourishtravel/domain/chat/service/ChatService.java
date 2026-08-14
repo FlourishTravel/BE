@@ -185,6 +185,7 @@ public class ChatService {
 
         User guide = session.getTourGuide();
         String guideName = guide != null ? guide.getFullName() : null;
+        String guideAvatarUrl = guide != null ? guide.getAvatarUrl() : null;
 
         return TourChatContextDto.builder()
                 .bookingId(booking.getId())
@@ -196,6 +197,7 @@ public class ChatService {
                 .sessionEndDate(session.getEndDate())
                 .bookingStatus(booking.getStatus())
                 .guideName(guideName)
+                .guideAvatarUrl(guideAvatarUrl)
                 .canChat(canChat)
                 .denyReason(denyReason)
                 .build();
@@ -266,6 +268,7 @@ public class ChatService {
                 .createdAt(msg.getCreatedAt())
                 .senderId(s.getId())
                 .senderName(s.getFullName())
+                .senderAvatarUrl(s.getAvatarUrl())
                 .senderRole(roleName)
                 .isPinned(msg.getIsPinned())
                 .build();

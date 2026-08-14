@@ -27,6 +27,7 @@ public class TourChatContextDto {
     private LocalDate sessionEndDate;
     private String bookingStatus;
     private String guideName;
+    private String guideAvatarUrl;
 
     /** true khi khách được vào phòng (đã đặt thành công + đã tham gia room). */
     private boolean canChat;
