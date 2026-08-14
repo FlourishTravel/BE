@@ -39,5 +39,21 @@ jobs:
 
             docker compose up -d --build --force-recreate be
             docker compose ps be
-            curl -sf http://127.0.0.1:8080/health || curl -sf http://127.0.0.1:8080/actuator/health
+
+            # Spring Boot cần ~20–40s sau recreate; đợi health trước khi fail job
+            ok=0
+            for i in $(seq 1 40); do
+              if curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1 \
+                || curl -sf http://127.0.0.1:8080/actuator/health >/dev/null 2>&1; then
+                ok=1
+                break
+              fi
+              echo "Waiting for BE health... ($i/40)"
+              sleep 3
+            done
+            if [ "$ok" != "1" ]; then
+              echo "BE health check failed"
+              docker compose logs be --tail 80
+              exit 1
+            fi
             echo "BE deploy OK"
