@@ -47,6 +47,24 @@ jobs:
               sed -i '/FRONTEND_URL: \${FRONTEND_URL}/a\      API_BASE_URL: ${API_BASE_URL}' docker-compose.yml
             fi
 
+            # BE must not start while Postgres is still in crash recovery (57P03).
+            pg_ok=0
+            for i in $(seq 1 60); do
+              if docker compose exec -T postgres pg_isready -q 2>/dev/null \
+                || docker compose exec -T db pg_isready -q 2>/dev/null; then
+                pg_ok=1
+                break
+              fi
+              echo "Waiting for PostgreSQL... ($i/60)"
+              sleep 3
+            done
+            if [ "$pg_ok" != "1" ]; then
+              echo "PostgreSQL is not ready (still recovering or down)"
+              docker compose ps
+              docker compose logs postgres --tail 40 2>/dev/null || docker compose logs db --tail 40 2>/dev/null || true
+              exit 1
+            fi
+
             docker compose up -d --build --force-recreate be
             docker compose ps be
 

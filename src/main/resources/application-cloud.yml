@@ -20,6 +20,8 @@ spring:
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
+      connection-timeout: 30000
+      initialization-fail-timeout: 180000
       data-source-properties:
         sslmode: ${DB_SSL_MODE:require}
 
