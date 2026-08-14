@@ -98,7 +98,9 @@ public class FloraContextBuilder {
                 sb.append("- Tour: ").append(journey.getTourTitle()).append("\n");
             }
             if (journey.getCurrentScheduleItem() != null) {
-                sb.append("- Hôm nay: ").append(journey.getCurrentScheduleItem().getTitle()).append("\n");
+                boolean upcoming = "UPCOMING".equalsIgnoreCase(journey.getJourneyStatus());
+                sb.append(upcoming ? "- Sắp tới: " : "- Hôm nay: ")
+                        .append(journey.getCurrentScheduleItem().getTitle()).append("\n");
             }
             if (journey.getNextMeeting() != null && journey.getNextMeeting().getLocation() != null) {
                 sb.append("- Điểm tập trung: ").append(journey.getNextMeeting().getLocation());
