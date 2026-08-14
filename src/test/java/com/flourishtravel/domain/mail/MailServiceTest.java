@@ -47,4 +47,11 @@ class MailServiceTest {
     void escapeHtml() {
         assertEquals("&lt;b&gt;x&amp;y&quot;", MailService.escape("<b>x&y\""));
     }
+
+    @Test
+    void extractEmailStripsBrackets() {
+        assertEquals("khanhtmintel24@gmail.com", MailAddresses.extractEmail("<khanhtmintel24@gmail.com"));
+        assertEquals("khanhtmintel24@gmail.com", MailAddresses.extractEmail("Flourish Travel <khanhtmintel24@gmail.com>"));
+        assertEquals("abcd1234abcd1234", MailAddresses.stripAppPassword("abcd 1234 abcd 1234"));
+    }
 }

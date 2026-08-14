@@ -27,7 +27,7 @@ public class MailService {
             @Value("${app.mail.username:}") String username) {
         this.mailSenderProvider = mailSenderProvider;
         this.enabled = enabled;
-        this.from = StringUtils.hasText(from) ? from.trim() : (username == null ? "" : username.trim());
+        this.from = MailAddresses.extractEmail(StringUtils.hasText(from) ? from : username);
     }
 
     public boolean isEnabled() {

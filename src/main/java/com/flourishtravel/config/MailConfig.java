@@ -1,5 +1,6 @@
 package com.flourishtravel.config;
 
+import com.flourishtravel.domain.mail.MailAddresses;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -23,14 +24,16 @@ public class MailConfig {
             @Value("${app.mail.port:587}") int port,
             @Value("${app.mail.username:}") String username,
             @Value("${app.mail.password:}") String password) {
-        if (username == null || username.isBlank() || password == null || password.isBlank()) {
+        String user = MailAddresses.extractEmail(username);
+        String pass = MailAddresses.stripAppPassword(password);
+        if (user.isBlank() || pass.isBlank()) {
             throw new IllegalStateException("MAIL_ENABLED=true nhưng thiếu MAIL_USERNAME hoặc MAIL_PASSWORD");
         }
         JavaMailSenderImpl sender = new JavaMailSenderImpl();
         sender.setHost(host);
         sender.setPort(port);
-        sender.setUsername(username.trim());
-        sender.setPassword(password.trim());
+        sender.setUsername(user);
+        sender.setPassword(pass);
         Properties props = sender.getJavaMailProperties();
         props.put("mail.transport.protocol", "smtp");
         props.put("mail.smtp.auth", "true");
