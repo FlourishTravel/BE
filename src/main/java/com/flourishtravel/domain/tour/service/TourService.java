@@ -370,16 +370,14 @@ public class TourService {
     }
 
     /**
-     * Nếu không gửi endDate, lấy startDate + (durationDays - 1). Một ngày thì end = start.
+     * Nếu không gửi endDate (hoặc FE gửi ngày trước start vì lệch UTC), lấy startDate + (durationDays - 1).
+     * Tour 1 ngày: end = start.
      */
     public static LocalDate resolveSessionEndDate(LocalDate startDate, LocalDate endDate, Integer durationDays) {
         if (startDate == null) {
             throw new BadRequestException("Ngày khởi hành là bắt buộc");
         }
-        if (endDate != null) {
-            if (endDate.isBefore(startDate)) {
-                throw new BadRequestException("endDate phải sau hoặc bằng startDate");
-            }
+        if (endDate != null && !endDate.isBefore(startDate)) {
             return endDate;
         }
         int extraDays = (durationDays != null && durationDays > 1) ? durationDays - 1 : 0;

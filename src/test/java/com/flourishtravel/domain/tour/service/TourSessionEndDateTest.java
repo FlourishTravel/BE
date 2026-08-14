@@ -1,12 +1,10 @@
 package com.flourishtravel.domain.tour.service;
 
-import com.flourishtravel.common.exception.BadRequestException;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TourSessionEndDateTest {
 
@@ -31,11 +29,11 @@ class TourSessionEndDateTest {
     }
 
     @Test
-    void rejectsEndBeforeStart() {
-        assertThrows(BadRequestException.class, () ->
-                TourService.resolveSessionEndDate(
-                        LocalDate.of(2026, 9, 5),
-                        LocalDate.of(2026, 9, 1),
-                        5));
+    void recomputesWhenEndBeforeStart() {
+        LocalDate start = LocalDate.of(2026, 9, 1);
+        assertEquals(LocalDate.of(2026, 9, 5), TourService.resolveSessionEndDate(
+                start, LocalDate.of(2026, 8, 31), 5));
+        assertEquals(start, TourService.resolveSessionEndDate(
+                start, LocalDate.of(2026, 8, 31), 1));
     }
 }
