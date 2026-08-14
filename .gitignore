@@ -1,5 +1,7 @@
 # Environment & secrets (không push key, biến môi trường)
 .env
+env
+/env
 .env.local
 .env.*.local
 *.env

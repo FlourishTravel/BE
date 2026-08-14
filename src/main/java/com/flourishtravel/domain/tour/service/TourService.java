@@ -7,9 +7,12 @@ import com.flourishtravel.domain.tour.dto.AvailabilityCheckDto;
 import com.flourishtravel.domain.tour.dto.ItineraryRequest;
 import com.flourishtravel.domain.tour.dto.LocationRequest;
 import com.flourishtravel.domain.tour.dto.TourDetailDto;
+import com.flourishtravel.domain.tour.dto.SessionRequest;
 import com.flourishtravel.domain.tour.dto.TourRequest;
 import com.flourishtravel.domain.tour.dto.TourSummaryDto;
 import com.flourishtravel.domain.tour.dto.TourVideoRequest;
+import com.flourishtravel.domain.chat.entity.ChatRoom;
+import com.flourishtravel.domain.chat.repository.ChatRoomRepository;
 import com.flourishtravel.domain.tour.entity.Category;
 import com.flourishtravel.domain.tour.entity.Tour;
 import com.flourishtravel.domain.tour.entity.TourActivity;
@@ -24,6 +27,7 @@ import com.flourishtravel.domain.tour.repository.CategoryRepository;
 import com.flourishtravel.domain.tour.repository.TourActivityRepository;
 import com.flourishtravel.domain.tour.repository.TourRepository;
 import com.flourishtravel.domain.tour.repository.TourSessionActivityOverrideRepository;
+import com.flourishtravel.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -37,10 +41,12 @@ import java.math.RoundingMode;
 import java.text.Normalizer;
 import java.time.LocalDate;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -60,6 +66,8 @@ public class TourService {
     private final CategoryRepository categoryRepository;
     private final TourActivityRepository tourActivityRepository;
     private final TourSessionActivityOverrideRepository sessionActivityOverrideRepository;
+    private final ChatRoomRepository chatRoomRepository;
+    private final UserRepository userRepository;
 
     @Value("${app.flora.timezone:Asia/Ho_Chi_Minh}")
     private String tourTimezone;
@@ -219,7 +227,11 @@ public class TourService {
 
         applyImages(tour, req);
         applyVideos(tour, req);
-        return tourRepository.save(tour);
+        applySessions(tour, req);
+        Tour saved = tourRepository.save(tour);
+        tourRepository.flush();
+        ensureChatRooms(saved);
+        return saved;
     }
 
     @Transactional
@@ -294,6 +306,84 @@ public class TourService {
                     .sortOrder(order++)
                     .build());
         }
+    }
+
+    private void applySessions(Tour tour, TourRequest req) {
+        List<SessionRequest> sessionReqs = req.getSessions();
+        if (sessionReqs == null || sessionReqs.isEmpty()) {
+            return;
+        }
+        Set<LocalDate> startDates = new HashSet<>();
+        int index = 0;
+        for (SessionRequest sReq : sessionReqs) {
+            index++;
+            if (sReq == null) {
+                throw new BadRequestException("Đợt khởi hành thứ " + index + " không hợp lệ");
+            }
+            LocalDate start = sReq.getStartDate();
+            if (start == null) {
+                throw new BadRequestException("Ngày khởi hành là bắt buộc");
+            }
+            if (!startDates.add(start)) {
+                throw new BadRequestException("Trùng ngày khởi hành: " + start);
+            }
+            LocalDate end = resolveSessionEndDate(start, sReq.getEndDate(), req.getDurationDays());
+            Integer maxPax = sReq.getMaxParticipants() != null ? sReq.getMaxParticipants() : 20;
+            User guide = resolveGuide(sReq.getTourGuideId());
+            tour.getSessions().add(TourSession.builder()
+                    .tour(tour)
+                    .startDate(start)
+                    .endDate(end)
+                    .maxParticipants(maxPax)
+                    .currentParticipants(0)
+                    .tourGuide(guide)
+                    .status("scheduled")
+                    .build());
+        }
+    }
+
+    private void ensureChatRooms(Tour tour) {
+        if (tour.getSessions() == null) {
+            return;
+        }
+        for (TourSession session : tour.getSessions()) {
+            if (session.getId() == null) {
+                continue;
+            }
+            if (chatRoomRepository.findBySession_Id(session.getId()).isPresent()) {
+                continue;
+            }
+            chatRoomRepository.save(ChatRoom.builder()
+                    .session(session)
+                    .roomName(tour.getTitle() + " - " + session.getStartDate())
+                    .isActive(true)
+                    .build());
+        }
+    }
+
+    private User resolveGuide(UUID tourGuideId) {
+        if (tourGuideId == null) {
+            return null;
+        }
+        return userRepository.findById(tourGuideId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", tourGuideId));
+    }
+
+    /**
+     * Nếu không gửi endDate, lấy startDate + (durationDays - 1). Một ngày thì end = start.
+     */
+    static LocalDate resolveSessionEndDate(LocalDate startDate, LocalDate endDate, Integer durationDays) {
+        if (startDate == null) {
+            throw new BadRequestException("Ngày khởi hành là bắt buộc");
+        }
+        if (endDate != null) {
+            if (endDate.isBefore(startDate)) {
+                throw new BadRequestException("endDate phải sau hoặc bằng startDate");
+            }
+            return endDate;
+        }
+        int extraDays = (durationDays != null && durationDays > 1) ? durationDays - 1 : 0;
+        return startDate.plusDays(extraDays);
     }
 
     @Transactional

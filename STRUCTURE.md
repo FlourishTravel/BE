@@ -52,6 +52,7 @@ BE/
 |--------|------|--------|
 | GET / PATCH | /api/users/me | Hồ sơ cá nhân |
 | GET | /api/tours | Danh sách tour (search, filter, sort) |
+| POST | /api/tours | Admin tạo tour kèm `sessions[]` (đợt khởi hành + ChatRoom) |
 | GET | /api/tours/:id, /api/tours/by-slug/:slug | Chi tiết tour |
 | GET / POST / DELETE | /api/favorites | Wishlist (GET danh sách, POST thêm, DELETE /:tourId) |
 
@@ -91,7 +92,7 @@ BE/
 | GET / PATCH | /api/admin/contact-requests | Liên hệ / Lead |
 | GET | /api/admin/audit-logs | Nhật ký audit |
 | POST / PUT / DELETE | /api/admin/tours | CRUD Tour |
-| POST / PUT / DELETE | /api/admin/sessions | CRUD Session (tự tạo ChatRoom) |
+| POST / PUT / DELETE | /api/admin/sessions | Thêm/sửa/xóa đợt sau khi tour đã tạo (tự tạo ChatRoom) |
 | PATCH | /api/admin/users/:id | Cập nhật role, is_active |
 
 ### Khác

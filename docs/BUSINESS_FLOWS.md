@@ -330,9 +330,8 @@ Chi tiết Flora MVP: [`docs/flora-ai/use-case-diagram.mmd`](../flora-ai/use-cas
 
 ```mermaid
 flowchart TD
-    A1["/admin/tours\nCreateTourModal"] --> A2["POST /tours\n+ marketSegment\n+ destinationCity"]
-    A2 --> A3["POST /admin/sessions\n(lịch khởi hành)"]
-    A3 --> A4["/admin/tours/itinerary/:tourId"]
+    A1["/admin/tours\nCreateTourModal"] --> A2["POST /tours\n+ sessions[] (đợt khởi hành)"]
+    A2 --> A4["/admin/tours/itinerary/:tourId"]
 
     A4 --> A5["PUT /tours/admin/{id}/itinerary\nngày + activities"]
     A4 --> A6["PUT /tours/admin/{id}/locations\nđịa điểm theo ngày"]

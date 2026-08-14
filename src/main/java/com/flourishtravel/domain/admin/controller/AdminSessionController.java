@@ -11,6 +11,7 @@ import com.flourishtravel.domain.tour.repository.TourRepository;
 import com.flourishtravel.domain.tour.repository.TourSessionRepository;
 import com.flourishtravel.domain.user.entity.User;
 import com.flourishtravel.domain.user.repository.UserRepository;
+import com.flourishtravel.domain.tour.service.TourService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -34,16 +35,20 @@ public class AdminSessionController {
     public ResponseEntity<ApiResponse<TourSession>> create(@RequestBody AdminSessionDto dto) {
         Tour tour = tourRepository.findById(dto.getTourId()).orElseThrow(() -> new ResourceNotFoundException("Tour", dto.getTourId()));
         User guide = dto.getTourGuideId() != null ? userRepository.findById(dto.getTourGuideId()).orElse(null) : null;
-        if (dto.getStartDate() == null || dto.getEndDate() == null) {
-            throw new BadRequestException("start_date và end_date là bắt buộc");
+        if (dto.getStartDate() == null) {
+            throw new BadRequestException("start_date là bắt buộc");
         }
-        if (!dto.getEndDate().isAfter(dto.getStartDate()) && !dto.getEndDate().equals(dto.getStartDate())) {
-            throw new BadRequestException("end_date phải sau hoặc bằng start_date");
+        boolean duplicate = sessionRepository.findByTourIdOrderByStartDateAsc(tour.getId()).stream()
+                .anyMatch(s -> dto.getStartDate().equals(s.getStartDate()));
+        if (duplicate) {
+            throw new BadRequestException("Trùng ngày khởi hành: " + dto.getStartDate());
         }
+        LocalDate endDate = TourService.resolveSessionEndDate(
+                dto.getStartDate(), dto.getEndDate(), tour.getDurationDays());
         TourSession session = TourSession.builder()
                 .tour(tour)
                 .startDate(dto.getStartDate())
-                .endDate(dto.getEndDate())
+                .endDate(endDate)
                 .maxParticipants(dto.getMaxParticipants() != null ? dto.getMaxParticipants() : 20)
                 .currentParticipants(0)
                 .tourGuide(guide)

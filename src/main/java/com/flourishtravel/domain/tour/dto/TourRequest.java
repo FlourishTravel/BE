@@ -1,5 +1,6 @@
 package com.flourishtravel.domain.tour.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -16,6 +17,7 @@ import java.util.UUID;
  * - title: bắt buộc.
  * - slug: tuỳ chọn; nếu để trống, service sẽ tự sinh từ title.
  * - categoryId: tuỳ chọn (cho phép tour không gắn danh mục).
+ * - sessions: đợt khởi hành khi tạo tour (cùng transaction). Cập nhật tour bỏ qua field này.
  */
 @Data
 public class TourRequest {
@@ -63,4 +65,8 @@ public class TourRequest {
 
     /** Video giới thiệu tour. */
     private List<TourVideoRequest> videos;
+
+    /** Đợt khởi hành tạo cùng tour. Chỉ áp dụng khi POST /tours. */
+    @Valid
+    private List<SessionRequest> sessions;
 }
