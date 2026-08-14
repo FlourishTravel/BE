@@ -31,15 +31,22 @@ jobs:
             df -h /
             docker system df || true
             # Do not prune volumes — that would wipe Postgres data.
+            find /var/lib/docker/containers -name '*-json.log' -exec truncate -s 0 {} \; 2>/dev/null || true
+            docker container prune -f || true
             docker builder prune -af || true
             docker image prune -af || true
-            journalctl --vacuum-size=80M || true
+            docker system prune -af || true
+            journalctl --vacuum-size=50M || true
             apt-get clean || true
-            find /var/log -type f \( -name "*.log" -o -name "*.gz" \) -size +20M -exec truncate -s 0 {} \; 2>/dev/null || true
+            find /var/log -type f \( -name "*.log" -o -name "*.gz" \) -size +10M -exec truncate -s 0 {} \; 2>/dev/null || true
             truncate -s 0 /var/log/nginx/access.log /var/log/nginx/error.log 2>/dev/null || true
+            if [ -d FE/.git ]; then
+              git -C FE gc --prune=now || true
+            fi
             echo "=== disk after cleanup ==="
             df -h /
             docker compose restart db 2>/dev/null || docker compose restart postgres 2>/dev/null || true
+            sleep 8
 
             if [ -d BE/.git ]; then
               cd BE
@@ -95,21 +102,26 @@ jobs:
 
             docker compose up -d --build --force-recreate be
             docker compose ps be
+            docker image prune -af || true
+            find /var/lib/docker/containers -name '*-json.log' -exec truncate -s 0 {} \; 2>/dev/null || true
 
-            # Spring Boot cần ~20–40s sau recreate; đợi health trước khi fail job
+            # Spring Boot cần ~20–40s sau recreate; đĩa chậm thì lâu hơn
             ok=0
-            for i in $(seq 1 40); do
+            for i in $(seq 1 60); do
               if curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1 \
                 || curl -sf http://127.0.0.1:8080/actuator/health >/dev/null 2>&1; then
                 ok=1
                 break
               fi
-              echo "Waiting for BE health... ($i/40)"
+              echo "Waiting for BE health... ($i/60)"
               sleep 3
             done
             if [ "$ok" != "1" ]; then
               echo "BE health check failed"
+              df -h /
+              docker compose ps
               docker compose logs be --tail 80
+              docker compose logs db --tail 30 2>/dev/null || docker compose logs postgres --tail 30 2>/dev/null || true
               exit 1
             fi
             echo "BE deploy OK"
