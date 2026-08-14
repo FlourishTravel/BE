@@ -18,6 +18,9 @@ public class UserBookingGuestLineDto {
     private String fullName;
     /** CCCD đã che (ví dụ ***1234). */
     private String maskedIdNumber;
+    private String maskedPassportNumber;
+    private LocalDate passportExpiry;
+    private String nationality;
     private LocalDate dateOfBirth;
     private Integer sortOrder;
 }

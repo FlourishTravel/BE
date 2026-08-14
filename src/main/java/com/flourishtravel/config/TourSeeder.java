@@ -185,7 +185,26 @@ public class TourSeeder {
     }
 
     private void backfillTour(Tour saved, LocalDate start) {
+        if (saved.getMarketSegment() == null || saved.getMarketSegment().isBlank()) {
+            saved.setMarketSegment(inferMarketSegment(saved.getSlug(), saved.getCategory()));
+        }
         saveTourWithDetails(saved, start);
+    }
+
+    private static String inferMarketSegment(String slug, Category category) {
+        String s = slug == null ? "" : slug.toLowerCase();
+        String cat = category != null && category.getSlug() != null ? category.getSlug().toLowerCase() : "";
+        if ("thai-lan".equals(cat)
+                || s.contains("bangkok")
+                || s.contains("pattaya")
+                || s.contains("phuket")
+                || s.contains("chiang")
+                || s.contains("samui")
+                || s.contains("ayutthaya")
+                || s.contains("thai")) {
+            return "international";
+        }
+        return "domestic";
     }
 
     private static Tour tour(String title, String slug, String desc, BigDecimal price, int days, int nights, Category category) {
@@ -197,6 +216,7 @@ public class TourSeeder {
         t.setDurationDays(days);
         t.setDurationNights(nights);
         t.setCategory(category);
+        t.setMarketSegment(inferMarketSegment(slug, category));
         t.setSessions(new java.util.ArrayList<>());
         t.setImages(new java.util.ArrayList<>());
         t.setItineraries(new java.util.ArrayList<>());

@@ -197,6 +197,9 @@ public class BookingService {
                                 .guestId(g.getId())
                                 .fullName(g.getFullName())
                                 .maskedIdNumber(g.getMaskedIdNumber())
+                                .maskedPassportNumber(g.getMaskedPassportNumber())
+                                .passportExpiry(g.getPassportExpiry())
+                                .nationality(g.getNationality())
                                 .dateOfBirth(g.getDateOfBirth())
                                 .sortOrder(g.getSortOrder())
                                 .build())
@@ -341,7 +344,10 @@ public class BookingService {
                 BookingGuest bg = BookingGuest.builder()
                         .booking(booking)
                         .fullName(g.getFullName().trim())
-                        .idNumber(g.getIdNumber() != null && !g.getIdNumber().isBlank() ? g.getIdNumber().trim() : null)
+                        .idNumber(blankToNull(g.getIdNumber()))
+                        .passportNumber(normalizePassport(g.getPassportNumber()))
+                        .passportExpiry(g.getPassportExpiry())
+                        .nationality(blankToNull(g.getNationality()))
                         .dateOfBirth(g.getDateOfBirth())
                         .sortOrder(i)
                         .build();
@@ -752,4 +758,14 @@ public class BookingService {
     }
 
     public record ValidateSessionResult(boolean valid, String message) {}
+
+    private static String blankToNull(String s) {
+        if (s == null || s.isBlank()) return null;
+        return s.trim();
+    }
+
+    private static String normalizePassport(String s) {
+        if (s == null || s.isBlank()) return null;
+        return s.replaceAll("\\s+", "").toUpperCase(java.util.Locale.ROOT);
+    }
 }

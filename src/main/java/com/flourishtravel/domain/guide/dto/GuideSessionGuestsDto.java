@@ -120,5 +120,8 @@ public class GuideSessionGuestsDto {
         private String fullName;
         private LocalDate dateOfBirth;
         private String maskedIdNumber;
+        private String maskedPassportNumber;
+        private LocalDate passportExpiry;
+        private String nationality;
     }
 }

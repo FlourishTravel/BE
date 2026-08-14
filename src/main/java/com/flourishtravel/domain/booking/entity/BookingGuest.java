@@ -35,6 +35,18 @@ public class BookingGuest extends BaseEntity {
     @JsonIgnore
     private String idNumber;
 
+    /** Số hộ chiếu – tour quốc tế; mã hóa ở DB. */
+    @Convert(converter = PiiEncryptionConverter.class)
+    @Column(name = "passport_number", length = 256)
+    @JsonIgnore
+    private String passportNumber;
+
+    @Column(name = "passport_expiry")
+    private LocalDate passportExpiry;
+
+    @Column(name = "nationality", length = 80)
+    private String nationality;
+
     /** Ngày sinh – tour hạn chế tuổi, bảo hiểm theo tuổi. */
     @Column(name = "date_of_birth")
     private LocalDate dateOfBirth;
@@ -46,8 +58,17 @@ public class BookingGuest extends BaseEntity {
     /** Trả về CCCD đã che (chỉ 4 số cuối) – dùng trong API, không lộ full số. */
     @JsonProperty("maskedIdNumber")
     public String getMaskedIdNumber() {
-        if (idNumber == null || idNumber.isBlank()) return null;
-        String s = idNumber.trim();
+        return maskTail(idNumber);
+    }
+
+    @JsonProperty("maskedPassportNumber")
+    public String getMaskedPassportNumber() {
+        return maskTail(passportNumber);
+    }
+
+    private static String maskTail(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String s = raw.trim();
         if (s.length() <= 4) return "***";
         return "***" + s.substring(s.length() - 4);
     }

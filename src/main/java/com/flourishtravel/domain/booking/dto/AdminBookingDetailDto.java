@@ -61,6 +61,9 @@ public class AdminBookingDetailDto {
         private UUID id;
         private String fullName;
         private String maskedIdNumber;   // ***1234
+        private String maskedPassportNumber;
+        private LocalDate passportExpiry;
+        private String nationality;
         private LocalDate dateOfBirth;
         private Integer ageAtDeparture;  // tính theo session.startDate
         private Integer sortOrder;

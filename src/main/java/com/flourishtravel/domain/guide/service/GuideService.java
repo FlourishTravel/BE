@@ -153,6 +153,9 @@ public class GuideService {
                             .fullName(g.getFullName())
                             .dateOfBirth(g.getDateOfBirth())
                             .maskedIdNumber(g.getMaskedIdNumber())
+                            .maskedPassportNumber(g.getMaskedPassportNumber())
+                            .passportExpiry(g.getPassportExpiry())
+                            .nationality(g.getNationality())
                             .build())
                     .toList();
 

@@ -9,4 +9,7 @@ public class GuestInputDto {
     private String fullName;
     private String idNumber;
     private LocalDate dateOfBirth;
+    private String passportNumber;
+    private LocalDate passportExpiry;
+    private String nationality;
 }

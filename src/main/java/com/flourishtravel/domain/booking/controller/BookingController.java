@@ -79,6 +79,9 @@ public class BookingController {
                         d.setFullName(g.getFullName());
                         d.setIdNumber(g.getIdNumber());
                         d.setDateOfBirth(g.getDateOfBirth());
+                        d.setPassportNumber(g.getPassportNumber());
+                        d.setPassportExpiry(g.getPassportExpiry());
+                        d.setNationality(g.getNationality());
                         return d;
                     })
                     .toList();
@@ -194,7 +197,7 @@ public class BookingController {
         private String pickupAddress;
         /** Danh sách tên từng khách (tương thích cũ). */
         private List<String> guestNames;
-        /** Chi tiết từng khách: tên, CCCD/CMND, ngày sinh (bảo hiểm, vé, hạn chế tuổi). */
+        /** Chi tiết từng khách: tên, CCCD/hộ chiếu, ngày sinh (bảo hiểm, vé, hạn chế tuổi). */
         private List<GuestItem> guests;
         /** Liên hệ khẩn cấp – tên người thân. */
         private String emergencyContactName;
@@ -207,10 +210,14 @@ public class BookingController {
     @Data
     public static class GuestItem {
         private String fullName;
-        /** CCCD/CMND. */
+        /** CCCD/CMND (tour nội địa). */
         private String idNumber;
         /** Ngày sinh (yyyy-MM-dd). */
         private LocalDate dateOfBirth;
+        /** Số hộ chiếu (tour quốc tế). */
+        private String passportNumber;
+        private LocalDate passportExpiry;
+        private String nationality;
     }
 
     @Data
