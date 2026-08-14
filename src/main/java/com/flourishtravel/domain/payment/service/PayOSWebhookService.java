@@ -36,6 +36,13 @@ public class PayOSWebhookService {
             return;
         }
         Payment payment = paymentOpt.get();
+        PayOSPaymentService.applyPayerBankIfBlank(
+                payment,
+                data.getCounterAccountBankId(),
+                data.getCounterAccountNumber(),
+                data.getCounterAccountName());
+        paymentRepository.save(payment);
+
         String orderId = payment.getOrderId();
         String reference = data.getReference();
 

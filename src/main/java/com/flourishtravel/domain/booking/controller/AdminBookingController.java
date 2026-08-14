@@ -67,11 +67,13 @@ public class AdminBookingController {
 
     @PatchMapping("/{id}/status")
     public ResponseEntity<ApiResponse<AdminBookingDetailDto>> updateStatus(
+            @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID id,
             @Valid @RequestBody BookingStatusUpdateRequest req) {
+        UUID adminId = principal == null ? null : principal.getId();
         return ResponseEntity.ok(ApiResponse.ok(
                 "Đã cập nhật trạng thái booking",
-                adminBookingService.updateStatus(id, req)));
+                adminBookingService.updateStatus(id, adminId, req)));
     }
 
     @PostMapping("/{id}/mark-paid")
@@ -89,7 +91,7 @@ public class AdminBookingController {
     public ResponseEntity<ApiResponse<AdminBookingDetailDto>> approveRefund(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID id,
-            @RequestBody(required = false) RefundActionRequest req) {
+            @Valid @RequestBody RefundActionRequest req) {
         UUID adminId = principal == null ? null : principal.getId();
         return ResponseEntity.ok(ApiResponse.ok(
                 "Đã duyệt hoàn tiền",

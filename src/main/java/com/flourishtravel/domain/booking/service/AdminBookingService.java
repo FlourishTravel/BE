@@ -15,6 +15,9 @@ import com.flourishtravel.domain.payment.entity.Payment;
 import com.flourishtravel.domain.payment.entity.Refund;
 import com.flourishtravel.domain.payment.repository.PaymentRepository;
 import com.flourishtravel.domain.payment.repository.RefundRepository;
+import com.flourishtravel.domain.payment.service.PayOSPayerBank;
+import com.flourishtravel.domain.payment.service.PayOSPaymentService;
+import com.flourishtravel.domain.payment.service.RefundReasonRules;
 import com.flourishtravel.domain.tour.entity.Tour;
 import com.flourishtravel.domain.tour.entity.TourImage;
 import com.flourishtravel.domain.tour.entity.TourSession;
@@ -29,6 +32,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Period;
@@ -63,6 +67,7 @@ public class AdminBookingService {
     private final RefundRepository refundRepository;
     private final UserRepository userRepository;
     private final SessionParticipantSyncService sessionParticipantSyncService;
+    private final PayOSPaymentService payOSPaymentService;
 
     // ---------- Queries ----------
 
@@ -146,10 +151,11 @@ public class AdminBookingService {
 
     /**
      * Đổi trạng thái booking theo state machine.
-     * Khi chuyển sang "cancelled" tự cộng trả slot session.
+     * Hủy đơn chờ thanh toán: hủy link PayOS.
+     * Hủy đơn đã thanh toán PayOS: chi hộ hoàn tiền tự động (cần lý do).
      */
     @Transactional
-    public AdminBookingDetailDto updateStatus(UUID id, BookingStatusUpdateRequest req) {
+    public AdminBookingDetailDto updateStatus(UUID id, UUID adminUserId, BookingStatusUpdateRequest req) {
         Booking b = bookingRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking", id));
 
@@ -162,11 +168,12 @@ public class AdminBookingService {
 
         validateTransition(current, target);
 
-        if ("cancelled".equals(target) && !"cancelled".equals(current)) {
-            releaseSeats(b);
+        if ("cancelled".equals(target)) {
+            String reason = RefundReasonRules.requireValid(req.getNote(), "hủy đơn");
+            return cancelBookingAsAdmin(b, reason, adminUserId);
         }
+
         if ("completed".equals(target)) {
-            // Đảm bảo đã thanh toán đủ trước khi mark complete (tránh sai lệch tài chính).
             BigDecimal paid = computePaidAmount(b);
             if (paid.compareTo(b.getTotalAmount()) < 0) {
                 throw new BadRequestException("Không thể hoàn thành: KH chưa thanh toán đủ");
@@ -223,14 +230,15 @@ public class AdminBookingService {
         return adminDetail(b.getId());
     }
 
-    /** Duyệt 1 refund (status='pending' -> 'approved') và đổi booking sang trạng thái cancelled (nếu chưa). */
+    /** Duyệt 1 refund pending: PayOS chi hộ hoàn tiền, rồi hủy booking. */
     @Transactional
     public AdminBookingDetailDto approveRefund(UUID bookingId, UUID adminUserId, RefundActionRequest req) {
+        String adminReason = RefundReasonRules.requireValid(
+                req == null ? null : req.getReason(), "duyệt hoàn tiền");
         Booking b = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking", bookingId));
         Refund refund = pickRefundForAction(b, req == null ? null : req.getRefundId());
 
-        // Chặn duyệt khi đã qua ngày khởi hành (chính sách: cần xử lý sự cố thủ công).
         if (b.getSession() != null && b.getSession().getStartDate() != null
                 && b.getSession().getStartDate().isBefore(LocalDate.now(ZONE_VN))) {
             throw new BadRequestException(
@@ -246,36 +254,17 @@ public class AdminBookingService {
                     "Số tiền duyệt hoàn (" + amount + ") vượt quá số đã thanh toán (" + paid + ")");
         }
 
-        refund.setAmount(amount);
-        refund.setStatus("approved");
-        refund.setProcessedAt(Instant.now());
-        if (adminUserId != null) {
-            User admin = userRepository.findById(adminUserId).orElse(null);
-            refund.setProcessedBy(admin);
-        }
-        if (req != null && req.getReason() != null && !req.getReason().isBlank()) {
-            String existing = refund.getReason() == null ? "" : refund.getReason() + " | ";
-            refund.setReason(existing + "Admin: " + req.getReason().trim());
-        }
-        refundRepository.save(refund);
-
-        // Huỷ booking & release seat khi duyệt hoàn tiền.
-        if (!"cancelled".equals(b.getStatus())) {
-            releaseSeats(b);
-            b.setStatus("cancelled");
-            bookingRepository.save(b);
-        }
-
-        log.info("[AdminBooking] Refund {} approved amount={} by admin={}", refund.getId(), amount, adminUserId);
+        settleRefundWithPayOSIfNeeded(b, refund, amount, adminReason, adminUserId);
         return adminDetail(b.getId());
     }
 
     /** Từ chối refund (status='pending' -> 'rejected'). */
     @Transactional
     public AdminBookingDetailDto rejectRefund(UUID bookingId, UUID adminUserId, RefundActionRequest req) {
-        if (req == null || req.getReason() == null || req.getReason().isBlank()) {
-            throw new BadRequestException("Cần cung cấp lý do từ chối");
+        if (req == null) {
+            throw new BadRequestException("Vui lòng nhập lý do từ chối hoàn tiền");
         }
+        String rejectReason = RefundReasonRules.requireValid(req.getReason(), "từ chối hoàn tiền");
         Booking b = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Booking", bookingId));
         Refund refund = pickRefundForAction(b, req.getRefundId());
@@ -287,7 +276,7 @@ public class AdminBookingService {
             refund.setProcessedBy(admin);
         }
         String existing = refund.getReason() == null ? "" : refund.getReason() + " | ";
-        refund.setReason(existing + "Admin từ chối: " + req.getReason().trim());
+        refund.setReason(existing + "Admin từ chối: " + rejectReason);
         refundRepository.save(refund);
 
         log.info("[AdminBooking] Refund {} rejected by admin={}", refund.getId(), adminUserId);
@@ -295,6 +284,127 @@ public class AdminBookingService {
     }
 
     // ---------- Helpers ----------
+
+    private AdminBookingDetailDto cancelBookingAsAdmin(Booking b, String reason, UUID adminUserId) {
+        String current = b.getStatus() == null ? "pending" : b.getStatus().toLowerCase(Locale.ROOT);
+        if ("pending".equals(current)) {
+            cancelPendingPayOSLinks(b, reason);
+            releaseSeats(b);
+            b.setStatus("cancelled");
+            bookingRepository.save(b);
+            log.info("[AdminBooking] {} cancelled unpaid. reason={}", b.getId(), reason);
+            return adminDetail(b.getId());
+        }
+
+        BigDecimal paid = computePaidAmount(b);
+        if (paid.compareTo(BigDecimal.ZERO) <= 0) {
+            releaseSeats(b);
+            b.setStatus("cancelled");
+            bookingRepository.save(b);
+            return adminDetail(b.getId());
+        }
+
+        Refund refund = b.getRefunds() == null ? null : b.getRefunds().stream()
+                .filter(r -> "pending".equalsIgnoreCase(r.getStatus()))
+                .max(Comparator.comparing(Refund::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())))
+                .orElse(null);
+        if (refund == null) {
+            refund = refundRepository.save(Refund.builder()
+                    .booking(b)
+                    .amount(paid)
+                    .reason("Admin hủy: " + reason)
+                    .status("pending")
+                    .build());
+        }
+        settleRefundWithPayOSIfNeeded(b, refund, paid, reason, adminUserId);
+        return adminDetail(b.getId());
+    }
+
+    /**
+     * PayOS: chi hộ về STK người chuyển. Cổng khác: chỉ ghi nhận hoàn trên hệ thống.
+     * Nếu PayOS thất bại thì không đổi trạng thái refund/booking.
+     */
+    private void settleRefundWithPayOSIfNeeded(Booking b, Refund refund, BigDecimal amount,
+                                               String adminReason, UUID adminUserId) {
+        Payment payosPaid = findPaidPayOSPayment(b);
+        if (payosPaid != null) {
+            PayOSPayerBank payer = payOSPaymentService.storedOrResolvedPayerBank(payosPaid)
+                    .orElseThrow(() -> new BadRequestException(
+                            "Chưa có số tài khoản người chuyển từ PayOS. "
+                                    + "Đợi webhook thanh toán hoặc kiểm tra ngân hàng có trả counterAccount."));
+            paymentRepository.save(payosPaid);
+            long amountVnd = amount.setScale(0, RoundingMode.HALF_UP).longValue();
+            String referenceId = "rf-" + refund.getId().toString().replace("-", "");
+            if (referenceId.length() > 50) {
+                referenceId = referenceId.substring(0, 50);
+            }
+            String payoutId = payOSPaymentService.refundViaPayout(
+                    referenceId,
+                    amountVnd,
+                    payer,
+                    "Hoan tien FT");
+            refund.setProviderRefundId(payoutId);
+            if (amount.compareTo(payosPaid.getAmount() == null ? BigDecimal.ZERO : payosPaid.getAmount()) >= 0) {
+                payosPaid.setStatus("refunded");
+                paymentRepository.save(payosPaid);
+            }
+        }
+
+        refund.setAmount(amount);
+        refund.setStatus(payosPaid != null ? "completed" : "approved");
+        refund.setProcessedAt(Instant.now());
+        if (adminUserId != null) {
+            User admin = userRepository.findById(adminUserId).orElse(null);
+            refund.setProcessedBy(admin);
+        }
+        String existing = refund.getReason() == null ? "" : refund.getReason() + " | ";
+        refund.setReason(existing + "Admin: " + adminReason);
+        refundRepository.save(refund);
+
+        if (!"cancelled".equals(b.getStatus())) {
+            releaseSeats(b);
+            b.setStatus("cancelled");
+            bookingRepository.save(b);
+        }
+        log.info("[AdminBooking] Refund {} settled amount={} payos={} by admin={}",
+                refund.getId(), amount, payosPaid != null, adminUserId);
+    }
+
+    private Payment findPaidPayOSPayment(Booking b) {
+        if (b.getPayments() == null || b.getPayments().isEmpty()) {
+            return null;
+        }
+        return b.getPayments().stream()
+                .filter(p -> "payos".equalsIgnoreCase(p.getProvider()))
+                .filter(p -> "paid".equalsIgnoreCase(p.getStatus()))
+                .max(Comparator.comparing(Payment::getPaidAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(Payment::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())))
+                .orElse(null);
+    }
+
+    private void cancelPendingPayOSLinks(Booking b, String reason) {
+        if (b.getPayments() == null) {
+            return;
+        }
+        for (Payment p : b.getPayments()) {
+            if (!"payos".equalsIgnoreCase(p.getProvider())) {
+                continue;
+            }
+            if (p.getStatus() != null && !"pending".equalsIgnoreCase(p.getStatus())) {
+                continue;
+            }
+            if (p.getPartnerCode() != null && !p.getPartnerCode().isBlank()) {
+                try {
+                    payOSPaymentService.cancelPaymentLink(Long.parseLong(p.getPartnerCode().trim()), reason);
+                } catch (Exception e) {
+                    log.warn("[AdminBooking] PayOS cancel link booking={}: {}", b.getId(), e.getMessage());
+                }
+            }
+            p.setStatus("failed");
+            p.setFailureReason(reason);
+            paymentRepository.save(p);
+        }
+    }
 
     private void validateTransition(String current, String target) {
         boolean allowed = switch (current) {

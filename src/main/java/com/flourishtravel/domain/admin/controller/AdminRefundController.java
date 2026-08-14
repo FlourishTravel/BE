@@ -6,8 +6,8 @@ import com.flourishtravel.common.exception.ResourceNotFoundException;
 import com.flourishtravel.domain.booking.entity.Booking;
 import com.flourishtravel.domain.booking.repository.BookingRepository;
 import com.flourishtravel.domain.payment.entity.Refund;
-import com.flourishtravel.domain.tour.repository.TourSessionRepository;
 import com.flourishtravel.domain.payment.repository.RefundRepository;
+import com.flourishtravel.domain.payment.service.RefundReasonRules;
 import com.flourishtravel.domain.user.entity.User;
 import com.flourishtravel.domain.user.repository.UserRepository;
 import com.flourishtravel.security.UserPrincipal;
@@ -17,9 +17,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Tạo yêu cầu hoàn tiền (pending). Admin duyệt ở booking để PayOS chi hộ tự động.
+ */
 @RestController
 @RequestMapping("/admin")
 @RequiredArgsConstructor
@@ -27,7 +29,6 @@ public class AdminRefundController {
 
     private final RefundRepository refundRepository;
     private final BookingRepository bookingRepository;
-    private final TourSessionRepository sessionRepository;
     private final UserRepository userRepository;
 
     @PostMapping("/refunds")
@@ -37,29 +38,33 @@ public class AdminRefundController {
         if (principal == null) {
             return ResponseEntity.status(401).build();
         }
+        if (request == null || request.getBookingId() == null) {
+            throw new BadRequestException("Thiếu mã booking");
+        }
+        String reason = RefundReasonRules.requireValid(request.getReason(), "hoàn tiền");
         Booking booking = bookingRepository.findById(request.getBookingId())
                 .orElseThrow(() -> new ResourceNotFoundException("Booking", request.getBookingId()));
-        if (!"paid".equals(booking.getStatus())) {
-            throw new BadRequestException("Chỉ có thể hoàn tiền cho đơn đã thanh toán");
+        if (!"paid".equals(booking.getStatus()) && !"confirmed".equals(booking.getStatus())) {
+            throw new BadRequestException("Chỉ có thể tạo hoàn tiền cho đơn đã thanh toán");
         }
-        User admin = userRepository.findById(principal.getId()).orElseThrow(() -> new ResourceNotFoundException("User", principal.getId()));
+        boolean hasPending = booking.getRefunds() != null && booking.getRefunds().stream()
+                .anyMatch(r -> "pending".equalsIgnoreCase(r.getStatus()));
+        if (hasPending) {
+            throw new BadRequestException("Đã có yêu cầu hoàn tiền đang chờ duyệt");
+        }
+        User admin = userRepository.findById(principal.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("User", principal.getId()));
         Refund refund = Refund.builder()
                 .booking(booking)
                 .amount(request.getAmount() != null ? request.getAmount() : booking.getTotalAmount())
-                .reason(request.getReason())
+                .reason(reason)
                 .status("pending")
                 .processedBy(admin)
-                .processedAt(Instant.now())
                 .build();
         refund = refundRepository.save(refund);
-        booking.setStatus("refunded");
-        var session = booking.getSession();
-        session.setCurrentParticipants(Math.max(0, session.getCurrentParticipants() - booking.getGuestCount()));
-        sessionRepository.save(session);
-        bookingRepository.save(booking);
-        refund.setStatus("completed");
-        refundRepository.save(refund);
-        return ResponseEntity.ok(ApiResponse.ok("Đã xử lý hoàn tiền", refund));
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Đã tạo yêu cầu hoàn tiền. Duyệt ở chi tiết booking để PayOS chi hộ tự động.",
+                refund));
     }
 
     @Data

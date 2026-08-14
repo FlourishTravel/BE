@@ -25,6 +25,6 @@ public class BookingStatusUpdateRequest {
             message = "status không hợp lệ")
     private String status;
 
-    /** Ghi chú nội bộ (lý do, ghi chú admin). Hiện ghi log; có thể mở rộng lưu BookingActivity. */
+    /** Ghi chú nội bộ (bắt buộc khi hủy). */
     private String note;
 }

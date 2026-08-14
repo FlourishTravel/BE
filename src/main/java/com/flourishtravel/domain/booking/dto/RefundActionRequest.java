@@ -14,7 +14,7 @@ import java.util.UUID;
  *
  *  - refundId: ID refund record (nếu bỏ trống lấy refund pending mới nhất của booking).
  *  - amount  : số tiền duyệt hoàn (cho phép hoàn 1 phần, mặc định = refund.amount).
- *  - reason  : ghi chú admin (mandatory khi reject).
+ *  - reason  : lý do admin (bắt buộc khi duyệt và khi từ chối).
  */
 @Data
 @Builder

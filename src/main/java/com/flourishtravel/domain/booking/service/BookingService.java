@@ -24,6 +24,7 @@ import com.flourishtravel.domain.payment.service.MomoPaymentCompletionService;
 import com.flourishtravel.domain.payment.service.MomoPaymentService;
 import com.flourishtravel.domain.payment.service.MomoPaymentService.MomoGatewayQueryResult;
 import com.flourishtravel.domain.payment.service.PayOSPaymentService;
+import com.flourishtravel.domain.payment.service.RefundReasonRules;
 import com.flourishtravel.domain.payment.entity.Refund;
 import com.flourishtravel.domain.payment.repository.RefundRepository;
 import com.flourishtravel.domain.tour.entity.Tour;
@@ -534,6 +535,12 @@ public class BookingService {
         PaymentLinkStatus status = link.getStatus();
         if (PaymentLinkStatus.PAID.equals(status)) {
             momoPaymentCompletionService.applyPaidByOrderId(oid, link.getId());
+            Payment paid = paymentRepository.findByOrderId(oid).orElse(p);
+            PayOSPaymentService.extractPayerBank(link)
+                    .ifPresent(bank -> {
+                        PayOSPaymentService.applyPayerBankIfBlank(paid, bank);
+                        paymentRepository.save(paid);
+                    });
             return;
         }
         if (PaymentLinkStatus.CANCELLED.equals(status) || PaymentLinkStatus.EXPIRED.equals(status)) {
@@ -570,6 +577,7 @@ public class BookingService {
         if (!"pending".equals(b.getStatus())) {
             throw new BadRequestException("Chỉ có thể hủy đơn đang chờ thanh toán");
         }
+        cancelPendingPayOSLinks(b, "Khach huy don cho thanh toan");
         b.setStatus("cancelled");
         bookingRepository.save(b);
         TourSession session = b.getSession();
@@ -709,13 +717,45 @@ public class BookingService {
         if (refusal != null) {
             throw new BadRequestException(refusal);
         }
+        String validReason = RefundReasonRules.requireValid(reason, "yêu cầu hoàn tiền");
         Refund refund = Refund.builder()
                 .booking(b)
                 .amount(b.getTotalAmount())
-                .reason(reason)
+                .reason(validReason)
                 .status("pending")
                 .build();
         return refundRepository.save(refund);
+    }
+
+    private void cancelPendingPayOSLinks(Booking b, String reason) {
+        if (b.getPayments() == null || b.getPayments().isEmpty()) {
+            return;
+        }
+        for (Payment p : b.getPayments()) {
+            if (!"payos".equalsIgnoreCase(p.getProvider())) {
+                continue;
+            }
+            if (p.getStatus() != null && !"pending".equalsIgnoreCase(p.getStatus())) {
+                continue;
+            }
+            if (p.getPartnerCode() == null || p.getPartnerCode().isBlank()) {
+                p.setStatus("failed");
+                p.setFailureReason(reason);
+                paymentRepository.save(p);
+                continue;
+            }
+            try {
+                long orderCode = Long.parseLong(p.getPartnerCode().trim());
+                payOSPaymentService.cancelPaymentLink(orderCode, reason);
+            } catch (NumberFormatException e) {
+                log.warn("PayOS cancel skipped, invalid orderCode booking={}", b.getId());
+            } catch (BadRequestException e) {
+                log.warn("PayOS cancel pending link booking={}: {}", b.getId(), e.getMessage());
+            }
+            p.setStatus("failed");
+            p.setFailureReason(reason);
+            paymentRepository.save(p);
+        }
     }
 
     public record ValidatePromoResult(boolean valid, BigDecimal discountAmount, String message) {}

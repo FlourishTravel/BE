@@ -69,4 +69,14 @@ public class Payment extends BaseEntity {
     /** Ghi chú nội bộ admin về giao dịch. */
     @Column(name = "admin_note", columnDefinition = "TEXT")
     private String adminNote;
+
+    /** BIN ngân hàng tài khoản đối ứng (người chuyển) — dùng chi hộ hoàn tiền PayOS. */
+    @Column(name = "payer_bank_bin", length = 20)
+    private String payerBankBin;
+
+    @Column(name = "payer_account_number", length = 50)
+    private String payerAccountNumber;
+
+    @Column(name = "payer_account_name", length = 255)
+    private String payerAccountName;
 }
