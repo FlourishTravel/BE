@@ -5,6 +5,7 @@ import com.flourishtravel.common.exception.ResourceNotFoundException;
 import com.flourishtravel.domain.auth.dto.AuthResponse;
 import com.flourishtravel.domain.auth.dto.LoginRequest;
 import com.flourishtravel.domain.auth.dto.RegisterRequest;
+import com.flourishtravel.domain.mail.MailService;
 import com.flourishtravel.domain.user.entity.PasswordResetToken;
 import com.flourishtravel.domain.user.entity.RefreshToken;
 import com.flourishtravel.domain.user.entity.Role;
@@ -18,10 +19,13 @@ import com.flourishtravel.domain.user.repository.UserRepository;
 import com.flourishtravel.security.JwtProvider;
 import com.flourishtravel.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import org.springframework.util.StringUtils;
 
@@ -45,6 +49,10 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final UserProviderRepository userProviderRepository;
+    private final MailService mailService;
+
+    @Value("${app.frontend.url:http://localhost:5173}")
+    private String frontendUrl;
 
     private static final String TRAVELER_ROLE = "TRAVELER";
     private static final int RESET_TOKEN_EXPIRE_MINUTES = 60;
@@ -117,9 +125,36 @@ public class AuthService {
                     .expiresAt(Instant.now().plusSeconds(60L * RESET_TOKEN_EXPIRE_MINUTES))
                     .used(false)
                     .build());
-            // TODO: Gửi email chứa link reset với token = rawToken (vd: /reset-password?token=...)
-            // MailSender.send(user.getEmail(), "Reset password", "Link: " + frontendUrl + "/reset-password?token=" + rawToken);
+            String resetUrl = trimSlash(frontendUrl) + "/reset-password?token=" + rawToken;
+            String to = user.getEmail();
+            String name = user.getFullName();
+            runAfterCommit(() -> mailService.sendHtml(
+                    to,
+                    "Flourish Travel — đặt lại mật khẩu",
+                    "<p>Xin chào " + MailService.escape(name) + ",</p>"
+                            + "<p>Bạn (hoặc ai đó) vừa yêu cầu đặt lại mật khẩu Flourish Travel.</p>"
+                            + "<p>Link có hiệu lực 60 phút:</p>"
+                            + "<p><a href=\"" + MailService.escape(resetUrl) + "\">Đặt lại mật khẩu</a></p>"
+                            + "<p>Nếu không phải bạn, hãy bỏ qua email này.</p>"));
         });
+    }
+
+    private static void runAfterCommit(Runnable action) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            action.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                action.run();
+            }
+        });
+    }
+
+    private static String trimSlash(String url) {
+        if (url == null || url.isBlank()) return "";
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 
     /** Luồng 1.6: Đặt lại mật khẩu từ token trong email. */

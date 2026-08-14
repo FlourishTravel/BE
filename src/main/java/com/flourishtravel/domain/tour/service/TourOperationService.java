@@ -2,6 +2,8 @@ package com.flourishtravel.domain.tour.service;
 
 import com.flourishtravel.common.exception.BadRequestException;
 import com.flourishtravel.common.exception.ResourceNotFoundException;
+import com.flourishtravel.domain.mail.MailService;
+import com.flourishtravel.domain.notification.service.NotificationService;
 import com.flourishtravel.domain.tour.dto.AssignGuideRequest;
 import com.flourishtravel.domain.tour.dto.GuideAvailabilityDto;
 import com.flourishtravel.domain.tour.dto.SessionStatusRequest;
@@ -17,9 +19,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -43,12 +49,18 @@ public class TourOperationService {
 
     private static final String ROLE_TOUR_GUIDE = "TOUR_GUIDE";
     private static final int URGENT_DAYS = 3;
+    private static final DateTimeFormatter VI_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     @Value("${app.flora.timezone:Asia/Ho_Chi_Minh}")
     private String tourTimezone;
 
+    @Value("${app.frontend.url:http://localhost:5173}")
+    private String frontendUrl;
+
     private final TourSessionRepository tourSessionRepository;
     private final UserRepository userRepository;
+    private final MailService mailService;
+    private final NotificationService notificationService;
 
     // ---------- Queries ----------
 
@@ -145,13 +157,17 @@ public class TourOperationService {
             throw new BadRequestException("HDV đã bận trong khoảng " + start + " - " + end);
         }
 
+        User previous = session.getTourGuide();
+        boolean replacing = previous != null && !previous.getId().equals(guide.getId());
+
         session.setTourGuide(guide);
         TourSession saved = tourSessionRepository.save(session);
 
         if (Boolean.TRUE.equals(req.getNotify())) {
-            // Hook: tích hợp Email service ở đây (tạm log)
-            log.info("[Operations] Notify guide {} for session {} (note={})",
-                    guide.getEmail(), saved.getId(), req.getNote());
+            String tourTitle = saved.getTour() != null ? saved.getTour().getTitle() : "Tour";
+            String note = req.getNote();
+            User previousGuide = replacing ? previous : null;
+            runAfterCommit(() -> notifyGuideAssignment(guide, previousGuide, sessionId, tourTitle, start, end, note));
         }
         return toOperationDto(saved);
     }
@@ -173,6 +189,82 @@ public class TourOperationService {
     }
 
     // ---------- Helpers ----------
+
+    private void notifyGuideAssignment(User assigned, User previous, UUID sessionId,
+                                       String tourTitle, LocalDate start, LocalDate end, String note) {
+        try {
+            dispatchGuideAssignment(assigned, previous, sessionId, tourTitle, start, end, note);
+        } catch (Exception e) {
+            log.warn("[Operations] Notify failed for session {}: {}", sessionId, e.getMessage());
+        }
+    }
+
+    private void dispatchGuideAssignment(User assigned, User previous, UUID sessionId,
+                                         String tourTitle, LocalDate start, LocalDate end, String note) {
+        String dateRange = formatDateRange(start, end);
+        String portalUrl = trimSlash(frontendUrl) + "/guide/tours";
+        String safeTitle = MailService.escape(tourTitle);
+        String safeNote = StringUtils.hasText(note)
+                ? "<p><strong>Ghi chú điều hành:</strong> " + MailService.escape(note) + "</p>"
+                : "";
+
+        if (assigned != null && assigned.getId() != null) {
+            String title = "Bạn được phân công dẫn tour";
+            String body = tourTitle + " · khởi hành " + dateRange;
+            notificationService.createFloraNotification(assigned.getId(), "GUIDE_ASSIGNED", title, body, null);
+            mailService.sendHtml(
+                    assigned.getEmail(),
+                    "Flourish Travel — phân công: " + tourTitle,
+                    "<p>Xin chào " + MailService.escape(assigned.getFullName()) + ",</p>"
+                            + "<p>Bạn được phân công dẫn <strong>" + safeTitle + "</strong> (" + dateRange + ").</p>"
+                            + safeNote
+                            + "<p>Xem chi tiết trên portal HDV: <a href=\"" + MailService.escape(portalUrl) + "\">"
+                            + MailService.escape(portalUrl) + "</a></p>"
+                            + "<p>Flourish Travel</p>");
+        }
+
+        if (previous != null && previous.getId() != null) {
+            String title = "Lịch dẫn tour đã chuyển người khác";
+            String body = tourTitle + " · khởi hành " + dateRange + " không còn gán cho bạn.";
+            notificationService.createFloraNotification(previous.getId(), "GUIDE_UNASSIGNED", title, body, null);
+            mailService.sendHtml(
+                    previous.getEmail(),
+                    "Flourish Travel — đổi HDV: " + tourTitle,
+                    "<p>Xin chào " + MailService.escape(previous.getFullName()) + ",</p>"
+                            + "<p>Lịch <strong>" + safeTitle + "</strong> (" + dateRange
+                            + ") đã được điều hành phân công cho HDV khác.</p>"
+                            + "<p>Nếu đây là nhầm lẫn, liên hệ điều hành ngay.</p>"
+                            + "<p>Flourish Travel</p>");
+        }
+        log.info("[Operations] Notified guide {} for session {} (previous={})",
+                assigned != null ? assigned.getEmail() : null,
+                sessionId,
+                previous != null ? previous.getEmail() : null);
+    }
+
+    private static void runAfterCommit(Runnable action) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            action.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                action.run();
+            }
+        });
+    }
+
+    private static String formatDateRange(LocalDate start, LocalDate end) {
+        if (start == null) return "—";
+        if (end == null || end.equals(start)) return start.format(VI_DATE);
+        return start.format(VI_DATE) + " – " + end.format(VI_DATE);
+    }
+
+    private static String trimSlash(String url) {
+        if (url == null || url.isBlank()) return "";
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+    }
 
     private TourSession getSession(UUID id) {
         return tourSessionRepository.findById(id)

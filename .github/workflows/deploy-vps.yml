@@ -43,8 +43,22 @@ jobs:
               && sed -i 's|^API_BASE_URL=.*|API_BASE_URL=https://flourishtravelapp.khanhtn45.id.vn/api|' .env \
               || echo 'API_BASE_URL=https://flourishtravelapp.khanhtn45.id.vn/api' >> .env
 
+            grep -q '^MAIL_ENABLED=' .env || echo 'MAIL_ENABLED=false' >> .env
+            grep -q '^MAIL_HOST=' .env || echo 'MAIL_HOST=smtp.gmail.com' >> .env
+            grep -q '^MAIL_PORT=' .env || echo 'MAIL_PORT=587' >> .env
+            grep -q '^MAIL_USERNAME=' .env || echo 'MAIL_USERNAME=' >> .env
+            grep -q '^MAIL_PASSWORD=' .env || echo 'MAIL_PASSWORD=' >> .env
+            grep -q '^MAIL_FROM=' .env || echo 'MAIL_FROM=' >> .env
+
             if ! grep -q 'API_BASE_URL' docker-compose.yml; then
               sed -i '/FRONTEND_URL: \${FRONTEND_URL}/a\      API_BASE_URL: ${API_BASE_URL}' docker-compose.yml
+            fi
+            if grep -q 'FRONTEND_URL: \${FRONTEND_URL}' docker-compose.yml; then
+              for key in MAIL_ENABLED MAIL_HOST MAIL_PORT MAIL_USERNAME MAIL_PASSWORD MAIL_FROM; do
+                if ! grep -q "${key}:" docker-compose.yml; then
+                  sed -i "/FRONTEND_URL: \${FRONTEND_URL}/a\\      ${key}: \${${key}:-}" docker-compose.yml
+                fi
+              done
             fi
 
             # BE must not start while Postgres is still in crash recovery (57P03).

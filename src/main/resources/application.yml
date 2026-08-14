@@ -112,6 +112,14 @@ app:
   # Có hoặc không dấu / cuối đều được (BE chuẩn hóa khi ghép /checkout/...).
   frontend:
     url: ${FRONTEND_URL:http://localhost:5173}
+  mail:
+    # Gmail: MAIL_ENABLED=true + App Password (không dùng mật khẩu đăng nhập Gmail).
+    enabled: ${MAIL_ENABLED:false}
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    from: ${MAIL_FROM:${MAIL_USERNAME:}}
   # Public URL (có /api) khi deploy; local: http://localhost:8080
   api-base-url: ${API_BASE_URL:http://localhost:8080}
   upload:

@@ -1,0 +1,50 @@
+package com.flourishtravel.domain.mail;
+
+import jakarta.mail.Session;
+import jakarta.mail.internet.MimeMessage;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.mail.javamail.JavaMailSender;
+
+import java.util.Properties;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class MailServiceTest {
+
+    @Test
+    void isEnabledFalseWhenFlagOff() {
+        @SuppressWarnings("unchecked")
+        ObjectProvider<JavaMailSender> provider = mock(ObjectProvider.class);
+        MailService service = new MailService(provider, false, "ops@flourish.vn", "ops@flourish.vn");
+        assertFalse(service.isEnabled());
+        service.sendHtml("guide@example.com", "Hi", "<p>x</p>");
+        verify(provider, never()).getIfAvailable();
+    }
+
+    @Test
+    void sendsWhenEnabledAndSenderPresent() {
+        JavaMailSender sender = mock(JavaMailSender.class);
+        MimeMessage mime = new MimeMessage(Session.getInstance(new Properties()));
+        when(sender.createMimeMessage()).thenReturn(mime);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<JavaMailSender> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(sender);
+
+        MailService service = new MailService(provider, true, "ops@flourish.vn", "ops@flourish.vn");
+        assertTrue(service.isEnabled());
+        service.sendHtml("guide@example.com", "Phân công tour", "<p>ok</p>");
+        verify(sender).send(mime);
+    }
+
+    @Test
+    void escapeHtml() {
+        assertEquals("&lt;b&gt;x&amp;y&quot;", MailService.escape("<b>x&y\""));
+    }
+}
