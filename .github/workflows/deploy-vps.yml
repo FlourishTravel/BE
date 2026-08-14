@@ -37,6 +37,16 @@ jobs:
               exit 1
             fi
 
+            # Public URL cho upload/media (tránh lưu http://localhost:8080 vào DB)
+            touch .env
+            grep -q '^API_BASE_URL=' .env \
+              && sed -i 's|^API_BASE_URL=.*|API_BASE_URL=https://flourishtravelapp.khanhtn45.id.vn/api|' .env \
+              || echo 'API_BASE_URL=https://flourishtravelapp.khanhtn45.id.vn/api' >> .env
+
+            if ! grep -q 'API_BASE_URL' docker-compose.yml; then
+              sed -i '/FRONTEND_URL: \${FRONTEND_URL}/a\      API_BASE_URL: ${API_BASE_URL}' docker-compose.yml
+            fi
+
             docker compose up -d --build --force-recreate be
             docker compose ps be
 
