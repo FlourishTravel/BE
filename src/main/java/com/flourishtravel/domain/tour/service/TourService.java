@@ -372,7 +372,7 @@ public class TourService {
     /**
      * Nếu không gửi endDate, lấy startDate + (durationDays - 1). Một ngày thì end = start.
      */
-    static LocalDate resolveSessionEndDate(LocalDate startDate, LocalDate endDate, Integer durationDays) {
+    public static LocalDate resolveSessionEndDate(LocalDate startDate, LocalDate endDate, Integer durationDays) {
         if (startDate == null) {
             throw new BadRequestException("Ngày khởi hành là bắt buộc");
         }
