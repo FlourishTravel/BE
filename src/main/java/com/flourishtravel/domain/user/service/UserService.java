@@ -84,6 +84,7 @@ public class UserService {
                 .gender(user.getGender())
                 .address(user.getAddress())
                 .role(user.getRole() != null ? user.getRole().getName() : null)
+                .jobTitle(user.getJobTitle())
                 .build();
     }
 }

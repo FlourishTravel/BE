@@ -82,6 +82,14 @@ public interface TourSessionRepository extends JpaRepository<TourSession, UUID> 
 
     @Query("""
             SELECT s FROM TourSession s
+            JOIN FETCH s.tour t
+            WHERE s.tourGuide.id = :guideId
+            ORDER BY s.startDate DESC
+            """)
+    List<TourSession> findAssignedWithTour(@Param("guideId") UUID guideId);
+
+    @Query("""
+            SELECT s FROM TourSession s
             WHERE LOWER(s.status) IN ('scheduled', 'ongoing')
               AND s.endDate IS NOT NULL
               AND s.endDate < :today
