@@ -2,6 +2,7 @@ package com.flourishtravel.domain.user.service;
 
 import com.flourishtravel.common.exception.BadRequestException;
 import com.flourishtravel.common.exception.ResourceNotFoundException;
+import com.flourishtravel.domain.notification.service.NotificationService;
 import com.flourishtravel.domain.tour.repository.TourSessionRepository;
 import com.flourishtravel.domain.user.dto.AdminStaffDetailDto;
 import com.flourishtravel.domain.user.dto.AdminStaffSummaryDto;
@@ -43,6 +44,7 @@ public class AdminStaffService {
     private final RoleRepository roleRepository;
     private final TourSessionRepository tourSessionRepository;
     private final PasswordEncoder passwordEncoder;
+    private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
     public Page<AdminStaffSummaryDto> list(String q, String employmentStatus, String roleName,
@@ -263,6 +265,8 @@ public class AdminStaffService {
             }
         }
 
+        applyGuideAdminFields(u, req);
+
         userRepository.save(u);
         return toDetail(u);
     }
@@ -332,6 +336,9 @@ public class AdminStaffService {
                 .employmentStatus(safeEmp(u.getEmploymentStatus()))
                 .active(Boolean.TRUE.equals(u.getIsActive()))
                 .lastLoginAt(u.getLastLoginAt())
+                .guidePublicApproved(Boolean.TRUE.equals(u.getGuidePublicApproved()))
+                .guidePendingReview(Boolean.TRUE.equals(u.getGuidePendingReview()))
+                .guideVerified(Boolean.TRUE.equals(u.getGuideVerified()))
                 .build();
     }
 
@@ -371,7 +378,66 @@ public class AdminStaffService {
                 .joinedAt(u.getCreatedAt())
                 .upcomingSessionsCount(upcoming)
                 .scheduledSessionsNext90Days((long) next90)
+                .guideShortBio(u.getGuideShortBio())
+                .guideBio(u.getGuideBio())
+                .guideLanguages(com.flourishtravel.domain.user.CsvLists.split(u.getGuideLanguages()))
+                .guideSpecialties(com.flourishtravel.domain.user.CsvLists.split(u.getGuideSpecialties()))
+                .guideCoverUrl(u.getGuideCoverUrl())
+                .guideExperienceYears(u.getGuideExperienceYears())
+                .guideBaseLocation(u.getGuideBaseLocation())
+                .guideBadges(com.flourishtravel.domain.user.CsvLists.split(u.getGuideBadges()))
+                .guideVerified(Boolean.TRUE.equals(u.getGuideVerified()))
+                .guidePublicApproved(Boolean.TRUE.equals(u.getGuidePublicApproved()))
+                .guidePendingReview(Boolean.TRUE.equals(u.getGuidePendingReview()))
                 .build();
+    }
+
+    private void applyGuideAdminFields(User u, UpdateStaffRequest req) {
+        if (req.getGuideShortBio() != null) {
+            u.setGuideShortBio(blankToEmpty(req.getGuideShortBio()).isBlank() ? null : req.getGuideShortBio().trim());
+        }
+        if (req.getGuideBio() != null) {
+            u.setGuideBio(blankToEmpty(req.getGuideBio()).isBlank() ? null : req.getGuideBio().trim());
+        }
+        if (req.getGuideLanguages() != null) {
+            u.setGuideLanguages(com.flourishtravel.domain.user.CsvLists.join(req.getGuideLanguages()));
+        }
+        if (req.getGuideSpecialties() != null) {
+            u.setGuideSpecialties(com.flourishtravel.domain.user.CsvLists.join(req.getGuideSpecialties()));
+        }
+        if (req.getGuideCoverUrl() != null) {
+            u.setGuideCoverUrl(blankToEmpty(req.getGuideCoverUrl()).isBlank() ? null : req.getGuideCoverUrl().trim());
+        }
+        if (req.getGuideExperienceYears() != null) {
+            u.setGuideExperienceYears(Math.max(0, Math.min(req.getGuideExperienceYears(), 50)));
+        }
+        if (req.getGuideBaseLocation() != null) {
+            u.setGuideBaseLocation(blankToEmpty(req.getGuideBaseLocation()).isBlank() ? null : req.getGuideBaseLocation().trim());
+        }
+        if (req.getGuideBadges() != null) {
+            u.setGuideBadges(com.flourishtravel.domain.user.CsvLists.join(req.getGuideBadges()));
+        }
+        if (req.getGuideVerified() != null) {
+            u.setGuideVerified(req.getGuideVerified());
+        }
+        boolean wasApproved = Boolean.TRUE.equals(u.getGuidePublicApproved());
+        if (req.getGuidePublicApproved() != null) {
+            u.setGuidePublicApproved(req.getGuidePublicApproved());
+            if (Boolean.TRUE.equals(req.getGuidePublicApproved())) {
+                u.setGuidePendingReview(false);
+                if (!wasApproved) {
+                    notificationService.createFloraNotification(
+                            u.getId(),
+                            "GUIDE_PROFILE",
+                            "Hồ sơ Đội ngũ HDV đã được duyệt",
+                            "Trang Khám phá → Đội ngũ HDV đang hiện hồ sơ của bạn.",
+                            null);
+                }
+            }
+        }
+        if (req.getGuidePendingReview() != null) {
+            u.setGuidePendingReview(req.getGuidePendingReview());
+        }
     }
 
     private static String generateEmployeeCode(UUID id) {

@@ -44,4 +44,17 @@ public class UpdateStaffRequest {
     private String employmentStatus;
 
     private String adminNote;
+
+    private Boolean guideVerified;
+    private Boolean guidePublicApproved;
+    private Boolean guidePendingReview;
+
+    private String guideShortBio;
+    private String guideBio;
+    private java.util.List<String> guideLanguages;
+    private java.util.List<String> guideSpecialties;
+    private String guideCoverUrl;
+    private Integer guideExperienceYears;
+    private String guideBaseLocation;
+    private java.util.List<String> guideBadges;
 }

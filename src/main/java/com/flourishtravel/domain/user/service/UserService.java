@@ -58,6 +58,9 @@ public class UserService {
         if (request.getAddress() != null) {
             user.setAddress(request.getAddress().trim().isEmpty() ? null : request.getAddress().trim());
         }
+        if (isTourGuide(user)) {
+            applyGuidePublicFields(user, request);
+        }
         user = userRepository.save(user);
         return toProfileResponse(user);
     }
@@ -85,6 +88,74 @@ public class UserService {
                 .address(user.getAddress())
                 .role(user.getRole() != null ? user.getRole().getName() : null)
                 .jobTitle(user.getJobTitle())
+                .guideShortBio(user.getGuideShortBio())
+                .guideBio(user.getGuideBio())
+                .guideLanguages(com.flourishtravel.domain.user.CsvLists.split(user.getGuideLanguages()))
+                .guideSpecialties(com.flourishtravel.domain.user.CsvLists.split(user.getGuideSpecialties()))
+                .guideCoverUrl(user.getGuideCoverUrl())
+                .guideExperienceYears(user.getGuideExperienceYears())
+                .guideBaseLocation(user.getGuideBaseLocation())
+                .guideBadges(com.flourishtravel.domain.user.CsvLists.split(user.getGuideBadges()))
+                .guideVerified(Boolean.TRUE.equals(user.getGuideVerified()))
+                .guidePublicApproved(Boolean.TRUE.equals(user.getGuidePublicApproved()))
+                .guidePendingReview(Boolean.TRUE.equals(user.getGuidePendingReview()))
                 .build();
+    }
+
+    private static boolean isTourGuide(User user) {
+        return user.getRole() != null && "TOUR_GUIDE".equalsIgnoreCase(user.getRole().getName());
+    }
+
+    private void applyGuidePublicFields(User user, UpdateProfileRequest request) {
+        boolean touched = false;
+        if (request.getGuideShortBio() != null) {
+            user.setGuideShortBio(blankToNull(request.getGuideShortBio()));
+            touched = true;
+        }
+        if (request.getGuideBio() != null) {
+            user.setGuideBio(blankToNull(request.getGuideBio()));
+            touched = true;
+        }
+        if (request.getGuideLanguages() != null) {
+            user.setGuideLanguages(com.flourishtravel.domain.user.CsvLists.join(request.getGuideLanguages()));
+            touched = true;
+        }
+        if (request.getGuideSpecialties() != null) {
+            user.setGuideSpecialties(com.flourishtravel.domain.user.CsvLists.join(request.getGuideSpecialties()));
+            touched = true;
+        }
+        if (request.getGuideCoverUrl() != null) {
+            String cover = request.getGuideCoverUrl().trim();
+            if (cover.isEmpty()) {
+                user.setGuideCoverUrl(null);
+            } else if (cover.regionMatches(true, 0, "data:", 0, 5)) {
+                throw new BadRequestException("Ảnh bìa quá lớn. Hãy tải ảnh qua API /upload rồi lưu URL.");
+            } else if (cover.length() > 500) {
+                throw new BadRequestException("guideCoverUrl tối đa 500 ký tự");
+            } else {
+                user.setGuideCoverUrl(cover);
+            }
+            touched = true;
+        }
+        if (request.getGuideExperienceYears() != null) {
+            int years = Math.max(0, Math.min(request.getGuideExperienceYears(), 50));
+            user.setGuideExperienceYears(years);
+            touched = true;
+        }
+        if (request.getGuideBaseLocation() != null) {
+            user.setGuideBaseLocation(blankToNull(request.getGuideBaseLocation()));
+            touched = true;
+        }
+        if (request.getAvatarUrl() != null) {
+            touched = true;
+        }
+        if (touched) {
+            user.setGuidePendingReview(true);
+        }
+    }
+
+    private static String blankToNull(String value) {
+        if (value == null || value.trim().isEmpty()) return null;
+        return value.trim();
     }
 }

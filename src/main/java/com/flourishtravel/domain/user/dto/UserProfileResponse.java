@@ -18,4 +18,15 @@ public class UserProfileResponse {
     private String address;
     private String role;
     private String jobTitle;
+    private String guideShortBio;
+    private String guideBio;
+    private java.util.List<String> guideLanguages;
+    private java.util.List<String> guideSpecialties;
+    private String guideCoverUrl;
+    private Integer guideExperienceYears;
+    private String guideBaseLocation;
+    private java.util.List<String> guideBadges;
+    private Boolean guideVerified;
+    private Boolean guidePublicApproved;
+    private Boolean guidePendingReview;
 }

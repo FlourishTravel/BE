@@ -1,10 +1,13 @@
 package com.flourishtravel.domain.user.service;
 
 import com.flourishtravel.common.exception.ResourceNotFoundException;
+import com.flourishtravel.domain.review.entity.Review;
+import com.flourishtravel.domain.review.repository.ReviewRepository;
 import com.flourishtravel.domain.tour.entity.Tour;
 import com.flourishtravel.domain.tour.entity.TourImage;
 import com.flourishtravel.domain.tour.entity.TourSession;
 import com.flourishtravel.domain.tour.repository.TourSessionRepository;
+import com.flourishtravel.domain.user.CsvLists;
 import com.flourishtravel.domain.user.dto.PublicGuideSummaryDto;
 import com.flourishtravel.domain.user.entity.User;
 import com.flourishtravel.domain.user.repository.UserRepository;
@@ -12,6 +15,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -28,10 +33,11 @@ public class PublicGuideService {
 
     private final UserRepository userRepository;
     private final TourSessionRepository tourSessionRepository;
+    private final ReviewRepository reviewRepository;
 
     @Transactional(readOnly = true)
     public List<PublicGuideSummaryDto> listActiveGuides() {
-        return userRepository.findActiveByRoleName(GUIDE_ROLE).stream()
+        return userRepository.findPublicApprovedGuides(GUIDE_ROLE).stream()
                 .map(user -> toDto(user, false))
                 .toList();
     }
@@ -40,24 +46,70 @@ public class PublicGuideService {
     public PublicGuideSummaryDto getGuide(UUID id) {
         User guide = userRepository.findByIdAndRole_NameAndIsActiveTrue(id, GUIDE_ROLE)
                 .orElseThrow(() -> new ResourceNotFoundException("Guide", id));
+        if (!Boolean.TRUE.equals(guide.getGuidePublicApproved())) {
+            throw new ResourceNotFoundException("Guide", id);
+        }
         return toDto(guide, true);
     }
 
-    private PublicGuideSummaryDto toDto(User user, boolean includeTours) {
+    private PublicGuideSummaryDto toDto(User user, boolean includeDetail) {
+        List<Review> reviews = reviewRepository.findPublishedByGuideId(user.getId());
+        BigDecimal rating = averageRating(reviews);
+
         PublicGuideSummaryDto.PublicGuideSummaryDtoBuilder builder = PublicGuideSummaryDto.builder()
                 .id(user.getId())
                 .fullName(user.getFullName())
                 .avatarUrl(user.getAvatarUrl())
+                .coverImageUrl(user.getGuideCoverUrl())
                 .jobTitle(user.getJobTitle() != null && !user.getJobTitle().isBlank()
                         ? user.getJobTitle()
                         : "Hướng dẫn viên")
-                .department(user.getDepartment())
-                .languages(List.of())
-                .toursCompleted(tourSessionRepository.countByTourGuide_Id(user.getId()));
-        if (includeTours) {
+                .location(user.getGuideBaseLocation())
+                .shortBio(user.getGuideShortBio())
+                .bio(user.getGuideBio())
+                .languages(CsvLists.split(user.getGuideLanguages()))
+                .specialties(CsvLists.split(user.getGuideSpecialties()))
+                .badges(CsvLists.split(user.getGuideBadges()))
+                .verified(Boolean.TRUE.equals(user.getGuideVerified()))
+                .experienceYears(user.getGuideExperienceYears())
+                .rating(rating)
+                .reviewCount(reviews.size())
+                .toursCompleted(tourSessionRepository.countByTourGuide_Id(user.getId()))
+                .joinedAt(user.getCreatedAt());
+        if (includeDetail) {
             builder.tours(assignedTours(user.getId()));
+            builder.reviews(reviews.stream().limit(8).map(this::toReviewRef).toList());
         }
         return builder.build();
+    }
+
+    private PublicGuideSummaryDto.GuideReviewRef toReviewRef(Review review) {
+        User author = review.getUser();
+        Tour tour = review.getTour();
+        return PublicGuideSummaryDto.GuideReviewRef.builder()
+                .id(review.getId())
+                .authorName(author != null ? author.getFullName() : "Du khách")
+                .authorAvatarUrl(author != null ? author.getAvatarUrl() : null)
+                .rating(review.getRating())
+                .comment(review.getComment())
+                .tourName(tour != null ? tour.getTitle() : null)
+                .createdAt(review.getCreatedAt())
+                .build();
+    }
+
+    private static BigDecimal averageRating(List<Review> reviews) {
+        if (reviews == null || reviews.isEmpty()) {
+            return null;
+        }
+        double avg = reviews.stream()
+                .filter(r -> r.getRating() != null)
+                .mapToInt(Review::getRating)
+                .average()
+                .orElse(Double.NaN);
+        if (Double.isNaN(avg)) {
+            return null;
+        }
+        return BigDecimal.valueOf(avg).setScale(1, RoundingMode.HALF_UP);
     }
 
     private List<PublicGuideSummaryDto.AssignedTourRef> assignedTours(UUID guideId) {

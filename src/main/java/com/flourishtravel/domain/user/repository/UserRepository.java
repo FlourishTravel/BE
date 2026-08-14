@@ -34,6 +34,15 @@ public interface UserRepository extends JpaRepository<User, UUID> {
         """)
     List<User> findActiveByRoleName(@Param("roleName") String roleName);
 
+    @Query("""
+        SELECT u FROM User u
+        WHERE u.role.name = :roleName
+          AND u.isActive = true
+          AND u.guidePublicApproved = true
+        ORDER BY u.fullName ASC
+        """)
+    List<User> findPublicApprovedGuides(@Param("roleName") String roleName);
+
     Optional<User> findByIdAndRole_NameAndIsActiveTrue(UUID id, String roleName);
 
     /**

@@ -90,6 +90,50 @@ public class User extends BaseEntity {
     @Builder.Default
     private String employmentStatus = "active";
 
+    /** Bio ngắn trên card Đội ngũ HDV. */
+    @Column(name = "guide_short_bio", columnDefinition = "TEXT")
+    private String guideShortBio;
+
+    /** Giới thiệu đầy đủ trên trang chi tiết HDV. */
+    @Column(name = "guide_bio", columnDefinition = "TEXT")
+    private String guideBio;
+
+    /** CSV: Tiếng Việt, Tiếng Anh, ... */
+    @Column(name = "guide_languages", length = 400)
+    private String guideLanguages;
+
+    /** CSV: Ẩm thực, Văn hóa, ... */
+    @Column(name = "guide_specialties", length = 400)
+    private String guideSpecialties;
+
+    @Column(name = "guide_cover_url", length = 500)
+    private String guideCoverUrl;
+
+    @Column(name = "guide_experience_years")
+    private Integer guideExperienceYears;
+
+    /** Vùng / tuyến phụ trách hiển thị khách (vd. Bangkok – Pattaya). */
+    @Column(name = "guide_base_location", length = 160)
+    private String guideBaseLocation;
+
+    /** CSV huy hiệu do admin gán. */
+    @Column(name = "guide_badges", length = 400)
+    private String guideBadges;
+
+    @Column(name = "guide_verified")
+    @Builder.Default
+    private Boolean guideVerified = false;
+
+    /** Admin đã duyệt — mới hiện trên /our-guides. */
+    @Column(name = "guide_public_approved")
+    @Builder.Default
+    private Boolean guidePublicApproved = false;
+
+    /** HDV vừa sửa hồ sơ công khai, chờ admin xem lại. */
+    @Column(name = "guide_pending_review")
+    @Builder.Default
+    private Boolean guidePendingReview = false;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<UserProvider> providers = new ArrayList<>();

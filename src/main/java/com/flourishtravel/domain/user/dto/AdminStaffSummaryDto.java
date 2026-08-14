@@ -36,4 +36,8 @@ public class AdminStaffSummaryDto {
     private boolean active;
 
     private Instant lastLoginAt;
+
+    private Boolean guidePublicApproved;
+    private Boolean guidePendingReview;
+    private Boolean guideVerified;
 }

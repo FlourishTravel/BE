@@ -92,6 +92,7 @@ public class DemoDataSeeder {
 
         // 1) Tour guides — luôn idempotent, bỏ qua HDV đã có email.
         List<User> guides = seedTourGuides(guideRole);
+        enrichPublicGuideProfiles(guides);
 
         // 1b) Nhân viên nội bộ (sales / điều hành / kế toán) — demo tab phòng ban trên admin.
         seedInternalStaff(staffRole);
@@ -222,6 +223,65 @@ public class DemoDataSeeder {
         }
         log.info("Seeded {} tour guides", result.size());
         return result;
+    }
+
+    private void enrichPublicGuideProfiles(List<User> guides) {
+        record Profile(String location, String languages, String specialties, String shortBio, String bio, int years, String badges) {}
+        Profile[] samples = {
+                new Profile("Bangkok – Pattaya, Thái Lan", "Tiếng Việt, Tiếng Anh, Tiếng Thái", "Ẩm thực, Văn hóa, Wellness",
+                        "Dẫn tour Bangkok – Pattaya theo nhịp chậm, thiên về phố và ẩm thực.",
+                        "Đồng hành cùng đoàn từ Hoàng Cung, Chinatown đến Meal Credit Yaowarat. Ưu tiên lịch vừa phải, giải thích văn hóa tại chỗ.",
+                        6, "Top Guide 2025"),
+                new Profile("TP. Hồ Chí Minh", "Tiếng Việt, Tiếng Anh", "Trong nước, Ẩm thực, Văn hóa",
+                        "Chuyên tour Sài Gòn Chợ Lớn 1 ngày: chùa, chợ và ẩm thực Hoa–Việt.",
+                        "Kể chuyện thương cảng, dẫn Chùa Bà Thiên Hậu và Chợ Bình Tây. Giúp đoàn dùng Meal Credit đúng nhịp.",
+                        5, "Local Expert"),
+                new Profile("Đà Nẵng – Hội An", "Tiếng Việt, Tiếng Anh", "Văn hóa, Bền vững, Phiêu lưu",
+                        "HDV miền Trung, thiên về di sản và nhịp sống chậm.",
+                        "Ưu tiên làng nghề, bãi biển và câu chuyện địa phương thay vì checklist check-in.",
+                        7, "Eco Champion"),
+                new Profile("TP. Hồ Chí Minh", "Tiếng Việt, Tiếng Anh, Tiếng Trung", "Ẩm thực, Văn hóa",
+                        "Chuyên ẩm thực Hoa–Việt và phố cổ Sài Gòn.",
+                        "Giới thiệu quán gia đình, cách trả giá nhẹ và lịch sử khu Chợ Lớn.",
+                        4, "Foodie Guide"),
+                new Profile("Hà Nội – Bangkok", "Tiếng Việt, Tiếng Anh, Tiếng Thái", "Phiêu lưu, Văn hóa",
+                        "Dẫn đoàn Thái Lan, giỏi nhịp đền chùa và phố đêm an toàn.",
+                        "Sắp xếp Hoàng Cung buổi sớm, chiều Talat Noi, tối Yaowarat tự chọn.",
+                        5, "Rising Star"),
+                new Profile("Nha Trang", "Tiếng Việt, Tiếng Anh", "Wellness, Biển đảo",
+                        "Tour biển và chữa lành, nhịp nhẹ.",
+                        "Kết hợp nghỉ dưỡng, ẩm thực biển và thời gian tự do có chủ đích.",
+                        3, "Wellness Certified"),
+                new Profile("Hà Nội", "Tiếng Việt, Tiếng Anh", "Văn hóa, Lịch sử",
+                        "Kể chuyện đô thị và di sản Bắc Bộ.",
+                        "Tập trung ngữ cảnh lịch sử, không nhồi điểm; phù hợp đoàn muốn hiểu hơn là chạy tour.",
+                        8, "History Expert"),
+                new Profile("TP. Hồ Chí Minh", "Tiếng Việt, Tiếng Anh, Tiếng Pháp", "Nghệ thuật, Văn hóa",
+                        "Guide trẻ, thiên gallery, cafe ẩn và nhiếp ảnh phố.",
+                        "Gợi ý góc chụp và quán địa phương, giữ đoàn gọn và đúng giờ tập trung.",
+                        3, "Rising Star 2025"),
+        };
+        for (int i = 0; i < guides.size(); i++) {
+            User u = guides.get(i);
+            if (u.getGuideShortBio() != null && !u.getGuideShortBio().isBlank()) {
+                continue;
+            }
+            Profile p = samples[i % samples.length];
+            u.setGuideBaseLocation(p.location());
+            u.setGuideLanguages(p.languages());
+            u.setGuideSpecialties(p.specialties());
+            u.setGuideShortBio(p.shortBio());
+            u.setGuideBio(p.bio());
+            u.setGuideExperienceYears(p.years());
+            u.setGuideBadges(p.badges());
+            u.setGuideVerified(true);
+            u.setGuidePublicApproved(true);
+            u.setGuidePendingReview(false);
+            if (u.getJobTitle() == null || u.getJobTitle().isBlank()) {
+                u.setJobTitle("Hướng dẫn viên");
+            }
+            userRepository.save(u);
+        }
     }
 
     /** Nhân viên STAFF (sales / điều hành / kế toán) — bỏ qua nếu email đã tồn tại. */

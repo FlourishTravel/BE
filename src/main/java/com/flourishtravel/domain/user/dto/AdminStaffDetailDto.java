@@ -44,4 +44,16 @@ public class AdminStaffDetailDto {
 
     /** Chỉ HDV: số session đã gán trong 90 ngày tới (ước lượng workload). */
     private Long scheduledSessionsNext90Days;
+
+    private String guideShortBio;
+    private String guideBio;
+    private java.util.List<String> guideLanguages;
+    private java.util.List<String> guideSpecialties;
+    private String guideCoverUrl;
+    private Integer guideExperienceYears;
+    private String guideBaseLocation;
+    private java.util.List<String> guideBadges;
+    private Boolean guideVerified;
+    private Boolean guidePublicApproved;
+    private Boolean guidePendingReview;
 }
