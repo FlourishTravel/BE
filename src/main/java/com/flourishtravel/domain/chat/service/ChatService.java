@@ -4,6 +4,8 @@ import com.flourishtravel.common.exception.BadRequestException;
 import com.flourishtravel.common.exception.ResourceNotFoundException;
 import com.flourishtravel.domain.booking.entity.Booking;
 import com.flourishtravel.domain.booking.repository.BookingRepository;
+import com.flourishtravel.domain.chat.FloraGroupChatTrigger;
+import com.flourishtravel.domain.chat.TourGroupChatFloraEvent;
 import com.flourishtravel.domain.chat.dto.ChatMessageViewDto;
 import com.flourishtravel.domain.chat.dto.TourChatContextDto;
 import com.flourishtravel.domain.chat.entity.ChatMember;
@@ -19,6 +21,7 @@ import com.flourishtravel.domain.tour.entity.TourSession;
 import com.flourishtravel.domain.user.entity.User;
 import com.flourishtravel.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -43,6 +46,7 @@ public class ChatService {
     private final MessageReactionRepository messageReactionRepository;
     private final UserRepository userRepository;
     private final BookingRepository bookingRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final int DEFAULT_LIMIT = 50;
     private static final int MAX_LIMIT = 100;
@@ -255,12 +259,18 @@ public class ChatService {
                 .content(trimmed)
                 .build();
         msg = messageRepository.save(msg);
+        if (!FloraGroupChatTrigger.isFloraEmail(actor.getEmail())) {
+            eventPublisher.publishEvent(new TourGroupChatFloraEvent(bookingId, userId, trimmed));
+        }
         return toMessageViewDto(msg);
     }
 
     private ChatMessageViewDto toMessageViewDto(Message msg) {
         User s = msg.getSender();
         String roleName = s.getRole() != null ? s.getRole().getName() : "TRAVELER";
+        if (FloraGroupChatTrigger.isFloraEmail(s.getEmail())) {
+            roleName = FloraGroupChatTrigger.FLORA_ROLE;
+        }
         return ChatMessageViewDto.builder()
                 .id(msg.getId())
                 .content(msg.getContent())

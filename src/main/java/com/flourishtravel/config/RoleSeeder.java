@@ -27,6 +27,7 @@ public class RoleSeeder {
         seed("TOUR_GUIDE", "Hướng dẫn viên – lịch công tác, quản đoàn, check-in, ghim tin");
         seed("STAFF", "Nhân viên nội bộ – sales, điều hành, kế toán (không phải HDV)");
         seed("ADMIN", "Quản trị viên – dashboard, CRUD tour/session/user, giao dịch, hoàn tiền");
+        seed("FLORA", "Trợ lý AI Flora trong chat đoàn");
         log.debug("Roles seeded");
     }
 
