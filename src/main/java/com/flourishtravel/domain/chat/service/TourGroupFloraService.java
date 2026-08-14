@@ -126,7 +126,9 @@ public class TourGroupFloraService {
     }
 
     public synchronized User ensureFloraUser() {
-        return userRepository.findByEmail(FloraGroupChatTrigger.FLORA_EMAIL).orElseGet(() -> {
+        return userRepository.findByEmail(FloraGroupChatTrigger.FLORA_EMAIL)
+                .map(this::ensureFloraAvatar)
+                .orElseGet(() -> {
             Role role = roleRepository.findByName(FloraGroupChatTrigger.FLORA_ROLE)
                     .orElseGet(() -> roleRepository.save(Role.builder()
                             .name(FloraGroupChatTrigger.FLORA_ROLE)
@@ -139,6 +141,7 @@ public class TourGroupFloraService {
                     .jobTitle("Trợ lý AI")
                     .department("FLORA")
                     .employmentStatus("active")
+                    .avatarUrl(FloraGroupChatTrigger.FLORA_AVATAR_URL)
                     .role(role)
                     .isActive(true)
                     .marketingOptIn(false)
@@ -146,9 +149,19 @@ public class TourGroupFloraService {
             try {
                 return userRepository.save(user);
             } catch (DataIntegrityViolationException ex) {
-                return userRepository.findByEmail(FloraGroupChatTrigger.FLORA_EMAIL).orElseThrow(() -> ex);
+                return userRepository.findByEmail(FloraGroupChatTrigger.FLORA_EMAIL)
+                        .map(this::ensureFloraAvatar)
+                        .orElseThrow(() -> ex);
             }
         });
+    }
+
+    private User ensureFloraAvatar(User flora) {
+        if (flora.getAvatarUrl() == null || flora.getAvatarUrl().isBlank()) {
+            flora.setAvatarUrl(FloraGroupChatTrigger.FLORA_AVATAR_URL);
+            return userRepository.save(flora);
+        }
+        return flora;
     }
 
     static String formatReply(ChatbotResponse response) {

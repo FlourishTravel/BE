@@ -12,6 +12,8 @@ public final class FloraGroupChatTrigger {
     public static final String FLORA_EMAIL = "flora@flourishtravel.internal";
     public static final String FLORA_ROLE = "FLORA";
     public static final String FLORA_NAME = "Flora";
+    /** Ảnh nhân vật Flora trên website (public/flora/Flora-AI.png). */
+    public static final String FLORA_AVATAR_URL = "/flora/Flora-AI.png";
 
     private static final Pattern MENTION = Pattern.compile(
             "(?i)(?:^|\\s)(?:@flora\\b|flora\\s+ơi\\b|/flora\\b|hỏi\\s+flora\\b|flora\\s+giúp\\b|này\\s+flora\\b|flora\\s+ơi)");
