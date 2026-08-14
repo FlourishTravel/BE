@@ -1,4 +1,4 @@
-# Push main → SSH VPS → pull BE + rebuild container be
+# Build image on GitHub (2-core VPS cannot run Maven). VPS only docker load + start.
 name: Deploy BE to VPS
 
 on:
@@ -14,7 +14,27 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy over SSH
+      - uses: actions/checkout@v4
+
+      - name: Build API image on GitHub
+        run: docker build -t flourish-be:gha .
+
+      - name: Save image
+        run: docker save flourish-be:gha | gzip -1 > flourish-be.tar.gz
+
+      - name: Copy image to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          source: flourish-be.tar.gz
+          target: /tmp
+          timeout: 600s
+          overwrite: true
+
+      - name: Load image and start API
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -22,43 +42,39 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
           script_stop: true
-          command_timeout: 30m
+          command_timeout: 20m
           script: |
             set -e
+            mkdir -p /var/lock
+            exec 9>/var/lock/flourish-deploy.lock
+            flock -w 900 9
+
             cd ~/flourish
 
-            echo "=== disk before cleanup ==="
-            df -h /
-            docker system df || true
-            # Do not prune volumes — that would wipe Postgres data.
+            echo "=== stop Maven/buildkit on the 2-core VPS ==="
+            docker ps --format '{{.ID}} {{.Image}}' | grep -iE 'maven|buildkit|moby/buildkit' | awk '{print $1}' | xargs -r docker stop || true
+
             find /var/lib/docker/containers -name '*-json.log' -exec truncate -s 0 {} \; 2>/dev/null || true
-            docker container prune -f || true
-            docker builder prune -af || true
-            docker image prune -af || true
-            docker system prune -af || true
-            journalctl --vacuum-size=50M || true
-            apt-get clean || true
-            find /var/log -type f \( -name "*.log" -o -name "*.gz" \) -size +10M -exec truncate -s 0 {} \; 2>/dev/null || true
-            truncate -s 0 /var/log/nginx/access.log /var/log/nginx/error.log 2>/dev/null || true
-            if [ -d FE/.git ]; then
-              git -C FE gc --prune=now || true
-            fi
-            echo "=== disk after cleanup ==="
             df -h /
-            docker compose restart db 2>/dev/null || docker compose restart postgres 2>/dev/null || true
-            sleep 8
+
+            echo "=== docker load (no Maven on VPS) ==="
+            gzip -dc /tmp/flourish-be.tar.gz | docker load
+            docker tag flourish-be:gha flourish-be:latest
+            docker tag flourish-be:gha flourish-be
+            docker tag flourish-be:gha flourish-be-be:latest || true
+            docker tag flourish-be:gha flourish_be:latest || true
+            docker compose config --images 2>/dev/null | grep -i be | while read -r img; do
+              docker tag flourish-be:gha "$img" || true
+            done
+            rm -f /tmp/flourish-be.tar.gz
 
             if [ -d BE/.git ]; then
               cd BE
-              git fetch origin
-              git reset --hard origin/main || git reset --hard origin/master
+              git fetch origin || true
+              git reset --hard origin/main || git reset --hard origin/master || true
               cd ..
-            else
-              echo "BE/.git not found"
-              exit 1
             fi
 
-            # Public URL cho upload/media (tránh lưu http://localhost:8080 vào DB)
             touch .env
             grep -q '^API_BASE_URL=' .env \
               && sed -i 's|^API_BASE_URL=.*|API_BASE_URL=https://flourishtravelapp.khanhtn45.id.vn/api|' .env \
@@ -82,38 +98,35 @@ jobs:
               done
             fi
 
-            # BE must not start while Postgres is still in crash recovery (57P03).
             pg_ok=0
-            for i in $(seq 1 60); do
+            for i in $(seq 1 40); do
               if docker compose exec -T postgres pg_isready -q 2>/dev/null \
                 || docker compose exec -T db pg_isready -q 2>/dev/null; then
                 pg_ok=1
                 break
               fi
-              echo "Waiting for PostgreSQL... ($i/60)"
+              echo "Waiting for PostgreSQL... ($i/40)"
               sleep 3
             done
             if [ "$pg_ok" != "1" ]; then
-              echo "PostgreSQL is not ready (still recovering or down)"
+              echo "PostgreSQL is not ready"
               docker compose ps
               docker compose logs postgres --tail 40 2>/dev/null || docker compose logs db --tail 40 2>/dev/null || true
               exit 1
             fi
 
-            docker compose up -d --build --force-recreate be
+            docker compose up -d --no-build --force-recreate be
             docker compose ps be
-            docker image prune -af || true
-            find /var/lib/docker/containers -name '*-json.log' -exec truncate -s 0 {} \; 2>/dev/null || true
+            docker image prune -f || true
 
-            # Spring Boot cần ~20–40s sau recreate; đĩa chậm thì lâu hơn
             ok=0
-            for i in $(seq 1 60); do
+            for i in $(seq 1 50); do
               if curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1 \
                 || curl -sf http://127.0.0.1:8080/actuator/health >/dev/null 2>&1; then
                 ok=1
                 break
               fi
-              echo "Waiting for BE health... ($i/60)"
+              echo "Waiting for BE health... ($i/50)"
               sleep 3
             done
             if [ "$ok" != "1" ]; then
@@ -121,7 +134,6 @@ jobs:
               df -h /
               docker compose ps
               docker compose logs be --tail 80
-              docker compose logs db --tail 30 2>/dev/null || docker compose logs postgres --tail 30 2>/dev/null || true
               exit 1
             fi
             echo "BE deploy OK"

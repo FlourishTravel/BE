@@ -13,5 +13,5 @@ COPY --from=build /app/target/flourish-travel-backend-1.0.0-SNAPSHOT.jar app.jar
 # Bắt buộc DB_PASSWORD khi profile cloud. Local H2: docker run -e SPRING_PROFILES_ACTIVE=dev ...
 ENV SPRING_PROFILES_ACTIVE=cloud
 EXPOSE 8080
-# TieredStopAtLevel=1: startup nhanh hơn trên container nhỏ (DO App Platform)
-ENTRYPOINT ["sh", "-c", "exec java -XX:+UseContainerSupport -XX:TieredStopAtLevel=1 -jar app.jar --spring.profiles.active=${SPRING_PROFILES_ACTIVE:-cloud}"]
+# 2 CPU / 2GB VPS: cap heap so Java không tranh CPU/RAM với Postgres
+ENTRYPOINT ["sh", "-c", "exec java -XX:+UseContainerSupport -XX:MaxRAMPercentage=40 -XX:TieredStopAtLevel=1 -jar app.jar --spring.profiles.active=${SPRING_PROFILES_ACTIVE:-cloud}"]
