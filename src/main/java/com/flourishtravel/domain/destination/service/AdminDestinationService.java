@@ -107,6 +107,7 @@ public class AdminDestinationService {
                 .slug(d.getSlug())
                 .name(d.getName())
                 .summary(d.getSummary())
+                .description(d.getDescription())
                 .heroImageUrl(d.getHeroImageUrl())
                 .rating(d.getRating())
                 .avgCostMinMillion(d.getAvgCostMinMillion())

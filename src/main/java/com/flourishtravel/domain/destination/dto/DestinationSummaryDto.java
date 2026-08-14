@@ -14,6 +14,7 @@ public class DestinationSummaryDto {
     private String slug;
     private String name;
     private String summary;
+    private String description;
     private String heroImageUrl;
     private BigDecimal rating;
     private Integer avgCostMinMillion;
