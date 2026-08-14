@@ -96,13 +96,20 @@ jobs:
               && sed -i 's|^FRONTEND_URL=.*|FRONTEND_URL=https://flourishtravelapp.khanhtn45.id.vn|' .env \
               || echo 'FRONTEND_URL=https://flourishtravelapp.khanhtn45.id.vn' >> .env
 
+            echo "=== write PayOS env (no secret dump) ==="
             upsert_env() {
               key="$1"
               val="$2"
-              [ -z "$val" ] && return 0
-              grep -q "^${key}=" .env \
-                && sed -i "s|^${key}=.*|${key}=${val}|" .env \
-                || echo "${key}=${val}" >> .env
+              if [ -z "$val" ]; then
+                return 0
+              fi
+              if [ -f .env ] && grep -q "^${key}=" .env; then
+                grep -v "^${key}=" .env > .env.tmp || true
+                printf '%s=%s\n' "$key" "$val" >> .env.tmp
+                mv .env.tmp .env
+              else
+                printf '%s=%s\n' "$key" "$val" >> .env
+              fi
             }
             upsert_env PAYOS_WEBHOOK_URL 'https://flourishtravelapp.khanhtn45.id.vn/api/payments/payos/webhook'
             upsert_env PAYOS_RETURN_URL 'https://flourishtravelapp.khanhtn45.id.vn/checkout/result'
@@ -110,7 +117,7 @@ jobs:
             upsert_env PAYOS_CLIENT_ID "${PAYOS_CLIENT_ID:-}"
             upsert_env PAYOS_API_KEY "${PAYOS_API_KEY:-}"
             upsert_env PAYOS_CHECKSUM_KEY "${PAYOS_CHECKSUM_KEY:-}"
-            if grep -q '^PAYOS_CLIENT_ID=.\+' .env && grep -q '^PAYOS_API_KEY=.\+' .env && grep -q '^PAYOS_CHECKSUM_KEY=.\+' .env; then
+            if grep -q '^PAYOS_CLIENT_ID=.' .env && grep -q '^PAYOS_API_KEY=.' .env && grep -q '^PAYOS_CHECKSUM_KEY=.' .env; then
               echo "PayOS credentials present on VPS"
             else
               echo "PayOS credentials missing — set GitHub secrets PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY"
