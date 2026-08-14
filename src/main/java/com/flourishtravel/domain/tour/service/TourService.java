@@ -625,6 +625,7 @@ public class TourService {
                 .locations(locations)
                 .sessions(sessions)
                 .destinationCity(tour.getDestinationCity())
+                .marketSegment(tour.getMarketSegment())
                 .rating(tour.getRating())
                 .badge(tour.getBadge())
                 .tags(splitCsv(tour.getTags()))

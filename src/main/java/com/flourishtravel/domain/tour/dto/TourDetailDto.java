@@ -42,6 +42,10 @@ public class TourDetailDto {
     private List<SessionDetail> sessions;
 
     private String destinationCity;
+
+    /** domestic | international | school | corporate */
+    private String marketSegment;
+
     private BigDecimal rating;
     private String badge;
     private List<String> tags;
