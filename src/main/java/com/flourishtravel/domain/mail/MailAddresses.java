@@ -1,11 +1,11 @@
 package com.flourishtravel.domain.mail;
 
-final class MailAddresses {
+public final class MailAddresses {
 
     private MailAddresses() {}
 
     /** "Flourish Travel &lt;a@gmail.com&gt;" hoặc "&lt;a@gmail.com&gt;" → a@gmail.com */
-    static String extractEmail(String raw) {
+    public static String extractEmail(String raw) {
         if (raw == null) return "";
         String value = raw.trim();
         int lt = value.lastIndexOf('<');
@@ -21,7 +21,7 @@ final class MailAddresses {
         return value;
     }
 
-    static String stripAppPassword(String raw) {
+    public static String stripAppPassword(String raw) {
         if (raw == null) return "";
         return raw.trim().replace(" ", "");
     }
