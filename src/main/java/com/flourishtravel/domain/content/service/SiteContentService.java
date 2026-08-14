@@ -134,7 +134,7 @@ public class SiteContentService {
     private String requiredType(String type) {
         String normalized = normalizeType(type);
         if (normalized == null || !ALLOWED_TYPES.contains(normalized)) {
-            throw new BadRequestException("type chỉ hỗ trợ news|story|career|help");
+            throw new BadRequestException("type chỉ hỗ trợ news, story, career, help, guide");
         }
         return normalized;
     }
