@@ -18,6 +18,7 @@ import com.flourishtravel.domain.booking.repository.BookingGuestRepository;
 import com.flourishtravel.domain.booking.repository.BookingRepository;
 import com.flourishtravel.domain.booking.repository.PromotionAssignmentRepository;
 import com.flourishtravel.domain.booking.repository.PromotionRepository;
+import com.flourishtravel.domain.mail.BookingInvoiceMailService;
 import com.flourishtravel.domain.payment.entity.Payment;
 import com.flourishtravel.domain.payment.repository.PaymentRepository;
 import com.flourishtravel.domain.payment.service.MomoPaymentCompletionService;
@@ -68,6 +69,7 @@ public class BookingService {
     private final MomoPaymentCompletionService momoPaymentCompletionService;
     private final PayOSPaymentService payOSPaymentService;
     private final BookingRefundEligibility bookingRefundEligibility;
+    private final BookingInvoiceMailService bookingInvoiceMailService;
 
     @Value("${app.frontend.url:http://localhost:5173}")
     private String frontendUrl;
@@ -391,6 +393,11 @@ public class BookingService {
         paymentRepository.save(payment);
 
         String paymentUrl = resolveCheckoutPaymentUrl(booking.getId(), orderId, amountVnd, requestId, pm, payosOrderCode);
+        try {
+            bookingInvoiceMailService.sendAfterCommit(booking, payment, paymentUrl, false);
+        } catch (Exception e) {
+            log.warn("Booking invoice mail skipped booking={}: {}", booking.getId(), e.getMessage());
+        }
         return CreateBookingResponse.builder()
                 .bookingId(booking.getId())
                 .orderId(orderId)

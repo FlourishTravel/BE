@@ -4,6 +4,7 @@ import com.flourishtravel.domain.booking.entity.Booking;
 import com.flourishtravel.domain.booking.repository.BookingRepository;
 import com.flourishtravel.domain.booking.service.SessionParticipantSyncService;
 import com.flourishtravel.domain.chat.service.ChatService;
+import com.flourishtravel.domain.mail.BookingInvoiceMailService;
 import com.flourishtravel.domain.notification.entity.Notification;
 import com.flourishtravel.domain.notification.repository.NotificationRepository;
 import com.flourishtravel.domain.payment.entity.Payment;
@@ -31,6 +32,7 @@ public class MomoPaymentCompletionService {
     private final TourSessionRepository sessionRepository;
     private final ChatService chatService;
     private final NotificationRepository notificationRepository;
+    private final BookingInvoiceMailService bookingInvoiceMailService;
 
     @Transactional
     public void applyPaidByOrderId(String orderId, String transId) {
@@ -71,6 +73,11 @@ public class MomoPaymentCompletionService {
                 .isRead(false)
                 .build();
         notificationRepository.save(notif);
+        try {
+            bookingInvoiceMailService.sendAfterCommit(booking, payment, null, true);
+        } catch (Exception e) {
+            log.warn("Paid invoice mail skipped booking={}: {}", booking.getId(), e.getMessage());
+        }
     }
 
     @Transactional
