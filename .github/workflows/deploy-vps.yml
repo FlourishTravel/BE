@@ -36,11 +36,16 @@ jobs:
 
       - name: Load image and start API
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          PAYOS_CLIENT_ID: ${{ secrets.PAYOS_CLIENT_ID }}
+          PAYOS_API_KEY: ${{ secrets.PAYOS_API_KEY }}
+          PAYOS_CHECKSUM_KEY: ${{ secrets.PAYOS_CHECKSUM_KEY }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
+          envs: PAYOS_CLIENT_ID,PAYOS_API_KEY,PAYOS_CHECKSUM_KEY
           script_stop: true
           command_timeout: 20m
           script: |
@@ -87,11 +92,35 @@ jobs:
             grep -q '^MAIL_PASSWORD=' .env || echo 'MAIL_PASSWORD=' >> .env
             grep -q '^MAIL_FROM=' .env || echo 'MAIL_FROM=' >> .env
 
+            grep -q '^FRONTEND_URL=' .env \
+              && sed -i 's|^FRONTEND_URL=.*|FRONTEND_URL=https://flourishtravelapp.khanhtn45.id.vn|' .env \
+              || echo 'FRONTEND_URL=https://flourishtravelapp.khanhtn45.id.vn' >> .env
+
+            upsert_env() {
+              key="$1"
+              val="$2"
+              [ -z "$val" ] && return 0
+              grep -q "^${key}=" .env \
+                && sed -i "s|^${key}=.*|${key}=${val}|" .env \
+                || echo "${key}=${val}" >> .env
+            }
+            upsert_env PAYOS_WEBHOOK_URL 'https://flourishtravelapp.khanhtn45.id.vn/api/payments/payos/webhook'
+            upsert_env PAYOS_RETURN_URL 'https://flourishtravelapp.khanhtn45.id.vn/checkout/result'
+            upsert_env PAYOS_CANCEL_URL 'https://flourishtravelapp.khanhtn45.id.vn/checkout/result'
+            upsert_env PAYOS_CLIENT_ID "${PAYOS_CLIENT_ID:-}"
+            upsert_env PAYOS_API_KEY "${PAYOS_API_KEY:-}"
+            upsert_env PAYOS_CHECKSUM_KEY "${PAYOS_CHECKSUM_KEY:-}"
+            if grep -q '^PAYOS_CLIENT_ID=.\+' .env && grep -q '^PAYOS_API_KEY=.\+' .env && grep -q '^PAYOS_CHECKSUM_KEY=.\+' .env; then
+              echo "PayOS credentials present on VPS"
+            else
+              echo "PayOS credentials missing — set GitHub secrets PAYOS_CLIENT_ID, PAYOS_API_KEY, PAYOS_CHECKSUM_KEY"
+            fi
+
             if ! grep -q 'API_BASE_URL' docker-compose.yml; then
               sed -i '/FRONTEND_URL: \${FRONTEND_URL}/a\      API_BASE_URL: ${API_BASE_URL}' docker-compose.yml
             fi
             if grep -q 'FRONTEND_URL: \${FRONTEND_URL}' docker-compose.yml; then
-              for key in MAIL_ENABLED MAIL_HOST MAIL_PORT MAIL_USERNAME MAIL_PASSWORD MAIL_FROM; do
+              for key in MAIL_ENABLED MAIL_HOST MAIL_PORT MAIL_USERNAME MAIL_PASSWORD MAIL_FROM PAYOS_CLIENT_ID PAYOS_API_KEY PAYOS_CHECKSUM_KEY PAYOS_WEBHOOK_URL PAYOS_RETURN_URL PAYOS_CANCEL_URL; do
                 if ! grep -q "${key}:" docker-compose.yml; then
                   sed -i "/FRONTEND_URL: \${FRONTEND_URL}/a\\      ${key}: \${${key}:-}" docker-compose.yml
                 fi
