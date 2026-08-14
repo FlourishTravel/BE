@@ -158,6 +158,7 @@ public class SiteContentService {
                 .published(content.getPublished())
                 .sortOrder(content.getSortOrder())
                 .publishedAt(content.getPublishedAt())
+                .createdAt(content.getCreatedAt())
                 .build();
     }
 }

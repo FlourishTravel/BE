@@ -20,4 +20,5 @@ public class SiteContentDto {
     private Boolean published;
     private Integer sortOrder;
     private Instant publishedAt;
+    private Instant createdAt;
 }
