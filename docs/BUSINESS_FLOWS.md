@@ -335,7 +335,7 @@ flowchart TD
 
     A4 --> A5["PUT /tours/admin/{id}/itinerary\nngày + activities"]
     A4 --> A6["PUT /tours/admin/{id}/locations\nđịa điểm theo ngày"]
-    A4 --> A7["GET geocode\nVietMap"]
+    A4 --> A7["GET geocode\nGoong"]
 
     A5 --> PUB["Tour public\nGET /tours"]
     A6 --> PUB

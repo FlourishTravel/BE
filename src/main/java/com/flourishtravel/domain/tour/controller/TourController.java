@@ -68,7 +68,7 @@ public class TourController {
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
-    /** Tra cứu tọa độ địa điểm qua VietMap (admin itinerary builder). */
+    /** Tra cứu tọa độ địa điểm qua Goong.io (admin itinerary builder). */
     @GetMapping("/admin/geocode")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<GeocodeResultDto>> geocodeActivity(

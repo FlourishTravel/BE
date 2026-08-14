@@ -24,8 +24,8 @@ public class ChatbotExternalApiConfig {
         return builder.build();
     }
 
-    @Bean("vietMapRestClient")
-    public RestClient vietMapRestClient() {
+    @Bean("goongRestClient")
+    public RestClient goongRestClient() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout((int) Duration.ofSeconds(8).toMillis());
         factory.setReadTimeout((int) Duration.ofSeconds(15).toMillis());

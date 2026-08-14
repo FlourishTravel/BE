@@ -1,7 +1,7 @@
 package com.flourishtravel.domain.tour.service;
 
 import com.flourishtravel.common.exception.BadRequestException;
-import com.flourishtravel.domain.tour.client.VietMapClient;
+import com.flourishtravel.domain.tour.client.GoongClient;
 import com.flourishtravel.domain.tour.dto.GeocodeResultDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,18 +16,18 @@ import java.util.List;
 @Slf4j
 public class GeocodeService {
 
-    private static final String PROVIDER = "vietmap";
+    private static final String PROVIDER = "goong";
 
-    private final VietMapClient vietMapClient;
+    private final GoongClient goongClient;
 
     public GeocodeResultDto resolveActivityCoordinates(
             String locationName,
             String locationAddress,
             String destinationCity) {
-        if (!vietMapClient.isConfigured()) {
+        if (!goongClient.isConfigured()) {
             throw new BadRequestException(
-                    "Chưa cấu hình VietMap API key trên server (VIETMAP_API_KEY hoặc MAP_VIET_ACESS_KEY). "
-                            + "Lấy key tại https://maps.vietmap.vn/console");
+                    "Chưa cấu hình Goong API key trên server (GOONG_API_KEY). "
+                            + "Lấy REST API key tại https://account.goong.io");
         }
 
         List<String> queries = buildQueries(locationName, locationAddress, destinationCity);
@@ -37,7 +37,7 @@ public class GeocodeService {
 
         for (String query : queries) {
             try {
-                var hit = vietMapClient.geocode(query);
+                var hit = goongClient.geocode(query);
                 if (hit.isPresent()) {
                     var h = hit.get();
                     return GeocodeResultDto.builder()
@@ -52,18 +52,19 @@ public class GeocodeService {
             }
         }
 
-        if (vietMapClient.hadAuthError()) {
+        if (goongClient.hadAuthError()) {
             throw new BadRequestException(
-                    "VietMap từ chối API key (401/403). Kiểm tra VIETMAP_API_KEY trên server và giới hạn IP/domain trên VietMap Console.");
+                    "Goong từ chối API key. Kiểm tra GOONG_API_KEY trên server "
+                            + "(REST API key, không phải Map tiles key) tại https://account.goong.io");
         }
 
         throw new BadRequestException(
-                "Không tìm thấy tọa độ trên VietMap cho: "
+                "Không tìm thấy tọa độ trên Goong cho: "
                         + String.join(" | ", queries.subList(0, Math.min(queries.size(), 2)))
                         + ". Thử tên ngắn hơn hoặc nhập Lat/Lng thủ công.");
     }
 
-    /** Ưu tiên tên địa điểm ngắn trước địa chỉ dài — VietMap hay match tốt hơn. */
+    /** Ưu tiên tên địa điểm ngắn trước địa chỉ dài. */
     static List<String> buildQueries(String locationName, String locationAddress, String destinationCity) {
         LinkedHashSet<String> queries = new LinkedHashSet<>();
         String name = trimToNull(locationName);

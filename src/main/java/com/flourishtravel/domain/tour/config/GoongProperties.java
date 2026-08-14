@@ -6,13 +6,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * VietMap API key — đọc từ nhiều tên biến env (tránh DO set VIETMAP_API_KEY rỗng chặn fallback).
+ * Goong REST API key — admin geocode itinerary.
+ * @see <a href="https://account.goong.io">account.goong.io</a>
  */
 @Component
 @Getter
-public class VietMapProperties {
+public class GoongProperties {
 
-    @Value("${app.vietmap.api-key:}")
+    @Value("${app.goong.api-key:}")
     private String apiKey;
 
     @PostConstruct
@@ -21,9 +22,8 @@ public class VietMapProperties {
             return;
         }
         apiKey = firstPresent(
-                System.getenv("MAP_VIET_ACESS_KEY"),
-                System.getenv("MAP_VIET_ACCESS_KEY"),
-                System.getenv("VIETMAP_API_KEY"));
+                System.getenv("GOONG_API_KEY"),
+                System.getenv("GOONG_MAPS_API_KEY"));
         if (apiKey == null) {
             apiKey = "";
         }

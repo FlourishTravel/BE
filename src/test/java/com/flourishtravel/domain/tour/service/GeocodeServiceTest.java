@@ -1,7 +1,7 @@
 package com.flourishtravel.domain.tour.service;
 
 import com.flourishtravel.common.exception.BadRequestException;
-import com.flourishtravel.domain.tour.client.VietMapClient;
+import com.flourishtravel.domain.tour.client.GoongClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -18,28 +18,28 @@ import static org.mockito.Mockito.when;
 class GeocodeServiceTest {
 
     @Mock
-    private VietMapClient vietMapClient;
+    private GoongClient goongClient;
 
     @InjectMocks
     private GeocodeService geocodeService;
 
     @Test
     void throwsWhenApiKeyMissing() {
-        when(vietMapClient.isConfigured()).thenReturn(false);
+        when(goongClient.isConfigured()).thenReturn(false);
         assertThrows(BadRequestException.class, () ->
                 geocodeService.resolveActivityCoordinates("Hồ Gươm", null, null));
     }
 
     @Test
     void resolvesFromLocationName() {
-        when(vietMapClient.isConfigured()).thenReturn(true);
-        when(vietMapClient.geocode("Hồ Gươm"))
-                .thenReturn(Optional.of(new VietMapClient.VietMapGeocodeHit(21.0285, 105.852, "Hồ Gươm")));
+        when(goongClient.isConfigured()).thenReturn(true);
+        when(goongClient.geocode("Hồ Gươm"))
+                .thenReturn(Optional.of(new GoongClient.GoongGeocodeHit(21.0285, 105.852, "Hồ Gươm")));
 
         var result = geocodeService.resolveActivityCoordinates("Hồ Gươm", null, null);
 
         assertEquals(21.0285, result.getLatitude());
         assertEquals(105.852, result.getLongitude());
-        assertEquals("vietmap", result.getProvider());
+        assertEquals("goong", result.getProvider());
     }
 }
