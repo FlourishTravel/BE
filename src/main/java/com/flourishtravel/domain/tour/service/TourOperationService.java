@@ -2,6 +2,8 @@ package com.flourishtravel.domain.tour.service;
 
 import com.flourishtravel.common.exception.BadRequestException;
 import com.flourishtravel.common.exception.ResourceNotFoundException;
+import com.flourishtravel.domain.mail.GuideMailTemplates;
+import com.flourishtravel.domain.mail.MailAddresses;
 import com.flourishtravel.domain.mail.MailService;
 import com.flourishtravel.domain.notification.service.NotificationService;
 import com.flourishtravel.domain.tour.dto.AssignGuideRequest;
@@ -56,6 +58,15 @@ public class TourOperationService {
 
     @Value("${app.frontend.url:http://localhost:5173}")
     private String frontendUrl;
+
+    @Value("${app.mail.support-email:}")
+    private String supportEmail;
+
+    @Value("${app.mail.hotline:}")
+    private String hotline;
+
+    @Value("${app.mail.username:}")
+    private String mailUsername;
 
     private final TourSessionRepository tourSessionRepository;
     private final UserRepository userRepository;
@@ -202,11 +213,7 @@ public class TourOperationService {
     private void dispatchGuideAssignment(User assigned, User previous, UUID sessionId,
                                          String tourTitle, LocalDate start, LocalDate end, String note) {
         String dateRange = formatDateRange(start, end);
-        String portalUrl = trimSlash(frontendUrl) + "/guide/tours";
-        String safeTitle = MailService.escape(tourTitle);
-        String safeNote = StringUtils.hasText(note)
-                ? "<p><strong>Ghi chú điều hành:</strong> " + MailService.escape(note) + "</p>"
-                : "";
+        GuideMailTemplates.Contact contact = mailContact();
 
         if (assigned != null && assigned.getId() != null) {
             String title = "Bạn được phân công dẫn tour";
@@ -215,12 +222,7 @@ public class TourOperationService {
             mailService.sendHtml(
                     assigned.getEmail(),
                     "Flourish Travel — phân công: " + tourTitle,
-                    "<p>Xin chào " + MailService.escape(assigned.getFullName()) + ",</p>"
-                            + "<p>Bạn được phân công dẫn <strong>" + safeTitle + "</strong> (" + dateRange + ").</p>"
-                            + safeNote
-                            + "<p>Xem chi tiết trên portal HDV: <a href=\"" + MailService.escape(portalUrl) + "\">"
-                            + MailService.escape(portalUrl) + "</a></p>"
-                            + "<p>Flourish Travel</p>");
+                    GuideMailTemplates.assigned(assigned.getFullName(), tourTitle, dateRange, note, contact));
         }
 
         if (previous != null && previous.getId() != null) {
@@ -230,16 +232,25 @@ public class TourOperationService {
             mailService.sendHtml(
                     previous.getEmail(),
                     "Flourish Travel — đổi HDV: " + tourTitle,
-                    "<p>Xin chào " + MailService.escape(previous.getFullName()) + ",</p>"
-                            + "<p>Lịch <strong>" + safeTitle + "</strong> (" + dateRange
-                            + ") đã được điều hành phân công cho HDV khác.</p>"
-                            + "<p>Nếu đây là nhầm lẫn, liên hệ điều hành ngay.</p>"
-                            + "<p>Flourish Travel</p>");
+                    GuideMailTemplates.unassigned(previous.getFullName(), tourTitle, dateRange, contact));
         }
         log.info("[Operations] Notified guide {} for session {} (previous={})",
                 assigned != null ? assigned.getEmail() : null,
                 sessionId,
                 previous != null ? previous.getEmail() : null);
+    }
+
+    private GuideMailTemplates.Contact mailContact() {
+        String site = trimSlash(frontendUrl);
+        String email = StringUtils.hasText(supportEmail)
+                ? MailAddresses.extractEmail(supportEmail)
+                : MailAddresses.extractEmail(mailUsername);
+        return new GuideMailTemplates.Contact(
+                site,
+                site + "/guide/tours",
+                site + "/help",
+                email,
+                hotline);
     }
 
     private static void runAfterCommit(Runnable action) {

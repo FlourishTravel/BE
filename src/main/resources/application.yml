@@ -120,6 +120,8 @@ app:
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
     from: ${MAIL_FROM:${MAIL_USERNAME:}}
+    support-email: ${MAIL_SUPPORT_EMAIL:${MAIL_FROM:${MAIL_USERNAME:}}}
+    hotline: ${MAIL_HOTLINE:}
   # Public URL (có /api) khi deploy; local: http://localhost:8080
   api-base-url: ${API_BASE_URL:http://localhost:8080}
   upload:
