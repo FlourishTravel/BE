@@ -22,6 +22,24 @@ jobs:
       - name: Save image
         run: docker save flourish-be:gha | gzip -1 > flourish-be.tar.gz
 
+      # /tmp is sticky: leftover flourish-be.tar.gz owned by another user
+      # (often root from a prior deploy) cannot be overwritten → tar Permission denied.
+      - name: Clear leftover tarball on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set +e
+            rm -f /tmp/flourish-be.tar.gz
+            sudo -n rm -f /tmp/flourish-be.tar.gz
+            mkdir -p "/tmp/flourish-gha-${{ github.run_id }}"
+            chmod 755 "/tmp/flourish-gha-${{ github.run_id }}"
+            df -h /
+            ls -ld /tmp /tmp/flourish-be.tar.gz "/tmp/flourish-gha-${{ github.run_id }}" || true
+
       - name: Copy image to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -30,7 +48,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
           source: flourish-be.tar.gz
-          target: /tmp
+          target: /tmp/flourish-gha-${{ github.run_id }}
           timeout: 600s
           overwrite: true
 
@@ -63,7 +81,7 @@ jobs:
             df -h /
 
             echo "=== docker load (no Maven on VPS) ==="
-            gzip -dc /tmp/flourish-be.tar.gz | docker load
+            gzip -dc "/tmp/flourish-gha-${{ github.run_id }}/flourish-be.tar.gz" | docker load
             docker tag flourish-be:gha flourish-be:latest
             docker tag flourish-be:gha flourish-be
             docker tag flourish-be:gha flourish-be-be:latest || true
@@ -71,6 +89,7 @@ jobs:
             docker compose config --images 2>/dev/null | grep -i be | while read -r img; do
               docker tag flourish-be:gha "$img" || true
             done
+            rm -rf "/tmp/flourish-gha-${{ github.run_id }}"
             rm -f /tmp/flourish-be.tar.gz
 
             if [ -d BE/.git ]; then
