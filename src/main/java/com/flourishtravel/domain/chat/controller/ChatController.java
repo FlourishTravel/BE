@@ -4,7 +4,6 @@ import com.flourishtravel.common.dto.ApiResponse;
 import com.flourishtravel.domain.chat.dto.ChatMessageViewDto;
 import com.flourishtravel.domain.chat.dto.TourChatContextDto;
 import com.flourishtravel.domain.chat.entity.Message;
-import com.flourishtravel.domain.chat.entity.MessageReaction;
 import com.flourishtravel.domain.chat.service.ChatService;
 import com.flourishtravel.security.UserPrincipal;
 import lombok.Data;
@@ -55,7 +54,9 @@ public class ChatController {
             return ResponseEntity.status(401).build();
         }
         String content = body != null ? body.getContent() : null;
-        ChatMessageViewDto dto = chatService.sendBookingChatMessage(bookingId, principal.getId(), content);
+        UUID replyToMessageId = body != null ? body.getReplyToMessageId() : null;
+        ChatMessageViewDto dto = chatService.sendBookingChatMessage(
+                bookingId, principal.getId(), content, replyToMessageId);
         return ResponseEntity.ok(ApiResponse.ok("Đã gửi", dto));
     }
 
@@ -94,16 +95,16 @@ public class ChatController {
     }
 
     @PostMapping("/messages/{messageId}/reactions")
-    public ResponseEntity<ApiResponse<MessageReaction>> addReaction(
+    public ResponseEntity<ApiResponse<ChatMessageViewDto>> toggleReaction(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID messageId,
             @RequestBody(required = false) ReactionRequest body) {
         if (principal == null) {
             return ResponseEntity.status(401).build();
         }
-        String type = body != null && body.getReactionType() != null ? body.getReactionType() : "like";
-        MessageReaction reaction = chatService.addReaction(messageId, principal.getId(), type);
-        return ResponseEntity.ok(ApiResponse.ok(reaction));
+        String type = body != null ? body.getReactionType() : null;
+        ChatMessageViewDto dto = chatService.toggleReaction(messageId, principal.getId(), type);
+        return ResponseEntity.ok(ApiResponse.ok(dto));
     }
 
     @Data
@@ -114,5 +115,6 @@ public class ChatController {
     @Data
     public static class SendMessageRequest {
         private String content;
+        private UUID replyToMessageId;
     }
 }

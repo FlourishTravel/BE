@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -33,4 +35,7 @@ public class TourChatContextDto {
     private boolean canChat;
     /** Lý do không mở chat (hiển thị cho user). */
     private String denyReason;
+    /** Thành viên phòng (kèm Flora) — dùng cho gắn @. */
+    @Builder.Default
+    private List<ChatMemberViewDto> members = new ArrayList<>();
 }

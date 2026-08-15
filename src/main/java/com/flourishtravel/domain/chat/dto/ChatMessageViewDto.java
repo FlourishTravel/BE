@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Data
@@ -22,7 +24,11 @@ public class ChatMessageViewDto {
     private String senderName;
     /** Ảnh đại diện người gửi (có thể là path /uploads/...). */
     private String senderAvatarUrl;
-    /** ADMIN | TOUR_GUIDE | TRAVELER | ... */
+    /** ADMIN | TOUR_GUIDE | TRAVELER | FLORA | ... */
     private String senderRole;
     private Boolean isPinned;
+    /** Tin nhắn đang được trả lời (nếu có). */
+    private ChatReplyPreviewDto replyTo;
+    @Builder.Default
+    private List<ChatReactionSummaryDto> reactions = new ArrayList<>();
 }

@@ -77,14 +77,7 @@ public class TourGroupFloraService {
             return;
         }
 
-        User flora = ensureFloraUser();
-        if (!chatMemberRepository.existsByRoomAndUser(room, flora)) {
-            chatMemberRepository.save(ChatMember.builder()
-                    .room(room)
-                    .user(flora)
-                    .joinedAt(java.time.Instant.now())
-                    .build());
-        }
+        User flora = ensureFloraInRoom(room);
 
         String question = FloraGroupChatTrigger.stripMention(rawContent);
         if (question.isBlank()) {
@@ -123,6 +116,18 @@ public class TourGroupFloraService {
                 .messageType("flora")
                 .content(text)
                 .build());
+    }
+
+    public User ensureFloraInRoom(ChatRoom room) {
+        User flora = ensureFloraUser();
+        if (room != null && !chatMemberRepository.existsByRoomAndUser(room, flora)) {
+            chatMemberRepository.save(ChatMember.builder()
+                    .room(room)
+                    .user(flora)
+                    .joinedAt(java.time.Instant.now())
+                    .build());
+        }
+        return flora;
     }
 
     public synchronized User ensureFloraUser() {

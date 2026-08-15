@@ -26,6 +26,10 @@ public class Message extends BaseEntity {
     @JoinColumn(name = "sender_id", nullable = false)
     private User sender;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reply_to_id")
+    private Message replyTo;
+
     @Column(name = "message_type", nullable = false, length = 30)
     @Builder.Default
     private String messageType = "text";

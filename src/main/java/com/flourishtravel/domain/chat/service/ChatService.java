@@ -4,9 +4,13 @@ import com.flourishtravel.common.exception.BadRequestException;
 import com.flourishtravel.common.exception.ResourceNotFoundException;
 import com.flourishtravel.domain.booking.entity.Booking;
 import com.flourishtravel.domain.booking.repository.BookingRepository;
+import com.flourishtravel.domain.chat.ChatReactionTypes;
 import com.flourishtravel.domain.chat.FloraGroupChatTrigger;
 import com.flourishtravel.domain.chat.TourGroupChatFloraEvent;
+import com.flourishtravel.domain.chat.dto.ChatMemberViewDto;
 import com.flourishtravel.domain.chat.dto.ChatMessageViewDto;
+import com.flourishtravel.domain.chat.dto.ChatReactionSummaryDto;
+import com.flourishtravel.domain.chat.dto.ChatReplyPreviewDto;
 import com.flourishtravel.domain.chat.dto.TourChatContextDto;
 import com.flourishtravel.domain.chat.entity.ChatMember;
 import com.flourishtravel.domain.chat.entity.ChatRoom;
@@ -31,10 +35,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -47,9 +55,11 @@ public class ChatService {
     private final UserRepository userRepository;
     private final BookingRepository bookingRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final TourGroupFloraService tourGroupFloraService;
 
     private static final int DEFAULT_LIMIT = 50;
     private static final int MAX_LIMIT = 100;
+    private static final int REPLY_PREVIEW_MAX = 140;
     private static final Set<String> CHAT_ELIGIBLE_STATUSES = Set.of("paid", "confirmed", "completed");
 
     public boolean isChatEligibleBookingStatus(String bookingStatus) {
@@ -173,6 +183,7 @@ public class ChatService {
         }
         if (eligible && room != null) {
             ensureGuideInChatRoom(session, room);
+            tourGroupFloraService.ensureFloraInRoom(room);
         }
 
         boolean isMember = room != null && chatMemberRepository.existsByRoomAndUser(room, actor);
@@ -204,6 +215,7 @@ public class ChatService {
                 .guideAvatarUrl(guideAvatarUrl)
                 .canChat(canChat)
                 .denyReason(denyReason)
+                .members(room != null ? toMemberViewDtos(room) : List.of())
                 .build();
     }
 
@@ -219,6 +231,7 @@ public class ChatService {
         ChatRoom room = chatRoomRepository.findBySession_Id(booking.getSession().getId())
                 .orElseGet(() -> ensureChatRoomForSession(booking.getSession()));
         ensureGuideInChatRoom(booking.getSession(), room);
+        tourGroupFloraService.ensureFloraInRoom(room);
         if (!chatMemberRepository.existsByRoomAndUser(room, actor)) {
             throw new BadRequestException("Bạn chưa tham gia phòng chat này.");
         }
@@ -227,11 +240,11 @@ public class ChatService {
         List<Message> desc = messageRepository.findByRoomOrderByCreatedAtDesc(room, page);
         List<Message> chronological = new ArrayList<>(desc);
         Collections.reverse(chronological);
-        return chronological.stream().map(this::toMessageViewDto).toList();
+        return toMessageViewDtos(chronological, actor.getId());
     }
 
     @Transactional
-    public ChatMessageViewDto sendBookingChatMessage(UUID bookingId, UUID userId, String content) {
+    public ChatMessageViewDto sendBookingChatMessage(UUID bookingId, UUID userId, String content, UUID replyToMessageId) {
         String trimmed = content == null ? "" : content.trim();
         if (trimmed.isEmpty()) {
             throw new BadRequestException("Nội dung tin nhắn không được trống.");
@@ -249,12 +262,15 @@ public class ChatService {
         ChatRoom room = chatRoomRepository.findBySession_Id(booking.getSession().getId())
                 .orElseGet(() -> ensureChatRoomForSession(booking.getSession()));
         ensureGuideInChatRoom(booking.getSession(), room);
+        tourGroupFloraService.ensureFloraInRoom(room);
         if (!chatMemberRepository.existsByRoomAndUser(room, actor)) {
             throw new BadRequestException("Bạn chưa tham gia phòng chat này.");
         }
+        Message replyTo = resolveReplyTarget(room, replyToMessageId);
         Message msg = Message.builder()
                 .room(room)
                 .sender(actor)
+                .replyTo(replyTo)
                 .messageType("text")
                 .content(trimmed)
                 .build();
@@ -262,10 +278,106 @@ public class ChatService {
         if (!FloraGroupChatTrigger.isFloraEmail(actor.getEmail())) {
             eventPublisher.publishEvent(new TourGroupChatFloraEvent(bookingId, userId, trimmed));
         }
-        return toMessageViewDto(msg);
+        return toMessageViewDto(msg, actor.getId(), List.of());
     }
 
-    private ChatMessageViewDto toMessageViewDto(Message msg) {
+    @Transactional
+    public ChatMessageViewDto toggleReaction(UUID messageId, UUID userId, String reactionType) {
+        Message msg = messageRepository.findById(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Message", messageId));
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", userId));
+        if (!chatMemberRepository.existsByRoomAndUser(msg.getRoom(), user)) {
+            throw new BadRequestException("Bạn không ở trong phòng chat này");
+        }
+        String type = ChatReactionTypes.normalize(reactionType);
+        List<MessageReaction> mine = messageReactionRepository.findByMessageAndUser(msg, user);
+        boolean sameAlready = mine.stream().anyMatch(r -> type.equals(r.getReactionType()));
+        if (!mine.isEmpty()) {
+            messageReactionRepository.deleteAll(mine);
+            messageReactionRepository.flush();
+        }
+        if (!sameAlready) {
+            messageReactionRepository.save(MessageReaction.builder()
+                    .message(msg)
+                    .user(user)
+                    .reactionType(type)
+                    .build());
+        }
+        List<MessageReaction> all = messageReactionRepository.findByMessage_IdIn(List.of(msg.getId()));
+        return toMessageViewDto(msg, userId, all);
+    }
+
+    private Message resolveReplyTarget(ChatRoom room, UUID replyToMessageId) {
+        if (replyToMessageId == null) {
+            return null;
+        }
+        Message replyTo = messageRepository.findById(replyToMessageId)
+                .orElseThrow(() -> new BadRequestException("Tin nhắn được trả lời không còn tồn tại."));
+        if (replyTo.getRoom() == null || !replyTo.getRoom().getId().equals(room.getId())) {
+            throw new BadRequestException("Chỉ được trả lời tin nhắn trong cùng phòng chat.");
+        }
+        return replyTo;
+    }
+
+    private List<ChatMemberViewDto> toMemberViewDtos(ChatRoom room) {
+        Map<UUID, ChatMemberViewDto> unique = new LinkedHashMap<>();
+        for (ChatMember member : chatMemberRepository.findByRoom(room)) {
+            User u = member.getUser();
+            if (u == null || u.getId() == null) {
+                continue;
+            }
+            unique.putIfAbsent(u.getId(), toMemberViewDto(u));
+        }
+        List<ChatMemberViewDto> list = new ArrayList<>(unique.values());
+        list.sort(Comparator
+                .comparing((ChatMemberViewDto m) -> !m.isFlora())
+                .thenComparing(m -> roleRank(m.getRole()))
+                .thenComparing(m -> m.getFullName() == null ? "" : m.getFullName(), String.CASE_INSENSITIVE_ORDER));
+        return list;
+    }
+
+    private ChatMemberViewDto toMemberViewDto(User user) {
+        boolean flora = FloraGroupChatTrigger.isFloraEmail(user.getEmail());
+        String roleName = user.getRole() != null ? user.getRole().getName() : "TRAVELER";
+        if (flora) {
+            roleName = FloraGroupChatTrigger.FLORA_ROLE;
+        }
+        return ChatMemberViewDto.builder()
+                .userId(user.getId())
+                .fullName(flora ? FloraGroupChatTrigger.FLORA_NAME : user.getFullName())
+                .avatarUrl(user.getAvatarUrl())
+                .role(roleName)
+                .flora(flora)
+                .build();
+    }
+
+    private static int roleRank(String role) {
+        if (role == null) {
+            return 9;
+        }
+        return switch (role.toUpperCase(Locale.ROOT)) {
+            case "FLORA" -> 0;
+            case "TOUR_GUIDE" -> 1;
+            case "ADMIN" -> 2;
+            default -> 3;
+        };
+    }
+
+    private List<ChatMessageViewDto> toMessageViewDtos(List<Message> messages, UUID currentUserId) {
+        if (messages == null || messages.isEmpty()) {
+            return List.of();
+        }
+        List<UUID> ids = messages.stream().map(Message::getId).toList();
+        Map<UUID, List<MessageReaction>> byMessage = messageReactionRepository.findByMessage_IdIn(ids)
+                .stream()
+                .collect(Collectors.groupingBy(r -> r.getMessage().getId()));
+        return messages.stream()
+                .map(m -> toMessageViewDto(m, currentUserId, byMessage.getOrDefault(m.getId(), List.of())))
+                .toList();
+    }
+
+    private ChatMessageViewDto toMessageViewDto(Message msg, UUID currentUserId, List<MessageReaction> reactions) {
         User s = msg.getSender();
         String roleName = s.getRole() != null ? s.getRole().getName() : "TRAVELER";
         if (FloraGroupChatTrigger.isFloraEmail(s.getEmail())) {
@@ -281,7 +393,43 @@ public class ChatService {
                 .senderAvatarUrl(s.getAvatarUrl())
                 .senderRole(roleName)
                 .isPinned(msg.getIsPinned())
+                .replyTo(toReplyPreview(msg.getReplyTo()))
+                .reactions(toReactionSummaries(reactions, currentUserId))
                 .build();
+    }
+
+    private ChatReplyPreviewDto toReplyPreview(Message replyTo) {
+        if (replyTo == null) {
+            return null;
+        }
+        User rs = replyTo.getSender();
+        String preview = replyTo.getContent() == null ? "" : replyTo.getContent().trim();
+        if (preview.length() > REPLY_PREVIEW_MAX) {
+            preview = preview.substring(0, REPLY_PREVIEW_MAX - 3) + "...";
+        }
+        return ChatReplyPreviewDto.builder()
+                .id(replyTo.getId())
+                .senderId(rs != null ? rs.getId() : null)
+                .senderName(rs != null ? rs.getFullName() : null)
+                .content(preview)
+                .build();
+    }
+
+    private List<ChatReactionSummaryDto> toReactionSummaries(List<MessageReaction> reactions, UUID currentUserId) {
+        if (reactions == null || reactions.isEmpty()) {
+            return List.of();
+        }
+        Map<String, List<MessageReaction>> grouped = reactions.stream()
+                .filter(r -> r.getReactionType() != null && !r.getReactionType().isBlank())
+                .collect(Collectors.groupingBy(MessageReaction::getReactionType, LinkedHashMap::new, Collectors.toList()));
+        return grouped.entrySet().stream()
+                .map(e -> ChatReactionSummaryDto.builder()
+                        .type(e.getKey())
+                        .count(e.getValue().size())
+                        .reactedByMe(currentUserId != null && e.getValue().stream().anyMatch(r ->
+                                r.getUser() != null && currentUserId.equals(r.getUser().getId())))
+                        .build())
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -319,26 +467,6 @@ public class ChatService {
         msg.setPinnedAt(null);
         msg.setPinnedBy(null);
         return messageRepository.save(msg);
-    }
-
-    @Transactional
-    public MessageReaction addReaction(UUID messageId, UUID userId, String reactionType) {
-        Message msg = messageRepository.findById(messageId).orElseThrow(() -> new ResourceNotFoundException("Message", messageId));
-        User user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
-        if (!chatMemberRepository.existsByRoomAndUser(msg.getRoom(), user)) {
-            throw new BadRequestException("Bạn không ở trong phòng chat này");
-        }
-        String type = reactionType != null && !reactionType.isBlank() ? reactionType.trim() : "like";
-        MessageReaction reaction = messageReactionRepository.findByMessageAndUserAndReactionType(msg, user, type)
-                .orElseGet(() -> {
-                    MessageReaction r = MessageReaction.builder()
-                            .message(msg)
-                            .user(user)
-                            .reactionType(type)
-                            .build();
-                    return messageReactionRepository.save(r);
-                });
-        return reaction;
     }
 
     private void ensureCanModifyRoom(ChatRoom room, User user) {

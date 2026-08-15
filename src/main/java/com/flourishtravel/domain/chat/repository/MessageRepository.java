@@ -13,6 +13,6 @@ import java.util.UUID;
 @Repository
 public interface MessageRepository extends JpaRepository<Message, UUID> {
 
-    @EntityGraph(attributePaths = {"sender", "sender.role"})
+    @EntityGraph(attributePaths = {"sender", "sender.role", "replyTo", "replyTo.sender"})
     List<Message> findByRoomOrderByCreatedAtDesc(ChatRoom room, Pageable pageable);
 }
