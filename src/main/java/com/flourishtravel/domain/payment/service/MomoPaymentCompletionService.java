@@ -82,19 +82,41 @@ public class MomoPaymentCompletionService {
 
     @Transactional
     public void applyFailedByOrderId(String orderId) {
+        applyFailedByOrderId(orderId, null);
+    }
+
+    @Transactional
+    public void applyFailedByOrderId(String orderId, String failureReason) {
         Optional<Payment> paymentOpt = paymentRepository.findByOrderId(orderId);
         if (paymentOpt.isEmpty()) {
             log.warn("MoMo fail: orderId not found: {}", orderId);
             return;
         }
         Payment payment = paymentOpt.get();
+        if ("paid".equalsIgnoreCase(payment.getStatus()) || "success".equalsIgnoreCase(payment.getStatus())) {
+            return;
+        }
         Booking booking = payment.getBooking();
+        String bookingStatus = booking == null || booking.getStatus() == null
+                ? ""
+                : booking.getStatus().toLowerCase();
+        if ("paid".equals(bookingStatus) || "confirmed".equals(bookingStatus) || "completed".equals(bookingStatus)) {
+            return;
+        }
 
         payment.setStatus("failed");
+        if (failureReason != null && !failureReason.isBlank()) {
+            payment.setFailureReason(failureReason);
+        }
         paymentRepository.save(payment);
 
-        booking.setStatus("cancelled");
-        bookingRepository.save(booking);
+        if (booking == null) {
+            return;
+        }
+        if (!"cancelled".equals(bookingStatus)) {
+            booking.setStatus("cancelled");
+            bookingRepository.save(booking);
+        }
         bookingRepository.flush();
         if (booking.getSession() != null) {
             sessionOccupancyService.sync(booking.getSession());

@@ -9,9 +9,11 @@ import org.springframework.stereotype.Repository;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -24,6 +26,20 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
     Optional<Payment> findByOrderId(String orderId);
 
     Optional<Payment> findByProviderAndPartnerCode(String provider, String partnerCode);
+
+    @EntityGraph(attributePaths = {"booking", "booking.session"})
+    @Query("""
+            SELECT p FROM Payment p
+            JOIN p.booking b
+            WHERE LOWER(p.status) = 'pending'
+              AND LOWER(COALESCE(b.status, '')) = 'pending'
+              AND LOWER(p.provider) IN :providers
+              AND p.createdAt <= :expiredBefore
+            ORDER BY p.createdAt ASC
+            """)
+    List<Payment> findExpiredPendingGatewayPayments(@Param("providers") Collection<String> providers,
+                                                    @Param("expiredBefore") Instant expiredBefore,
+                                                    Pageable pageable);
 
     Page<Payment> findByStatusOrderByCreatedAtDesc(String status, Pageable pageable);
 

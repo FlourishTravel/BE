@@ -95,6 +95,10 @@ app:
     return-url: ${PAYOS_RETURN_URL:http://localhost:5173/checkout/result}
     cancel-url: ${PAYOS_CANCEL_URL:http://localhost:5173/checkout/result}
 
+  booking:
+    pending-expire-seconds: ${BOOKING_PENDING_EXPIRE_SECONDS:900}
+    pending-expire-check-ms: ${BOOKING_PENDING_EXPIRE_CHECK_MS:60000}
+
   openrouter:
     api-key: ${OPENROUTER_API_KEY:}
     model: ${OPENROUTER_MODEL:google/gemini-3-flash-preview}

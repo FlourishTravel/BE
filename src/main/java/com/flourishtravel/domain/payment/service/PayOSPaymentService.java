@@ -17,6 +17,7 @@ import vn.payos.model.v2.paymentRequests.PaymentLinkStatus;
 import vn.payos.model.v2.paymentRequests.Transaction;
 import vn.payos.core.ClientOptions;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,6 +47,9 @@ public class PayOSPaymentService {
 
     @Value("${app.payos.cancel-url:}")
     private String cancelUrl;
+
+    @Value("${app.booking.pending-expire-seconds:" + PaymentHoldRules.DEFAULT_EXPIRE_SECONDS + "}")
+    private int pendingExpireSeconds;
 
     public boolean isConfigured() {
         return clientId != null && !clientId.isBlank()
@@ -94,6 +98,7 @@ public class PayOSPaymentService {
                 .description(safeDescription)
                 .returnUrl(redirectUrl)
                 .cancelUrl(cancel)
+                .expiredAt(PaymentHoldRules.expiredAtUnix(Instant.now(), pendingExpireSeconds).getEpochSecond())
                 .build();
 
         try {

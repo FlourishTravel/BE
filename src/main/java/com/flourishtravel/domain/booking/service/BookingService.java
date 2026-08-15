@@ -25,6 +25,7 @@ import com.flourishtravel.domain.payment.service.MomoPaymentCompletionService;
 import com.flourishtravel.domain.payment.service.MomoPaymentService;
 import com.flourishtravel.domain.payment.service.MomoPaymentService.MomoGatewayQueryResult;
 import com.flourishtravel.domain.payment.service.PayOSPaymentService;
+import com.flourishtravel.domain.payment.service.PaymentHoldRules;
 import com.flourishtravel.domain.payment.service.RefundReasonRules;
 import com.flourishtravel.domain.payment.entity.Refund;
 import com.flourishtravel.domain.payment.repository.RefundRepository;
@@ -74,6 +75,9 @@ public class BookingService {
 
     @Value("${app.frontend.url:http://localhost:5173}")
     private String frontendUrl;
+
+    @Value("${app.booking.pending-expire-seconds:" + PaymentHoldRules.DEFAULT_EXPIRE_SECONDS + "}")
+    private int pendingExpireSeconds;
 
     /**
      * Danh sách chuyến đi / đơn đã đặt của khách — payload an toàn cho API công khai (app user).
@@ -404,7 +408,7 @@ public class BookingService {
                 .bookingId(booking.getId())
                 .orderId(orderId)
                 .paymentUrl(paymentUrl)
-                .expiresInSeconds(15 * 60)
+                .expiresInSeconds(PaymentHoldRules.holdSeconds(pendingExpireSeconds))
                 .build();
     }
 
