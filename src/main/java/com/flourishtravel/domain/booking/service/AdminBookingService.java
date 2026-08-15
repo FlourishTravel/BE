@@ -68,6 +68,7 @@ public class AdminBookingService {
     private final UserRepository userRepository;
     private final SessionParticipantSyncService sessionParticipantSyncService;
     private final PayOSPaymentService payOSPaymentService;
+    private final SessionOccupancyService sessionOccupancyService;
 
     // ---------- Queries ----------
 
@@ -289,18 +290,14 @@ public class AdminBookingService {
         String current = b.getStatus() == null ? "pending" : b.getStatus().toLowerCase(Locale.ROOT);
         if ("pending".equals(current)) {
             cancelPendingPayOSLinks(b, reason);
-            releaseSeats(b);
-            b.setStatus("cancelled");
-            bookingRepository.save(b);
+            markCancelledAndSyncSeats(b);
             log.info("[AdminBooking] {} cancelled unpaid. reason={}", b.getId(), reason);
             return adminDetail(b.getId());
         }
 
         BigDecimal paid = computePaidAmount(b);
         if (paid.compareTo(BigDecimal.ZERO) <= 0) {
-            releaseSeats(b);
-            b.setStatus("cancelled");
-            bookingRepository.save(b);
+            markCancelledAndSyncSeats(b);
             return adminDetail(b.getId());
         }
 
@@ -362,9 +359,7 @@ public class AdminBookingService {
         refundRepository.save(refund);
 
         if (!"cancelled".equals(b.getStatus())) {
-            releaseSeats(b);
-            b.setStatus("cancelled");
-            bookingRepository.save(b);
+            markCancelledAndSyncSeats(b);
         }
         log.info("[AdminBooking] Refund {} settled amount={} payos={} by admin={}",
                 refund.getId(), amount, payosPaid != null, adminUserId);
@@ -420,12 +415,13 @@ public class AdminBookingService {
         }
     }
 
-    private void releaseSeats(Booking b) {
-        TourSession session = b.getSession();
-        if (session == null) return;
-        int newCount = Math.max(0, (session.getCurrentParticipants() == null ? 0 : session.getCurrentParticipants())
-                - (b.getGuestCount() == null ? 0 : b.getGuestCount()));
-        session.setCurrentParticipants(newCount);
+    private void markCancelledAndSyncSeats(Booking b) {
+        b.setStatus("cancelled");
+        bookingRepository.save(b);
+        bookingRepository.flush();
+        if (b.getSession() != null) {
+            sessionOccupancyService.sync(b.getSession());
+        }
     }
 
     private Refund pickRefundForAction(Booking b, UUID refundId) {
@@ -522,7 +518,7 @@ public class AdminBookingService {
                         .endDate(s.getEndDate())
                         .status(s.getStatus())
                         .maxParticipants(s.getMaxParticipants())
-                        .currentParticipants(s.getCurrentParticipants())
+                        .currentParticipants(sessionOccupancyService.heldSeats(s.getId()))
                         .build())
                 .guestCount(b.getGuestCount())
                 .totalAmount(b.getTotalAmount())

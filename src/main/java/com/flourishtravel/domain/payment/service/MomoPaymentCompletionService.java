@@ -2,6 +2,7 @@ package com.flourishtravel.domain.payment.service;
 
 import com.flourishtravel.domain.booking.entity.Booking;
 import com.flourishtravel.domain.booking.repository.BookingRepository;
+import com.flourishtravel.domain.booking.service.SessionOccupancyService;
 import com.flourishtravel.domain.booking.service.SessionParticipantSyncService;
 import com.flourishtravel.domain.chat.service.ChatService;
 import com.flourishtravel.domain.mail.BookingInvoiceMailService;
@@ -9,7 +10,6 @@ import com.flourishtravel.domain.notification.entity.Notification;
 import com.flourishtravel.domain.notification.repository.NotificationRepository;
 import com.flourishtravel.domain.payment.entity.Payment;
 import com.flourishtravel.domain.payment.repository.PaymentRepository;
-import com.flourishtravel.domain.tour.repository.TourSessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,7 +29,7 @@ public class MomoPaymentCompletionService {
     private final PaymentRepository paymentRepository;
     private final BookingRepository bookingRepository;
     private final SessionParticipantSyncService sessionParticipantSyncService;
-    private final TourSessionRepository sessionRepository;
+    private final SessionOccupancyService sessionOccupancyService;
     private final ChatService chatService;
     private final NotificationRepository notificationRepository;
     private final BookingInvoiceMailService bookingInvoiceMailService;
@@ -94,9 +94,10 @@ public class MomoPaymentCompletionService {
         paymentRepository.save(payment);
 
         booking.setStatus("cancelled");
-        var session = booking.getSession();
-        session.setCurrentParticipants(Math.max(0, session.getCurrentParticipants() - booking.getGuestCount()));
-        sessionRepository.save(session);
         bookingRepository.save(booking);
+        bookingRepository.flush();
+        if (booking.getSession() != null) {
+            sessionOccupancyService.sync(booking.getSession());
+        }
     }
 }

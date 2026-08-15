@@ -70,6 +70,7 @@ public class BookingService {
     private final PayOSPaymentService payOSPaymentService;
     private final BookingRefundEligibility bookingRefundEligibility;
     private final BookingInvoiceMailService bookingInvoiceMailService;
+    private final SessionOccupancyService sessionOccupancyService;
 
     @Value("${app.frontend.url:http://localhost:5173}")
     private String frontendUrl;
@@ -246,7 +247,7 @@ public class BookingService {
                 .sessionEndDate(session != null ? session.getEndDate() : null)
                 .sessionStatus(session != null ? session.getStatus() : null)
                 .sessionMaxParticipants(session != null ? session.getMaxParticipants() : null)
-                .sessionCurrentParticipants(session != null ? session.getCurrentParticipants() : null)
+                .sessionCurrentParticipants(session != null ? sessionOccupancyService.heldSeats(session.getId()) : null)
                 .tourId(tour != null ? tour.getId() : null)
                 .tourTitle(tour != null ? tour.getTitle() : null)
                 .tourSlug(tour != null ? tour.getSlug() : null)
@@ -286,7 +287,8 @@ public class BookingService {
         if (!"scheduled".equals(session.getStatus())) {
             throw new BadRequestException("Lịch này không còn mở đặt");
         }
-        int available = session.getMaxParticipants() - session.getCurrentParticipants();
+        int maxP = session.getMaxParticipants() == null ? 0 : session.getMaxParticipants();
+        int available = Math.max(0, maxP - sessionOccupancyService.heldSeats(session.getId()));
         if (guestCount <= 0 || guestCount > available) {
             throw new BadRequestException("Số chỗ không hợp lệ hoặc đã hết chỗ (còn " + available + ")");
         }
@@ -359,8 +361,8 @@ public class BookingService {
             }
         }
 
-        session.setCurrentParticipants(session.getCurrentParticipants() + guestCount);
-        sessionRepository.save(session);
+        bookingRepository.flush();
+        sessionOccupancyService.sync(session);
         if (promotion != null) {
             promotion.setUsedCount(promotion.getUsedCount() + 1);
             promotionRepository.save(promotion);
@@ -587,9 +589,11 @@ public class BookingService {
         cancelPendingPayOSLinks(b, "Khach huy don cho thanh toan");
         b.setStatus("cancelled");
         bookingRepository.save(b);
+        bookingRepository.flush();
         TourSession session = b.getSession();
-        session.setCurrentParticipants(Math.max(0, session.getCurrentParticipants() - b.getGuestCount()));
-        sessionRepository.save(session);
+        if (session != null) {
+            sessionOccupancyService.sync(session);
+        }
         Promotion cancelledPromo = b.getPromotion();
         if (cancelledPromo != null) {
             int used = cancelledPromo.getUsedCount() == null ? 0 : cancelledPromo.getUsedCount();
@@ -789,7 +793,7 @@ public class BookingService {
             return new ValidateSessionResult(false, "Lịch này không còn mở đặt");
         }
         int maxP = session.getMaxParticipants() != null ? session.getMaxParticipants() : 0;
-        int cur = session.getCurrentParticipants() != null ? session.getCurrentParticipants() : 0;
+        int cur = sessionOccupancyService.heldSeats(session.getId());
         int available = maxP - cur;
         if (guestCount > available) {
             return new ValidateSessionResult(false, "Không đủ chỗ (còn " + Math.max(0, available) + " khách)");

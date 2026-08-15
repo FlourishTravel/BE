@@ -11,6 +11,7 @@ import com.flourishtravel.domain.booking.repository.BookingRepository;
 import com.flourishtravel.domain.booking.repository.SessionCheckinRepository;
 import com.flourishtravel.domain.booking.repository.SessionParticipantActivityAttendanceRepository;
 import com.flourishtravel.domain.booking.repository.SessionParticipantRepository;
+import com.flourishtravel.domain.booking.service.SessionOccupancyService;
 import com.flourishtravel.domain.booking.service.SessionParticipantSyncService;
 import com.flourishtravel.domain.guide.dto.GuideSessionDetailDto;
 import com.flourishtravel.domain.guide.dto.GuideSessionGuestsDto;
@@ -55,6 +56,7 @@ public class GuideService {
     private final SessionParticipantRepository participantRepository;
     private final SessionParticipantActivityAttendanceRepository activityAttendanceRepository;
     private final SessionParticipantSyncService sessionParticipantSyncService;
+    private final SessionOccupancyService sessionOccupancyService;
     private final TourRepository tourRepository;
     private final TourActivityRepository tourActivityRepository;
     private final UserRepository userRepository;
@@ -75,9 +77,12 @@ public class GuideService {
             from = today.minusMonths(1);
             to = today.plusMonths(3);
         }
-        return sessionRepository.findByTourGuide_IdAndStartDateBetweenOrderByStartDateAsc(guideId, from, to)
-                .stream()
-                .map(this::toSummaryDto)
+        List<TourSession> sessions = sessionRepository
+                .findByTourGuide_IdAndStartDateBetweenOrderByStartDateAsc(guideId, from, to);
+        Map<UUID, Integer> held = sessionOccupancyService.heldSeatsBySessionIds(
+                sessions.stream().map(TourSession::getId).toList());
+        return sessions.stream()
+                .map(s -> toSummaryDto(s, held.getOrDefault(s.getId(), 0)))
                 .toList();
     }
 
@@ -463,7 +468,7 @@ public class GuideService {
                 .build();
     }
 
-    private GuideSessionSummaryDto toSummaryDto(TourSession session) {
+    private GuideSessionSummaryDto toSummaryDto(TourSession session, int held) {
         Tour tour = session.getTour();
         long checkedIn = checkinRepository.countDistinctBySession(session);
         return GuideSessionSummaryDto.builder()
@@ -476,7 +481,7 @@ public class GuideService {
                 .startDate(session.getStartDate())
                 .endDate(session.getEndDate())
                 .status(normalizeStatus(session.getStatus(), session.getStartDate(), session.getEndDate()))
-                .currentParticipants(session.getCurrentParticipants() == null ? 0 : session.getCurrentParticipants())
+                .currentParticipants(held)
                 .maxParticipants(session.getMaxParticipants() == null ? 0 : session.getMaxParticipants())
                 .checkedInParticipants((int) checkedIn)
                 .build();
@@ -509,7 +514,7 @@ public class GuideService {
                 .startDate(session.getStartDate())
                 .endDate(session.getEndDate())
                 .status(normalizeStatus(session.getStatus(), session.getStartDate(), session.getEndDate()))
-                .currentParticipants(session.getCurrentParticipants() == null ? 0 : session.getCurrentParticipants())
+                .currentParticipants(sessionOccupancyService.heldSeats(session.getId()))
                 .maxParticipants(session.getMaxParticipants() == null ? 0 : session.getMaxParticipants())
                 .checkedInParticipants((int) checkedIn)
                 .itineraryDays(itineraryDays)

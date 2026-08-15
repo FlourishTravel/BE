@@ -3,6 +3,7 @@ package com.flourishtravel.domain.admin.controller;
 import com.flourishtravel.common.dto.ApiResponse;
 import com.flourishtravel.common.exception.BadRequestException;
 import com.flourishtravel.common.exception.ResourceNotFoundException;
+import com.flourishtravel.domain.booking.service.SessionOccupancyService;
 import com.flourishtravel.domain.chat.entity.ChatRoom;
 import com.flourishtravel.domain.chat.repository.ChatRoomRepository;
 import com.flourishtravel.domain.tour.entity.Tour;
@@ -30,6 +31,7 @@ public class AdminSessionController {
     private final TourRepository tourRepository;
     private final UserRepository userRepository;
     private final ChatRoomRepository chatRoomRepository;
+    private final SessionOccupancyService sessionOccupancyService;
 
     @PostMapping("/sessions")
     public ResponseEntity<ApiResponse<TourSession>> create(@RequestBody AdminSessionDto dto) {
@@ -68,7 +70,7 @@ public class AdminSessionController {
     @PutMapping("/sessions/{id}")
     public ResponseEntity<ApiResponse<TourSession>> update(@PathVariable UUID id, @RequestBody AdminSessionDto dto) {
         TourSession session = sessionRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Session", id));
-        if (session.getCurrentParticipants() > 0) {
+        if (sessionOccupancyService.heldSeats(session.getId()) > 0) {
             throw new BadRequestException("Không thể sửa lịch đã có khách đặt");
         }
         if (dto.getStartDate() != null) session.setStartDate(dto.getStartDate());
@@ -84,7 +86,7 @@ public class AdminSessionController {
     @DeleteMapping("/sessions/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         TourSession session = sessionRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Session", id));
-        if (session.getCurrentParticipants() > 0) {
+        if (sessionOccupancyService.heldSeats(session.getId()) > 0) {
             throw new BadRequestException("Không thể xóa lịch đã có khách đặt");
         }
         chatRoomRepository.findBySession_Id(id).ifPresent(chatRoomRepository::delete);

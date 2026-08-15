@@ -30,7 +30,10 @@ public interface TourRepository extends JpaRepository<Tour, UUID> {
           AND (:startDate IS NULL OR s.startDate >= :startDate)
           AND (:categoryId IS NULL OR t.category.id = :categoryId)
           AND s.status = 'scheduled'
-          AND s.currentParticipants < s.maxParticipants
+          AND (
+              SELECT COALESCE(SUM(COALESCE(b.guestCount, 0)), 0) FROM Booking b
+              WHERE b.session = s AND LOWER(COALESCE(b.status, '')) <> 'cancelled'
+          ) < s.maxParticipants
         ORDER BY t.createdAt ASC
         """,
         countQuery = """
@@ -43,7 +46,10 @@ public interface TourRepository extends JpaRepository<Tour, UUID> {
           AND (:startDate IS NULL OR s.startDate >= :startDate)
           AND (:categoryId IS NULL OR t.category.id = :categoryId)
           AND s.status = 'scheduled'
-          AND s.currentParticipants < s.maxParticipants
+          AND (
+              SELECT COALESCE(SUM(COALESCE(b.guestCount, 0)), 0) FROM Booking b
+              WHERE b.session = s AND LOWER(COALESCE(b.status, '')) <> 'cancelled'
+          ) < s.maxParticipants
         """
     )
     Page<Tour> search(@Param("destinationPattern") String destinationPattern,

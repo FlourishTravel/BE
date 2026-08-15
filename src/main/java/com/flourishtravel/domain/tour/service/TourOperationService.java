@@ -2,6 +2,7 @@ package com.flourishtravel.domain.tour.service;
 
 import com.flourishtravel.common.exception.BadRequestException;
 import com.flourishtravel.common.exception.ResourceNotFoundException;
+import com.flourishtravel.domain.booking.service.SessionOccupancyService;
 import com.flourishtravel.domain.mail.GuideMailTemplates;
 import com.flourishtravel.domain.mail.MailAddresses;
 import com.flourishtravel.domain.mail.MailService;
@@ -32,6 +33,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -72,6 +74,7 @@ public class TourOperationService {
     private final UserRepository userRepository;
     private final MailService mailService;
     private final NotificationService notificationService;
+    private final SessionOccupancyService sessionOccupancyService;
 
     // ---------- Queries ----------
 
@@ -92,7 +95,7 @@ public class TourOperationService {
 
         String term = (q == null || q.isBlank()) ? null : q.trim().toLowerCase(Locale.ROOT);
 
-        return sessions.stream()
+        List<TourSession> filtered = sessions.stream()
                 .filter(s -> {
                     if (term == null) return true;
                     Tour t = s.getTour();
@@ -101,7 +104,11 @@ public class TourOperationService {
                     String slug = t.getSlug() == null ? "" : t.getSlug().toLowerCase(Locale.ROOT);
                     return title.contains(term) || slug.contains(term);
                 })
-                .map(this::toOperationDto)
+                .toList();
+        Map<UUID, Integer> held = sessionOccupancyService.heldSeatsBySessionIds(
+                filtered.stream().map(TourSession::getId).toList());
+        return filtered.stream()
+                .map(s -> toOperationDto(s, held.getOrDefault(s.getId(), 0)))
                 .toList();
     }
 
@@ -283,9 +290,12 @@ public class TourOperationService {
     }
 
     private TourOperationDto toOperationDto(TourSession s) {
+        return toOperationDto(s, sessionOccupancyService.heldSeats(s.getId()));
+    }
+
+    private TourOperationDto toOperationDto(TourSession s, int curr) {
         Tour t = s.getTour();
         int max = s.getMaxParticipants() == null ? 0 : s.getMaxParticipants();
-        int curr = s.getCurrentParticipants() == null ? 0 : s.getCurrentParticipants();
         int remaining = Math.max(0, max - curr);
         double occupancy = max > 0 ? (curr * 100.0 / max) : 0.0;
         occupancy = Math.round(occupancy * 10.0) / 10.0;

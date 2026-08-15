@@ -23,6 +23,7 @@ import com.flourishtravel.domain.tour.entity.TourSession;
 import com.flourishtravel.domain.tour.entity.TourVideo;
 import com.flourishtravel.domain.user.entity.User;
 import com.flourishtravel.domain.booking.repository.SessionParticipantActivityAttendanceRepository;
+import com.flourishtravel.domain.booking.service.SessionOccupancyService;
 import com.flourishtravel.domain.tour.repository.CategoryRepository;
 import com.flourishtravel.domain.tour.repository.TourActivityRepository;
 import com.flourishtravel.domain.tour.repository.TourRepository;
@@ -44,6 +45,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -68,6 +70,7 @@ public class TourService {
     private final TourSessionActivityOverrideRepository sessionActivityOverrideRepository;
     private final ChatRoomRepository chatRoomRepository;
     private final UserRepository userRepository;
+    private final SessionOccupancyService sessionOccupancyService;
 
     @Value("${app.flora.timezone:Asia/Ho_Chi_Minh}")
     private String tourTimezone;
@@ -167,9 +170,10 @@ public class TourService {
             if (t.getSessions() == null) continue;
             for (TourSession s : t.getSessions()) {
                 if (!"scheduled".equals(s.getStatus())) continue;
-                if (s.getCurrentParticipants() == null || s.getMaxParticipants() == null) continue;
-                if (s.getCurrentParticipants() < s.getMaxParticipants()) {
-                    int remaining = s.getMaxParticipants() - s.getCurrentParticipants();
+                if (s.getMaxParticipants() == null) continue;
+                int held = sessionOccupancyService.heldSeats(s.getId());
+                if (held < s.getMaxParticipants()) {
+                    int remaining = s.getMaxParticipants() - held;
                     return Optional.of(AvailabilityCheckDto.builder()
                             .remainingSlots(remaining)
                             .nextStartDate(s.getStartDate())
@@ -477,15 +481,16 @@ public class TourService {
             if (earliestOpt.isPresent()) {
                 TourSession s = earliestOpt.get();
                 LocalDate today = todayInTourZone();
+                Map<UUID, Integer> held = occupancyBySessions(tour.getSessions());
                 earliest = TourSummaryDto.SessionRef.builder()
                         .id(s.getId())
                         .startDate(s.getStartDate())
                         .endDate(s.getEndDate())
                         .maxParticipants(s.getMaxParticipants())
-                        .currentParticipants(s.getCurrentParticipants())
+                        .currentParticipants(held.getOrDefault(s.getId(), 0))
                         .status(TourSessionStatusResolver.resolveEffectiveStatus(s, today))
                         .build();
-                status = computeStatus(tour.getSessions(), today);
+                status = computeStatus(tour.getSessions(), today, held);
             }
         }
 
@@ -572,6 +577,8 @@ public class TourService {
                                 .build())
                         .toList();
 
+        Map<UUID, Integer> sessionHeld = occupancyBySessions(tour.getSessions());
+
         List<TourDetailDto.SessionDetail> sessions = tour.getSessions() == null ? List.of() :
                 tour.getSessions().stream()
                         .sorted(Comparator.comparing(
@@ -596,7 +603,7 @@ public class TourService {
                                     .startDate(s.getStartDate())
                                     .endDate(s.getEndDate())
                                     .maxParticipants(s.getMaxParticipants())
-                                    .currentParticipants(s.getCurrentParticipants())
+                                    .currentParticipants(sessionHeld.getOrDefault(s.getId(), 0))
                                     .status(TourSessionStatusResolver.resolveEffectiveStatus(s, today))
                                     .tourGuide(guideRef)
                                     .build();
@@ -605,7 +612,7 @@ public class TourService {
 
         String status = (tour.getSessions() == null || tour.getSessions().isEmpty())
                 ? "draft"
-                : computeStatus(tour.getSessions(), todayInTourZone());
+                : computeStatus(tour.getSessions(), todayInTourZone(), sessionHeld);
 
         String thumbnailUrl = images.isEmpty() ? null : images.get(0).getImageUrl();
 
@@ -914,6 +921,14 @@ public class TourService {
         }
     }
 
+    private Map<UUID, Integer> occupancyBySessions(List<TourSession> sessions) {
+        if (sessions == null || sessions.isEmpty()) {
+            return Map.of();
+        }
+        return sessionOccupancyService.heldSeatsBySessionIds(
+                sessions.stream().map(TourSession::getId).filter(Objects::nonNull).toList());
+    }
+
     /**
      * Suy luận status hiển thị cho admin / public (theo session scheduled sớm nhất còn chỗ):
      *   - ongoing        : có session đang diễn ra (start ≤ hôm nay ≤ end)
@@ -924,10 +939,11 @@ public class TourService {
      *   - upcoming       : khởi hành &gt; {@value #ACTIVE_HORIZON_DAYS} ngày (mở bán xa)
      *   - draft          : không có session
      */
-    private String computeStatus(List<TourSession> sessions, LocalDate today) {
+    private String computeStatus(List<TourSession> sessions, LocalDate today, Map<UUID, Integer> held) {
         if (sessions == null || sessions.isEmpty()) {
             return "draft";
         }
+        Map<UUID, Integer> occupancy = held != null ? held : Map.of();
 
         List<String> effective = sessions.stream()
                 .map(s -> TourSessionStatusResolver.resolveEffectiveStatus(s, today))
@@ -953,8 +969,7 @@ public class TourService {
 
         boolean allFull = scheduledFuture.stream().allMatch(s ->
                 s.getMaxParticipants() != null
-                && s.getCurrentParticipants() != null
-                && s.getCurrentParticipants() >= s.getMaxParticipants());
+                && occupancy.getOrDefault(s.getId(), 0) >= s.getMaxParticipants());
         if (allFull && !scheduledFuture.isEmpty()) {
             return "full";
         }

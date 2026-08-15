@@ -15,6 +15,7 @@ import org.springframework.data.repository.query.Param;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -22,6 +23,22 @@ import java.util.UUID;
 
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, UUID> {
+
+    @Query("""
+            SELECT COALESCE(SUM(COALESCE(b.guestCount, 0)), 0) FROM Booking b
+            WHERE b.session.id = :sessionId
+              AND LOWER(COALESCE(b.status, '')) <> 'cancelled'
+            """)
+    Long sumHeldGuestCount(@Param("sessionId") UUID sessionId);
+
+    @Query("""
+            SELECT b.session.id, COALESCE(SUM(COALESCE(b.guestCount, 0)), 0)
+            FROM Booking b
+            WHERE b.session.id IN :sessionIds
+              AND LOWER(COALESCE(b.status, '')) <> 'cancelled'
+            GROUP BY b.session.id
+            """)
+    List<Object[]> sumHeldGuestCountBySessionIds(@Param("sessionIds") Collection<UUID> sessionIds);
 
     List<Booking> findByUserOrderByCreatedAtDesc(User user);
 
