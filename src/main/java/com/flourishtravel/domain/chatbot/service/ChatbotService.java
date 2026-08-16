@@ -59,7 +59,7 @@ public class ChatbotService {
 User vừa nói: "%s"
 %s
 Trả lời ĐÚNG 1 JSON (không markdown, không giải thích):
-{"intent":"search_tour|general_question|travel_tips|policy_faq|trip_planner|unknown","slots":{"destination": "tên địa điểm hoặc null","duration_days": số ngày hoặc null,"budget_min": số triệu VND hoặc null,"budget_max": số triệu VND hoặc null,"guest_count": số người hoặc null,"destinations": ["địa điểm 1","địa điểm 2"] hoặc null},"reply":"1-3 câu theo giọng Flora AI (xưng Flora/mình, gọi bạn; ngôn ngữ theo user)","quick_replies":[{"label":"...","payload":"..."}]}
+{"intent":"search_tour|general_question|travel_tips|policy_faq|trip_planner|unknown","slots":{"destination": "tên địa điểm hoặc null","duration_days": số ngày hoặc null,"budget_min": số triệu VND hoặc null,"budget_max": số triệu VND hoặc null,"guest_count": số người hoặc null,"destinations": ["địa điểm 1","địa điểm 2"] hoặc null},"reply":"2-4 câu ngắn như nhắn Zalo (xưng mình, gọi bạn/tên; không câu hành chính, không 'Flora đã kiểm tra')","quick_replies":[{"label":"...","payload":"..."}]}
 
 Bộ nhớ ngữ cảnh (Context Memory): Nếu context từ lượt trước có guest_count, destination, duration_days hoặc khách từng nói "đi với con nhỏ"/"2 con"/"gia đình" thì các câu sau BẠN TỰ GỢI Ý tour/điểm có khu vui chơi, thực đơn không cay, phù hợp gia đình mà KHÔNG cần khách nhắc lại. Dùng slots đã có để reply nhất quán.
 
@@ -88,7 +88,7 @@ Cá nhân hóa: Nếu có block "Hồ sơ khách đang đăng nhập" bên dư�
             String content = normalizeUserInput(raw);
             if (content.isEmpty()) {
                 return ChatbotResponse.builder()
-                        .reply(FloraAiPersona.WELCOME + " Bạn có thể hỏi ví dụ: 'Tour biển 3 ngày tầm 5 triệu' hoặc 'Chính sách hủy tour?'.")
+                        .reply(FloraAiPersona.WELCOME + " Ví dụ: 'Tour biển 3 ngày tầm 5 triệu' hoặc 'Chính sách hủy tour?'.")
                         .quickReplies(List.of(
                                 ChatbotResponse.QuickReply.builder().label("Tour biển 3 ngày").payload("Tour biển 3 ngày").build(),
                                 ChatbotResponse.QuickReply.builder().label("Chính sách hủy tour").payload("Chính sách hủy tour").build()
@@ -143,7 +143,7 @@ Cá nhân hóa: Nếu có block "Hồ sơ khách đang đăng nhập" bên dư�
         } catch (Exception e) {
             log.error("Chatbot processMessage failed", e);
             return ChatbotResponse.builder()
-                    .reply("Flora đang gặp chút sự cố kỹ thuật. Bạn thử nhập lại hoặc chọn gợi ý bên dưới nhé.")
+                    .reply("Mình đang hơi lag. Bạn gửi lại tin hoặc bấm gợi ý bên dưới nha.")
                     .quickReplies(List.of(
                             ChatbotResponse.QuickReply.builder().label("Tour biển 3 ngày").payload("Tour biển 3 ngày").build(),
                             ChatbotResponse.QuickReply.builder().label("Tìm tour Đà Nẵng").payload("Tìm tour Đà Nẵng").build()
@@ -176,7 +176,7 @@ Cá nhân hóa: Nếu có block "Hồ sơ khách đang đăng nhập" bên dư�
 
     private ChatbotResponse buildSentimentResponse() {
         String reply = findByTopic(policyFaqRepository.findAllByOrderBySortOrderAsc(), "sentiment_apology");
-        if (reply == null) reply = "Flora rất tiếc nếu trải nghiệm chưa như mong đợi. Bạn vui lòng gọi hotline hoặc để lại tin nhắn qua form Liên hệ — mình sẽ chuyển cho nhân viên hỗ trợ cụ thể nhé.";
+        if (reply == null) reply = "Mình tiếc nếu trải nghiệm chưa ổn. Gọi hotline hoặc gửi form Liên hệ, mình chuyển cho nhân viên nha.";
         return ChatbotResponse.builder()
                 .reply(reply)
                 .tours(List.of())
@@ -722,7 +722,7 @@ Cá nhân hóa: Nếu có block "Hồ sơ khách đang đăng nhập" bên dư�
                 .build();
     }
 
-    private static final String OFF_TOPIC_REPLY = "Flora là trợ lý du lịch của Flourish-Travel, chỉ hỗ trợ tour và chính sách đặt/hủy tour thôi nhé. Bạn muốn tìm tour hay hỏi chính sách? Thử chọn gợi ý bên dưới.";
+    private static final String OFF_TOPIC_REPLY = "Mình chỉ rành tour và chính sách đặt/hủy của Flourish-Travel thôi. Bạn muốn tìm tour hay hỏi chính sách? Bấm gợi ý bên dưới cũng được.";
 
     private static boolean looksLikeTravelOrPolicy(String content) {
         if (content == null || content.isBlank()) return false;
