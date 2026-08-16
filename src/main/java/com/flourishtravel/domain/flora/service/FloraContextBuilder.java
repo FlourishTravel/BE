@@ -7,8 +7,10 @@ import com.flourishtravel.domain.chatbot.service.ChatbotUserContextService;
 import com.flourishtravel.domain.flora.dto.FloraJourneyDto;
 import com.flourishtravel.domain.flora.dto.FloraSuggestedActionDto;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +25,9 @@ public class FloraContextBuilder {
     private final FloraPrivacyService privacyService;
     private final FloraJourneyService journeyService;
     private final ChatbotSecurityService chatbotSecurityService;
+
+    @Value("${app.flora.timezone:Asia/Ho_Chi_Minh}")
+    private String tourTimezone;
 
     public String buildCombinedHint(ChatbotRequest request, UUID userId, Map<String, Object> previousState) {
         StringBuilder sb = new StringBuilder();
@@ -104,8 +109,12 @@ public class FloraContextBuilder {
             }
             if (journey.getNextMeeting() != null && journey.getNextMeeting().getLocation() != null) {
                 sb.append("- Điểm tập trung: ").append(journey.getNextMeeting().getLocation());
-                if (journey.getMinutesUntilGathering() != null) {
-                    sb.append(" (còn ~").append(journey.getMinutesUntilGathering()).append(" phút)");
+                String when = FloraCountdownPhrases.meetingWhen(
+                        journey.getNextMeeting().getTime(),
+                        journey.getMinutesUntilGathering(),
+                        ZoneId.of(tourTimezone));
+                if (when != null) {
+                    sb.append(" (").append(when).append(")");
                 }
                 sb.append("\n");
             }
