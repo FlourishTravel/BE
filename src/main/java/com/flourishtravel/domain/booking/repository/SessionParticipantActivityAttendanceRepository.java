@@ -1,6 +1,7 @@
 package com.flourishtravel.domain.booking.repository;
 
 import com.flourishtravel.domain.booking.entity.SessionParticipantActivityAttendance;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -18,6 +19,7 @@ public interface SessionParticipantActivityAttendanceRepository
 
     List<SessionParticipantActivityAttendance> findBySessionParticipant_Id(UUID sessionParticipantId);
 
+    @EntityGraph(attributePaths = { "tourActivity", "tourActivity.itinerary", "sessionParticipant" })
     List<SessionParticipantActivityAttendance> findBySessionParticipant_IdIn(Collection<UUID> sessionParticipantIds);
 
     Optional<SessionParticipantActivityAttendance> findBySessionParticipant_IdAndTourActivity_Id(

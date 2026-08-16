@@ -109,6 +109,19 @@ public class GuideService {
     @Transactional
     public GuideSessionGuestsDto getSessionGuestsBookings(UUID sessionId, UUID guideId) {
         TourSession session = assertGuideOwnsSession(sessionId, guideId);
+        return buildSessionGuests(session);
+    }
+
+    /** Admin xem cùng dữ liệu đoàn / điểm danh, không cần là HDV của đợt. */
+    @Transactional
+    public GuideSessionGuestsDto getSessionGuestsForAdmin(UUID sessionId) {
+        TourSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Session", sessionId));
+        return buildSessionGuests(session);
+    }
+
+    private GuideSessionGuestsDto buildSessionGuests(TourSession session) {
+        UUID sessionId = session.getId();
         Tour tour = session.getTour();
         sessionParticipantSyncService.syncAllPaidForSession(session);
 
@@ -213,12 +226,15 @@ public class GuideService {
                     .build());
         }
 
+        User guide = session.getTourGuide();
         return GuideSessionGuestsDto.builder()
                 .sessionId(session.getId())
                 .tourTitle(tour != null ? tour.getTitle() : null)
                 .tourCode(buildTourCode(tour))
                 .startDate(session.getStartDate())
                 .endDate(session.getEndDate())
+                .guideId(guide != null ? guide.getId() : null)
+                .guideName(guide != null ? guide.getFullName() : null)
                 .totalGuestSlots((int) Math.min(totalSlots, Integer.MAX_VALUE))
                 .checkedInGuestSlots((int) Math.min(checkedSlots, Integer.MAX_VALUE))
                 .checkedOutParticipants((int) Math.min(checkedOutSlots, Integer.MAX_VALUE))
@@ -239,8 +255,13 @@ public class GuideService {
         Map<UUID, List<GuideSessionGuestsDto.ActivityAttendanceDto>> map = new HashMap<>();
         for (SessionParticipantActivityAttendance row : rows) {
             UUID pid = row.getSessionParticipant().getId();
+            TourActivity act = row.getTourActivity();
+            TourItinerary day = act != null ? act.getItinerary() : null;
             GuideSessionGuestsDto.ActivityAttendanceDto dto = GuideSessionGuestsDto.ActivityAttendanceDto.builder()
-                    .activityId(row.getTourActivity().getId())
+                    .activityId(act != null ? act.getId() : null)
+                    .activityTitle(act != null ? act.getTitle() : null)
+                    .locationName(act != null ? act.getLocationName() : null)
+                    .dayNumber(day != null ? day.getDayNumber() : null)
                     .checkInAt(row.getCheckInAt())
                     .checkOutAt(row.getCheckOutAt())
                     .build();

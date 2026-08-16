@@ -23,6 +23,9 @@ public class GuideSessionGuestsDto {
     private String tourCode;
     private LocalDate startDate;
     private LocalDate endDate;
+    /** HDV được gán cho đợt — dùng khi admin/HDV xem lịch sử điểm danh. */
+    private UUID guideId;
+    private String guideName;
 
     /** Tổng số dòng người tham gia (lead + booking_guests đã đồng bộ). */
     private int totalGuestSlots;
@@ -110,6 +113,9 @@ public class GuideSessionGuestsDto {
     @Builder
     public static class ActivityAttendanceDto {
         private UUID activityId;
+        private String activityTitle;
+        private String locationName;
+        private Integer dayNumber;
         private Instant checkInAt;
         private Instant checkOutAt;
     }
