@@ -17,6 +17,8 @@ public interface SessionParticipantRepository extends JpaRepository<SessionParti
     Optional<SessionParticipant> findBySession_IdAndBooking_IdAndRosterKey(
             UUID sessionId, UUID bookingId, String rosterKey);
 
+    List<SessionParticipant> findBySession_Id(UUID sessionId);
+
     long countBySession_Id(UUID sessionId);
 
     @Query("""

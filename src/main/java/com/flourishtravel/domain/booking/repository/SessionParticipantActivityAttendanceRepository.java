@@ -25,6 +25,10 @@ public interface SessionParticipantActivityAttendanceRepository
     Optional<SessionParticipantActivityAttendance> findBySessionParticipant_IdAndTourActivity_Id(
             UUID sessionParticipantId, UUID tourActivityId);
 
+    @EntityGraph(attributePaths = "sessionParticipant")
+    List<SessionParticipantActivityAttendance> findBySessionParticipant_Session_IdAndTourActivity_Id(
+            UUID sessionId, UUID tourActivityId);
+
     long countBySessionParticipant_Session_IdAndTourActivity_IdAndCheckInAtIsNotNull(
             UUID sessionId, UUID tourActivityId);
 

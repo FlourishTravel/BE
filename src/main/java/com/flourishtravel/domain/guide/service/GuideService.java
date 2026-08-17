@@ -12,6 +12,7 @@ import com.flourishtravel.domain.booking.repository.SessionParticipantActivityAt
 import com.flourishtravel.domain.booking.repository.SessionParticipantRepository;
 import com.flourishtravel.domain.booking.service.SessionOccupancyService;
 import com.flourishtravel.domain.booking.service.SessionParticipantSyncService;
+import com.flourishtravel.domain.guide.dto.ActivityBulkAttendanceResultDto;
 import com.flourishtravel.domain.guide.dto.GuideSessionDetailDto;
 import com.flourishtravel.domain.guide.dto.GuideSessionGuestsDto;
 import com.flourishtravel.domain.guide.dto.GuideSessionMemberDto;
@@ -407,6 +408,89 @@ public class GuideService {
         row.setCheckOutAt(Instant.now());
         SessionParticipantActivityAttendance saved = activityAttendanceRepository.save(row);
         return toActivityAttendanceResult(saved);
+    }
+
+    @Transactional
+    public ActivityBulkAttendanceResultDto checkInAllAtActivity(UUID guideId, UUID sessionId, UUID activityId) {
+        TourSession session = assertGuideOwnsSession(sessionId, guideId);
+        TourActivity activity = requireActivityOnSession(session, activityId);
+        List<SessionParticipant> participants = participantRepository.findBySession_Id(sessionId);
+        Map<UUID, SessionParticipantActivityAttendance> existing = attendanceByParticipant(sessionId, activityId);
+
+        Instant now = Instant.now();
+        int updated = 0;
+        int skipped = 0;
+        for (SessionParticipant p : participants) {
+            SessionParticipantActivityAttendance row = existing.get(p.getId());
+            if (row == null) {
+                row = SessionParticipantActivityAttendance.builder()
+                        .sessionParticipant(p)
+                        .tourActivity(activity)
+                        .build();
+            }
+            if (row.getCheckInAt() != null) {
+                skipped++;
+                continue;
+            }
+            row.setCheckInAt(now);
+            activityAttendanceRepository.save(row);
+            updated++;
+        }
+        return toBulkResult(activityId, updated, skipped, participants.size(), sessionId);
+    }
+
+    @Transactional
+    public ActivityBulkAttendanceResultDto checkOutAllAtActivity(UUID guideId, UUID sessionId, UUID activityId) {
+        TourSession session = assertGuideOwnsSession(sessionId, guideId);
+        requireActivityOnSession(session, activityId);
+        List<SessionParticipant> participants = participantRepository.findBySession_Id(sessionId);
+        Map<UUID, SessionParticipantActivityAttendance> existing = attendanceByParticipant(sessionId, activityId);
+
+        Instant now = Instant.now();
+        int updated = 0;
+        int skipped = 0;
+        for (SessionParticipant p : participants) {
+            SessionParticipantActivityAttendance row = existing.get(p.getId());
+            if (row == null || row.getCheckInAt() == null || row.getCheckOutAt() != null) {
+                skipped++;
+                continue;
+            }
+            row.setCheckOutAt(now);
+            activityAttendanceRepository.save(row);
+            updated++;
+        }
+        return toBulkResult(activityId, updated, skipped, participants.size(), sessionId);
+    }
+
+    private Map<UUID, SessionParticipantActivityAttendance> attendanceByParticipant(UUID sessionId, UUID activityId) {
+        Map<UUID, SessionParticipantActivityAttendance> map = new HashMap<>();
+        for (SessionParticipantActivityAttendance row :
+                activityAttendanceRepository.findBySessionParticipant_Session_IdAndTourActivity_Id(sessionId, activityId)) {
+            map.put(row.getSessionParticipant().getId(), row);
+        }
+        return map;
+    }
+
+    private ActivityBulkAttendanceResultDto toBulkResult(
+            UUID activityId, int updated, int skipped, int total, UUID sessionId) {
+        long checked = activityAttendanceRepository
+                .countBySessionParticipant_Session_IdAndTourActivity_IdAndCheckInAtIsNotNull(sessionId, activityId);
+        return ActivityBulkAttendanceResultDto.builder()
+                .activityId(activityId)
+                .updated(updated)
+                .skippedAlready(skipped)
+                .totalParticipants(total)
+                .checkedInAtStopCount((int) Math.min(checked, Integer.MAX_VALUE))
+                .build();
+    }
+
+    private TourActivity requireActivityOnSession(TourSession session, UUID activityId) {
+        Tour tour = session.getTour();
+        if (tour == null || !tourActivityRepository.existsForTour(activityId, tour.getId())) {
+            throw new BadRequestException("Hoạt động không thuộc tour của chuyến này");
+        }
+        return tourActivityRepository.findById(activityId)
+                .orElseThrow(() -> new ResourceNotFoundException("TourActivity", activityId));
     }
 
     private ParticipantActivityAttendanceResultDto toActivityAttendanceResult(SessionParticipantActivityAttendance saved) {

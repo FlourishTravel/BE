@@ -1,6 +1,7 @@
 package com.flourishtravel.domain.guide.controller;
 
 import com.flourishtravel.common.dto.ApiResponse;
+import com.flourishtravel.domain.guide.dto.ActivityBulkAttendanceResultDto;
 import com.flourishtravel.domain.guide.dto.GuideSessionDetailDto;
 import com.flourishtravel.domain.guide.dto.GuideSessionGuestsDto;
 import com.flourishtravel.domain.guide.dto.GuideSessionMemberDto;
@@ -150,6 +151,32 @@ public class GuideController {
         ParticipantActivityAttendanceResultDto row = guideService.checkOutParticipantAtActivity(
                 principal.getId(), sessionId, participantId, activityId);
         return ResponseEntity.ok(ApiResponse.ok("Đã check-out tại điểm", row));
+    }
+
+    @PostMapping("/sessions/{sessionId}/activities/{activityId}/check-in-all")
+    public ResponseEntity<ApiResponse<ActivityBulkAttendanceResultDto>> checkInAllAtActivity(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID sessionId,
+            @PathVariable UUID activityId) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        ActivityBulkAttendanceResultDto row = guideService.checkInAllAtActivity(
+                principal.getId(), sessionId, activityId);
+        return ResponseEntity.ok(ApiResponse.ok("Đã điểm có mặt tất cả tại điểm", row));
+    }
+
+    @PostMapping("/sessions/{sessionId}/activities/{activityId}/check-out-all")
+    public ResponseEntity<ApiResponse<ActivityBulkAttendanceResultDto>> checkOutAllAtActivity(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID sessionId,
+            @PathVariable UUID activityId) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        ActivityBulkAttendanceResultDto row = guideService.checkOutAllAtActivity(
+                principal.getId(), sessionId, activityId);
+        return ResponseEntity.ok(ApiResponse.ok("Đã rời điểm tất cả", row));
     }
 
     @GetMapping("/sessions/{sessionId}/schedule")
