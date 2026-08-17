@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -58,34 +59,48 @@ public class SessionParticipantSyncService {
 
         TourSession session = b.getSession();
         User lead = b.getUser();
+        RosterCompanionPlan plan = selectCompanionsForRoster(lead, b.getBookingGuests(), b.getGuestCount());
 
         Set<String> keepKeys = new HashSet<>();
         keepKeys.add(ROSTER_LEAD);
 
-        upsertLead(session, b, lead);
+        upsertLead(session, b, lead, plan.skippedFormLead());
 
         stageCompanionLineIndicesAwayFromDisplayRange(b);
 
-        List<BookingGuest> companions = b.getBookingGuests() == null ? List.of() : b.getBookingGuests().stream()
-                .sorted(Comparator.comparing(BookingGuest::getSortOrder, Comparator.nullsLast(Comparator.naturalOrder())))
-                .toList();
-
         int idx = 1;
-        for (BookingGuest g : companions) {
-            if (isBookingGuestDuplicateOfLead(g, lead)) {
-                continue;
-            }
+        for (BookingGuest g : plan.companions()) {
             keepKeys.add(g.getId().toString());
             upsertCompanion(session, b, g, idx++);
         }
 
         List<SessionParticipant> existing = participantRepository.findByBooking_Id(b.getId());
+        SessionParticipant leadRow = existing.stream()
+                .filter(row -> ROSTER_LEAD.equals(row.getRosterKey()))
+                .findFirst()
+                .orElse(null);
+        boolean leadTouched = false;
         for (SessionParticipant row : existing) {
-            if (!keepKeys.contains(row.getRosterKey())) {
-                activityAttendanceRepository.findBySessionParticipant_Id(row.getId())
-                        .forEach(activityAttendanceRepository::delete);
-                participantRepository.delete(row);
+            if (keepKeys.contains(row.getRosterKey())) {
+                continue;
             }
+            // Dòng thừa thường là người đặt bị nhân đôi — giữ mốc điểm danh trên LEAD nếu có.
+            if (leadRow != null) {
+                if (leadRow.getCheckInAt() == null && row.getCheckInAt() != null) {
+                    leadRow.setCheckInAt(row.getCheckInAt());
+                    leadTouched = true;
+                }
+                if (leadRow.getCheckOutAt() == null && row.getCheckOutAt() != null) {
+                    leadRow.setCheckOutAt(row.getCheckOutAt());
+                    leadTouched = true;
+                }
+            }
+            activityAttendanceRepository.findBySessionParticipant_Id(row.getId())
+                    .forEach(activityAttendanceRepository::delete);
+            participantRepository.delete(row);
+        }
+        if (leadTouched) {
+            participantRepository.save(leadRow);
         }
     }
 
@@ -107,7 +122,7 @@ public class SessionParticipantSyncService {
                 || "completed".equals(normalizedLowerStatus);
     }
 
-    private void upsertLead(TourSession session, Booking b, User lead) {
+    private void upsertLead(TourSession session, Booking b, User lead, BookingGuest formLead) {
         SessionParticipant row = participantRepository
                 .findBySession_IdAndBooking_IdAndRosterKey(session.getId(), b.getId(), ROSTER_LEAD)
                 .orElseGet(() -> SessionParticipant.builder()
@@ -121,9 +136,13 @@ public class SessionParticipantSyncService {
         row.setLineIndex(0);
         row.setUser(lead);
         row.setBookingGuest(null);
-        row.setDisplayName(lead.getFullName() != null && !lead.getFullName().isBlank()
-                ? lead.getFullName()
-                : lead.getEmail());
+        String accountName = lead.getFullName() != null && !lead.getFullName().isBlank()
+                ? lead.getFullName().trim()
+                : lead.getEmail();
+        String formName = formLead != null && formLead.getFullName() != null && !formLead.getFullName().isBlank()
+                ? formLead.getFullName().trim()
+                : null;
+        row.setDisplayName(formName != null ? formName : accountName);
         row.setPhoneSnapshot(firstNonBlank(b.getContactPhone(), lead.getPhone()));
         row.setParticipantRole(ROLE_LEAD);
         participantRepository.save(row);
@@ -177,14 +196,54 @@ public class SessionParticipantSyncService {
     }
 
     /**
+     * Checkout/app gửi cả người đặt trong {@code booking_guests}; seed chỉ gửi khách kèm.
+     * Roster luôn có 1 LEAD từ tài khoản — companion tối đa {@code guestCount - 1}.
+     */
+    public static RosterCompanionPlan selectCompanionsForRoster(
+            User lead, List<BookingGuest> guests, Integer guestCount) {
+        int seats = effectiveGuestCount(guestCount);
+        int maxCompanions = Math.max(0, seats - 1);
+        List<BookingGuest> sorted = guests == null ? List.of() : guests.stream()
+                .sorted(Comparator.comparing(BookingGuest::getSortOrder, Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
+
+        boolean skippedLead = false;
+        BookingGuest skippedFormLead = null;
+        List<BookingGuest> out = new ArrayList<>();
+        for (BookingGuest g : sorted) {
+            if (!skippedLead && isBookingGuestDuplicateOfLead(g, lead)) {
+                skippedLead = true;
+                skippedFormLead = g;
+                continue;
+            }
+            out.add(g);
+        }
+        // Tên trên form không khớp tài khoản → dòng đầu là người đặt, không phải khách kèm.
+        if (!skippedLead && out.size() > maxCompanions) {
+            skippedFormLead = out.remove(0);
+        }
+        if (out.size() > maxCompanions) {
+            out = new ArrayList<>(out.subList(0, maxCompanions));
+        }
+        return new RosterCompanionPlan(List.copyOf(out), skippedFormLead);
+    }
+
+    public static int effectiveGuestCount(Integer guestCount) {
+        if (guestCount == null || guestCount < 1) {
+            return 1;
+        }
+        return guestCount;
+    }
+
+    /**
      * Một số form/seed lưu thêm 1 dòng booking_guest trùng thông tin người đặt — không tạo thêm slot roster.
      */
     public static boolean isBookingGuestDuplicateOfLead(BookingGuest g, User lead) {
         if (g == null || lead == null) {
             return false;
         }
-        String gn = g.getFullName() == null ? "" : g.getFullName().trim().toLowerCase(Locale.ROOT);
-        String ln = lead.getFullName() == null ? "" : lead.getFullName().trim().toLowerCase(Locale.ROOT);
+        String gn = normalizePersonName(g.getFullName());
+        String ln = normalizePersonName(lead.getFullName());
         if (gn.isEmpty() || ln.isEmpty() || !gn.equals(ln)) {
             return false;
         }
@@ -192,5 +251,19 @@ public class SessionParticipantSyncService {
             return g.getDateOfBirth().equals(lead.getDateOfBirth());
         }
         return true;
+    }
+
+    static String normalizePersonName(String name) {
+        if (name == null) {
+            return "";
+        }
+        return name.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+    }
+
+    /** Kết quả tách khách kèm khỏi người đặt trên form. */
+    public record RosterCompanionPlan(List<BookingGuest> companions, BookingGuest skippedFormLead) {
+        public RosterCompanionPlan {
+            companions = companions == null ? List.of() : List.copyOf(companions);
+        }
     }
 }

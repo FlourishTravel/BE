@@ -3,7 +3,6 @@ package com.flourishtravel.domain.guide.service;
 import com.flourishtravel.common.exception.BadRequestException;
 import com.flourishtravel.common.exception.ResourceNotFoundException;
 import com.flourishtravel.domain.booking.entity.Booking;
-import com.flourishtravel.domain.booking.entity.BookingGuest;
 import com.flourishtravel.domain.booking.entity.SessionCheckin;
 import com.flourishtravel.domain.booking.entity.SessionParticipant;
 import com.flourishtravel.domain.booking.entity.SessionParticipantActivityAttendance;
@@ -162,20 +161,19 @@ public class GuideService {
                     ? b.getContactPhone()
                     : (u != null ? u.getPhone() : null);
 
-            List<GuideSessionGuestsDto.CompanionLineDto> companions = b.getBookingGuests() == null
-                    ? List.of()
-                    : b.getBookingGuests().stream()
-                    .sorted(Comparator.comparing(BookingGuest::getSortOrder, Comparator.nullsLast(Comparator.naturalOrder())))
-                    .filter(g -> !SessionParticipantSyncService.isBookingGuestDuplicateOfLead(g, u))
-                    .map(g -> GuideSessionGuestsDto.CompanionLineDto.builder()
-                            .fullName(g.getFullName())
-                            .dateOfBirth(g.getDateOfBirth())
-                            .maskedIdNumber(g.getMaskedIdNumber())
-                            .maskedPassportNumber(g.getMaskedPassportNumber())
-                            .passportExpiry(g.getPassportExpiry())
-                            .nationality(g.getNationality())
-                            .build())
-                    .toList();
+            List<GuideSessionGuestsDto.CompanionLineDto> companions =
+                    SessionParticipantSyncService.selectCompanionsForRoster(u, b.getBookingGuests(), slots)
+                            .companions()
+                            .stream()
+                            .map(g -> GuideSessionGuestsDto.CompanionLineDto.builder()
+                                    .fullName(g.getFullName())
+                                    .dateOfBirth(g.getDateOfBirth())
+                                    .maskedIdNumber(g.getMaskedIdNumber())
+                                    .maskedPassportNumber(g.getMaskedPassportNumber())
+                                    .passportExpiry(g.getPassportExpiry())
+                                    .nationality(g.getNationality())
+                                    .build())
+                            .toList();
 
             List<SessionParticipant> parts = participantRepository.findByBooking_Id(b.getId());
             parts.sort(Comparator.comparing(SessionParticipant::getLineIndex, Comparator.nullsLast(Comparator.naturalOrder())));
