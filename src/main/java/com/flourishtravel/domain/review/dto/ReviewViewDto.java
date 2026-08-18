@@ -18,6 +18,10 @@ public class ReviewViewDto {
     private Integer rating;
     private String comment;
     private String feedbackTags;
+    private UUID guideId;
+    private String guideName;
+    private Integer guideRating;
+    private String guideFeedbackTags;
     private Boolean isPublished;
     private Boolean isFeatured;
     private Instant createdAt;

@@ -37,7 +37,9 @@ public class ReviewController {
                 request.getBookingId(),
                 request.getRating(),
                 request.getComment(),
-                request.getFeedbackTags());
+                request.getFeedbackTags(),
+                request.getGuideRating(),
+                request.getGuideFeedbackTags());
         return ResponseEntity.ok(ApiResponse.ok("Đã gửi đánh giá", review));
     }
 
@@ -71,5 +73,10 @@ public class ReviewController {
         private String comment;
         @Size(max = 10)
         private List<String> feedbackTags;
+        @Min(1)
+        @Max(5)
+        private Integer guideRating;
+        @Size(max = 10)
+        private List<String> guideFeedbackTags;
     }
 }

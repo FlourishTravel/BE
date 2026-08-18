@@ -102,8 +102,8 @@ public class PublicGuideService {
             return null;
         }
         double avg = reviews.stream()
-                .filter(r -> r.getRating() != null)
-                .mapToInt(Review::getRating)
+                .filter(r -> r.getRating() != null || r.getGuideRating() != null)
+                .mapToInt(r -> r.getGuideRating() != null ? r.getGuideRating() : r.getRating())
                 .average()
                 .orElse(Double.NaN);
         if (Double.isNaN(avg)) {

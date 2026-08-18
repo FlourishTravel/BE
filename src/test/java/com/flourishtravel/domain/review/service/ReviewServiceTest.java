@@ -113,4 +113,41 @@ class ReviewServiceTest {
         var review = reviewService.create(userId, bookingId, 3, "Ổn", null);
         assertNull(review.getFeedbackTags());
     }
+
+    @Test
+    void create_savesGuideFeedbackWhenSessionHasGuide() {
+        User guide = User.builder().fullName("Lan HDV").build();
+        guide.setId(UUID.randomUUID());
+        booking.getSession().setTourGuide(guide);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(bookingRepository.findDetailForUser(bookingId, userId)).thenReturn(Optional.of(booking));
+        when(postTourEligibility.isEligible(booking)).thenReturn(true);
+        when(reviewRepository.existsByBooking(booking)).thenReturn(false);
+        when(reviewRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var review = reviewService.create(
+                userId, bookingId, 5, "Hay", List.of("COFFEE"), 4, List.of("GUIDE_ATTENTIVE"));
+
+        assertEquals(guide.getId(), review.getGuideId());
+        assertEquals("Lan HDV", review.getGuideName());
+        assertEquals(4, review.getGuideRating());
+        assertEquals("GUIDE_ATTENTIVE", review.getGuideFeedbackTags());
+    }
+
+    @Test
+    void create_rejectsGuideRatingWhenNoGuideAssigned() {
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(bookingRepository.findDetailForUser(bookingId, userId)).thenReturn(Optional.of(booking));
+        when(postTourEligibility.isEligible(booking)).thenReturn(true);
+        when(reviewRepository.existsByBooking(booking)).thenReturn(false);
+
+        assertThrows(BadRequestException.class,
+                () -> reviewService.create(userId, bookingId, 5, null, null, 5, null));
+    }
+
+    @Test
+    void create_rejectsUnknownGuideTag() {
+        assertThrows(BadRequestException.class,
+                () -> reviewService.create(userId, bookingId, 4, null, null, 5, List.of("UNKNOWN_GUIDE")));
+    }
 }

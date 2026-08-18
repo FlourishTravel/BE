@@ -20,7 +20,11 @@ public class FloraPostTourFeedbackContextDto {
     private String tourName;
     private String completedAt;
     private boolean personalizationEnabled;
+    private boolean guideAssigned;
+    private UUID guideId;
+    private String guideName;
     private List<FloraFeedbackTagDto> availableTags;
+    private List<FloraFeedbackTagDto> availableGuideTags;
     private ExistingFeedback existingFeedback;
 
     @Data
@@ -31,5 +35,7 @@ public class FloraPostTourFeedbackContextDto {
         private Integer rating;
         private String comment;
         private List<String> feedbackTags;
+        private Integer guideRating;
+        private List<String> guideFeedbackTags;
     }
 }

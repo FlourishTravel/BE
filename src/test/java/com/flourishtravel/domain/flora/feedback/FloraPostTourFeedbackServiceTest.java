@@ -93,6 +93,24 @@ class FloraPostTourFeedbackServiceTest {
     }
 
     @Test
+    void getContext_includesGuideTagsWhenGuideAssigned() {
+        User guide = User.builder().fullName("Minh").build();
+        guide.setId(UUID.randomUUID());
+        booking.getSession().setTourGuide(guide);
+        when(privacyService.requireOwnedBooking(bookingId, userId)).thenReturn(booking);
+        when(eligibility.isEligible(booking)).thenReturn(true);
+        when(reviewRepository.findByBooking(booking)).thenReturn(Optional.empty());
+        when(privacyService.hasPersonalizationConsent(userId)).thenReturn(false);
+
+        var ctx = service.getContext(bookingId, userId);
+
+        assertTrue(ctx.isGuideAssigned());
+        assertEquals("Minh", ctx.getGuideName());
+        assertFalse(ctx.getAvailableGuideTags().isEmpty());
+        assertTrue(ctx.getAvailableTags().isEmpty());
+    }
+
+    @Test
     void previewPreferences_emptyWhenPersonalizationOff() {
         when(privacyService.hasPersonalizationConsent(userId)).thenReturn(false);
         when(preferenceService.getForUser(userId)).thenReturn(TravelPreferencesDto.builder().build());

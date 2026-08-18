@@ -5,6 +5,7 @@ import com.flourishtravel.common.exception.ResourceNotFoundException;
 import com.flourishtravel.domain.booking.entity.Booking;
 import com.flourishtravel.domain.booking.repository.BookingRepository;
 import com.flourishtravel.domain.flora.feedback.FloraFeedbackTagCatalog;
+import com.flourishtravel.domain.flora.feedback.FloraGuideFeedbackTagCatalog;
 import com.flourishtravel.domain.flora.feedback.FloraPostTourEligibility;
 import com.flourishtravel.domain.review.dto.ReviewModerationRequest;
 import com.flourishtravel.domain.review.dto.ReviewViewDto;
@@ -37,6 +38,18 @@ public class ReviewService {
 
     @Transactional
     public Review create(UUID userId, UUID bookingId, int rating, String comment, List<String> feedbackTags) {
+        return create(userId, bookingId, rating, comment, feedbackTags, null, null);
+    }
+
+    @Transactional
+    public Review create(
+            UUID userId,
+            UUID bookingId,
+            int rating,
+            String comment,
+            List<String> feedbackTags,
+            Integer guideRating,
+            List<String> guideFeedbackTags) {
         if (rating < 1 || rating > 5) {
             throw new BadRequestException("Rating phải từ 1 đến 5");
         }
@@ -45,8 +58,12 @@ public class ReviewService {
         }
         try {
             FloraFeedbackTagCatalog.validateTagIds(feedbackTags);
+            FloraGuideFeedbackTagCatalog.validateTagIds(guideFeedbackTags);
         } catch (IllegalArgumentException ex) {
             throw new BadRequestException(ex.getMessage());
+        }
+        if (guideRating != null && (guideRating < 1 || guideRating > 5)) {
+            throw new BadRequestException("Điểm HDV phải từ 1 đến 5");
         }
 
         User user = userRepository.findById(userId).orElseThrow(() -> new ResourceNotFoundException("User", userId));
@@ -61,6 +78,12 @@ public class ReviewService {
         if (reviewRepository.existsByBooking(booking)) {
             throw new BadRequestException("Bạn đã đánh giá đơn này rồi");
         }
+
+        User guide = booking.getSession() != null ? booking.getSession().getTourGuide() : null;
+        if (guide == null && (guideRating != null || (guideFeedbackTags != null && !guideFeedbackTags.isEmpty()))) {
+            throw new BadRequestException("Chuyến này chưa có HDV để đánh giá");
+        }
+
         Review review = Review.builder()
                 .booking(booking)
                 .user(user)
@@ -68,6 +91,10 @@ public class ReviewService {
                 .rating(rating)
                 .comment(comment != null ? comment.trim() : null)
                 .feedbackTags(FloraFeedbackTagCatalog.joinTagIds(feedbackTags))
+                .guideId(guide != null ? guide.getId() : null)
+                .guideName(guide != null ? guide.getFullName() : null)
+                .guideRating(guide != null ? guideRating : null)
+                .guideFeedbackTags(guide != null ? FloraFeedbackTagCatalog.joinTagIds(guideFeedbackTags) : null)
                 .build();
         return reviewRepository.save(review);
     }
@@ -127,6 +154,10 @@ public class ReviewService {
                 .rating(review.getRating())
                 .comment(review.getComment())
                 .feedbackTags(review.getFeedbackTags())
+                .guideId(review.getGuideId())
+                .guideName(review.getGuideName())
+                .guideRating(review.getGuideRating())
+                .guideFeedbackTags(review.getGuideFeedbackTags())
                 .isPublished(review.getIsPublished())
                 .isFeatured(review.getIsFeatured())
                 .createdAt(review.getCreatedAt())

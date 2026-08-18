@@ -7,11 +7,14 @@ import com.flourishtravel.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.util.UUID;
+
 @Entity
 @Table(name = "reviews", indexes = {
         @Index(columnList = "booking_id", unique = true),
         @Index(columnList = "tour_id"),
-        @Index(columnList = "user_id")
+        @Index(columnList = "user_id"),
+        @Index(columnList = "guide_id")
 })
 @Getter
 @Setter
@@ -41,6 +44,19 @@ public class Review extends BaseEntity {
     /** Comma-separated Flora feedback tag IDs (Phase 1.4). */
     @Column(name = "feedback_tags", columnDefinition = "TEXT")
     private String feedbackTags;
+
+    /** HDV of this booking's session at submit time. */
+    @Column(name = "guide_id")
+    private UUID guideId;
+
+    @Column(name = "guide_name", length = 255)
+    private String guideName;
+
+    @Column(name = "guide_rating")
+    private Integer guideRating;
+
+    @Column(name = "guide_feedback_tags", columnDefinition = "TEXT")
+    private String guideFeedbackTags;
 
     @Column(name = "is_published", nullable = false)
     @Builder.Default

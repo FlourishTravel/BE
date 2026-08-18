@@ -13,6 +13,7 @@ import com.flourishtravel.domain.review.entity.Review;
 import com.flourishtravel.domain.review.repository.ReviewRepository;
 import com.flourishtravel.domain.tour.entity.Tour;
 import com.flourishtravel.domain.tour.entity.TourSession;
+import com.flourishtravel.domain.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +43,7 @@ public class FloraPostTourFeedbackService {
         Optional<Review> existing = reviewRepository.findByBooking(booking);
         boolean alreadySubmitted = existing.isPresent();
         boolean personalizationEnabled = privacyService.hasPersonalizationConsent(userId);
+        User guide = resolveGuide(booking);
 
         return FloraPostTourFeedbackContextDto.builder()
                 .bookingId(bookingId)
@@ -50,7 +52,11 @@ public class FloraPostTourFeedbackService {
                 .tourName(resolveTourName(booking))
                 .completedAt(formatCompletedAt(booking))
                 .personalizationEnabled(personalizationEnabled)
+                .guideAssigned(guide != null)
+                .guideId(guide != null ? guide.getId() : null)
+                .guideName(guide != null ? guide.getFullName() : null)
                 .availableTags(personalizationEnabled ? catalogTags() : List.of())
+                .availableGuideTags(guide != null ? guideCatalogTags() : List.of())
                 .existingFeedback(existing.map(this::toExisting).orElse(null))
                 .build();
     }
@@ -85,6 +91,8 @@ public class FloraPostTourFeedbackService {
                 .rating(review.getRating())
                 .comment(review.getComment())
                 .feedbackTags(FloraFeedbackTagCatalog.splitTagIds(review.getFeedbackTags()))
+                .guideRating(review.getGuideRating())
+                .guideFeedbackTags(FloraFeedbackTagCatalog.splitTagIds(review.getGuideFeedbackTags()))
                 .build();
     }
 
@@ -98,6 +106,21 @@ public class FloraPostTourFeedbackService {
                         .suggestedValue(t.getSuggestedValue())
                         .build())
                 .toList();
+    }
+
+    private static List<FloraFeedbackTagDto> guideCatalogTags() {
+        return FloraGuideFeedbackTagCatalog.all().stream()
+                .map(t -> FloraFeedbackTagDto.builder()
+                        .id(t.id())
+                        .label(t.label())
+                        .category(t.category())
+                        .build())
+                .toList();
+    }
+
+    private static User resolveGuide(Booking booking) {
+        TourSession session = booking.getSession();
+        return session != null ? session.getTourGuide() : null;
     }
 
     private String resolveTourName(Booking booking) {

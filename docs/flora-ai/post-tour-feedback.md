@@ -20,7 +20,11 @@ Upcoming, cancelled, or refunded bookings are not eligible.
 - **Tour feedback** → `Review` entity (`POST /api/reviews`)
   - `rating` (1–5), `comment`, optional `feedbackTags` (comma-separated catalog IDs)
   - One review per booking (`booking_id` unique)
-- **Preference suggestions** → deterministic mapping from selected tags (`FloraFeedbackTagCatalog`)
+- **HDV of that booking** → same `Review` row
+  - Snapshot `guideId` / `guideName` from `session.tourGuide` at submit
+  - Optional `guideRating` (1–5) and `guideFeedbackTags` (catalog in `FloraGuideFeedbackTagCatalog`)
+  - Hidden when the session has no assigned HDV
+- **Preference suggestions** → deterministic mapping from selected **trip** tags only (`FloraFeedbackTagCatalog`)
 - **Confirmed updates** → `PATCH /api/flora/preferences/me` only
 
 No separate `FloraPostTourFeedback` table.
@@ -38,7 +42,7 @@ No separate `FloraPostTourFeedback` table.
 
 1. User opens booking detail (web) or trip detail (mobile) for an eligible booking.
 2. Flora shows intro: *Chuyến đi của bạn đã kết thúc rồi…*
-3. User rates, adds optional comment, selects chips.
+3. User rates the trip, optionally rates the HDV of that session, adds comment, selects chips.
 4. **Đánh giá chuyến đi** → `POST /api/reviews` (with or without tags).
 5. If `personalizationConsent = true` and chips selected → preview suggested changes.
 6. **Lưu sở thích này** → `PATCH /api/flora/preferences/me` with merged partial body.
