@@ -24,6 +24,7 @@ public interface ReviewRepository extends JpaRepository<Review, UUID> {
             SELECT r FROM Review r
             LEFT JOIN FETCH r.user
             LEFT JOIN FETCH r.tour
+            LEFT JOIN FETCH r.booking
             ORDER BY r.createdAt DESC
             """)
     List<Review> findAllAdmin();

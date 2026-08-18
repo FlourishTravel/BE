@@ -11,6 +11,8 @@ import java.util.UUID;
 public class ReviewViewDto {
     private UUID id;
     private UUID bookingId;
+    /** Mã đặt chỗ khách thấy (FT-XXXXXXXX). Chỉ trả cho chủ đơn / admin. */
+    private String bookingCode;
     private UUID userId;
     private String userName;
     private UUID tourId;

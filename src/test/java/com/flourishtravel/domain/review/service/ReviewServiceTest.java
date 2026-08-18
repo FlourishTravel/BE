@@ -5,6 +5,7 @@ import com.flourishtravel.common.exception.ResourceNotFoundException;
 import com.flourishtravel.domain.booking.entity.Booking;
 import com.flourishtravel.domain.booking.repository.BookingRepository;
 import com.flourishtravel.domain.flora.feedback.FloraPostTourEligibility;
+import com.flourishtravel.domain.review.entity.Review;
 import com.flourishtravel.domain.review.repository.ReviewRepository;
 import com.flourishtravel.domain.tour.entity.Tour;
 import com.flourishtravel.domain.tour.entity.TourSession;
@@ -149,5 +150,41 @@ class ReviewServiceTest {
     void create_rejectsUnknownGuideTag() {
         assertThrows(BadRequestException.class,
                 () -> reviewService.create(userId, bookingId, 4, null, null, 5, List.of("UNKNOWN_GUIDE")));
+    }
+
+    @Test
+    void listMine_includesBookingCode() {
+        Review review = Review.builder()
+                .booking(booking)
+                .user(user)
+                .tour(booking.getSession().getTour())
+                .rating(5)
+                .comment("Hay")
+                .build();
+        when(reviewRepository.findByUserId(userId)).thenReturn(List.of(review));
+
+        var rows = reviewService.listMine(userId);
+
+        assertEquals(1, rows.size());
+        assertEquals(bookingId, rows.get(0).getBookingId());
+        assertEquals("FT-" + bookingId.toString().substring(0, 8).toUpperCase(), rows.get(0).getBookingCode());
+    }
+
+    @Test
+    void listPublic_omitsBookingCode() {
+        Review review = Review.builder()
+                .booking(booking)
+                .user(user)
+                .tour(booking.getSession().getTour())
+                .rating(5)
+                .isPublished(true)
+                .build();
+        when(reviewRepository.findPublic(null)).thenReturn(List.of(review));
+
+        var rows = reviewService.listPublic(null);
+
+        assertEquals(1, rows.size());
+        assertNull(rows.get(0).getBookingId());
+        assertNull(rows.get(0).getBookingCode());
     }
 }

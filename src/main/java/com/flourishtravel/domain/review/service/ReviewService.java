@@ -2,6 +2,7 @@ package com.flourishtravel.domain.review.service;
 
 import com.flourishtravel.common.exception.BadRequestException;
 import com.flourishtravel.common.exception.ResourceNotFoundException;
+import com.flourishtravel.domain.booking.BookingCodes;
 import com.flourishtravel.domain.booking.entity.Booking;
 import com.flourishtravel.domain.booking.repository.BookingRepository;
 import com.flourishtravel.domain.flora.feedback.FloraFeedbackTagCatalog;
@@ -125,14 +126,14 @@ public class ReviewService {
     @Transactional(readOnly = true)
     public List<ReviewViewDto> listPublic(UUID tourId) {
         return reviewRepository.findPublic(tourId).stream()
-                .map(this::toDto)
+                .map(this::toPublicDto)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public List<ReviewViewDto> listPublicFeatured() {
         return reviewRepository.findFeaturedPublic().stream()
-                .map(this::toDto)
+                .map(this::toPublicDto)
                 .toList();
     }
 
@@ -143,10 +144,19 @@ public class ReviewService {
                 .toList();
     }
 
+    private ReviewViewDto toPublicDto(Review review) {
+        ReviewViewDto dto = toDto(review);
+        dto.setBookingId(null);
+        dto.setBookingCode(null);
+        return dto;
+    }
+
     private ReviewViewDto toDto(Review review) {
+        UUID bookingId = review.getBooking() != null ? review.getBooking().getId() : null;
         return ReviewViewDto.builder()
                 .id(review.getId())
-                .bookingId(review.getBooking() != null ? review.getBooking().getId() : null)
+                .bookingId(bookingId)
+                .bookingCode(BookingCodes.fromId(bookingId))
                 .userId(review.getUser() != null ? review.getUser().getId() : null)
                 .userName(review.getUser() != null ? review.getUser().getFullName() : null)
                 .tourId(review.getTour() != null ? review.getTour().getId() : null)

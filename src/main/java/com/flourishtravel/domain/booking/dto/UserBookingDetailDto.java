@@ -21,6 +21,8 @@ import java.util.UUID;
 public class UserBookingDetailDto {
 
     private UUID bookingId;
+    /** Mã đặt chỗ khách thấy trên hóa đơn / vé (FT-XXXXXXXX). */
+    private String bookingCode;
     private String bookingStatus;
     private Integer guestCount;
     private BigDecimal totalAmount;

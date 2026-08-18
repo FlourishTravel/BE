@@ -20,6 +20,8 @@ import java.util.UUID;
 public class UserBookingSummaryDto {
 
     private UUID bookingId;
+    /** Mã đặt chỗ khách thấy trên hóa đơn / vé (FT-XXXXXXXX). */
+    private String bookingCode;
     /** pending | paid | cancelled (theo booking) */
     private String bookingStatus;
     private Integer guestCount;

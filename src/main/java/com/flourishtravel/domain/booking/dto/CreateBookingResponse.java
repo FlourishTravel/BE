@@ -14,6 +14,8 @@ import java.util.UUID;
 @AllArgsConstructor
 public class CreateBookingResponse {
     private UUID bookingId;
+    /** Mã đặt chỗ khách thấy (FT-XXXXXXXX). Khác mã thanh toán cổng nếu cổng dùng orderId riêng. */
+    private String bookingCode;
     private String orderId;
     private String paymentUrl;
     private int expiresInSeconds;

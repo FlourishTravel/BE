@@ -3,6 +3,7 @@ package com.flourishtravel.domain.booking.service;
 import com.flourishtravel.common.exception.BadRequestException;
 import com.flourishtravel.common.exception.ResourceNotFoundException;
 import com.flourishtravel.common.util.UrlUtils;
+import com.flourishtravel.domain.booking.BookingCodes;
 import com.flourishtravel.domain.booking.dto.CreateBookingResponse;
 import com.flourishtravel.domain.booking.dto.GuestInputDto;
 import com.flourishtravel.domain.booking.dto.MomoPayUrlResponse;
@@ -105,6 +106,7 @@ public class BookingService {
 
         return UserBookingSummaryDto.builder()
                 .bookingId(b.getId())
+                .bookingCode(BookingCodes.fromId(b.getId()))
                 .bookingStatus(b.getStatus())
                 .guestCount(b.getGuestCount())
                 .totalAmount(b.getTotalAmount())
@@ -159,12 +161,35 @@ public class BookingService {
 
     /**
      * Chi tiết đơn cho app khách — DTO đầy đủ, không trả entity JPA.
+     * {@code bookingRef} là UUID hoặc mã đặt chỗ FT-XXXXXXXX.
      */
     @Transactional(readOnly = true)
-    public UserBookingDetailDto getMyBookingDetail(UUID bookingId, UUID userId) {
-        Booking b = bookingRepository.findDetailForUser(bookingId, userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Booking", bookingId));
-        return toUserBookingDetailDto(b);
+    public UserBookingDetailDto getMyBookingDetail(String bookingRef, UUID userId) {
+        return toUserBookingDetailDto(resolveOwnedBooking(bookingRef, userId));
+    }
+
+    private Booking resolveOwnedBooking(String bookingRef, UUID userId) {
+        Optional<UUID> uuid = BookingCodes.parseUuid(bookingRef);
+        if (uuid.isPresent()) {
+            return bookingRepository.findDetailForUser(uuid.get(), userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Booking", uuid.get()));
+        }
+        String code = BookingCodes.normalize(bookingRef);
+        if (code == null) {
+            throw new BadRequestException("Mã đặt chỗ không hợp lệ.");
+        }
+        List<UUID> matches = bookingRepository.findWithSummaryGraphByUserId(userId).stream()
+                .map(Booking::getId)
+                .filter(id -> code.equals(BookingCodes.fromId(id)))
+                .toList();
+        if (matches.isEmpty()) {
+            throw new ResourceNotFoundException("Booking", bookingRef);
+        }
+        if (matches.size() > 1) {
+            throw new BadRequestException("Mã đặt chỗ trùng, hãy mở đơn từ Chuyến đi của tôi.");
+        }
+        return bookingRepository.findDetailForUser(matches.get(0), userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Booking", matches.get(0)));
     }
 
     private UserBookingDetailDto toUserBookingDetailDto(Booking b) {
@@ -240,6 +265,7 @@ public class BookingService {
 
         return UserBookingDetailDto.builder()
                 .bookingId(b.getId())
+                .bookingCode(BookingCodes.fromId(b.getId()))
                 .bookingStatus(b.getStatus())
                 .guestCount(b.getGuestCount())
                 .totalAmount(b.getTotalAmount())
@@ -406,6 +432,7 @@ public class BookingService {
         }
         return CreateBookingResponse.builder()
                 .bookingId(booking.getId())
+                .bookingCode(BookingCodes.fromId(booking.getId()))
                 .orderId(orderId)
                 .paymentUrl(paymentUrl)
                 .expiresInSeconds(PaymentHoldRules.holdSeconds(pendingExpireSeconds))

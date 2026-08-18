@@ -56,7 +56,7 @@ public class BookingController {
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<UserBookingDetailDto>> getMyBookingDetail(
             @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID id) {
+            @PathVariable String id) {
         if (principal == null) {
             return ResponseEntity.status(401).build();
         }
