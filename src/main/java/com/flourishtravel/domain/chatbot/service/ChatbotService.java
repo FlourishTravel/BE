@@ -19,6 +19,7 @@ import com.flourishtravel.domain.tour.entity.TourLocation;
 import com.flourishtravel.domain.tour.repository.TourRepository;
 import org.hibernate.Hibernate;
 import com.flourishtravel.domain.tour.service.TourService;
+import com.flourishtravel.domain.flora.recommendation.FloraGiftShoppingAdvice;
 import com.flourishtravel.domain.flora.service.FloraContextBuilder;
 import com.flourishtravel.domain.user.entity.User;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -65,13 +66,13 @@ Bộ nhớ ngữ cảnh (Context Memory): Nếu context từ lượt trước c�
 
 Đa ý định (Multi-intent): Nếu khách hỏi 2 việc trong 1 câu (vd "Tour này có đi Hội An không và ở lại thêm 1 đêm tính phí thế nào?") thì reply phải BÓC TÁCH và trả lời CẢ HAI ý: (1) có đi Hội An hay không theo lịch trình, (2) ở lại thêm đêm thì phí theo chính sách/option. Không bỏ sót ý.
 
-Entity: Nhặt từ câu: địa điểm -> destination, số ngày -> duration_days, ngân sách (X triệu) -> budget_min/budget_max, số người -> guest_count. Slang: đl=Đà Lạt, ks=khách sạn, mb=miền Bắc, mt=miền Trung, mn=miền Nam.
+Entity: Nhặt từ câu: địa điểm -> destination, số ngày -> duration_days, ngân sách tour (X triệu VND) -> budget_min/budget_max, số người -> guest_count. Số + baht/THB/฿ khi mua quà/shopping local KHÔNG đưa vào budget_min/budget_max. Slang: đl=Đà Lạt, ks=khách sạn, mb=miền Bắc, mt=miền Trung, mn=miền Nam.
 
 Các intent:
 - search_tour: tìm/đặt/xem tour; tư vấn theo ngân sách/phong cách/thời tiết. Điền slots; reply gợi ý tour, có thể nhắc "để lại SĐT/email nhận lịch trình".
 - trip_planner: có N ngày muốn đi X, Y. slots: duration_days, destination hoặc destinations.
 - general_question: hỏi chung du lịch (ăn gì, thời tiết). Local secrets (quán ẩn, góc chụp, trả giá, taxi) -> policy_faq hoặc general_question tùy câu.
-- travel_tips: mẹo du lịch, hành trang.
+- travel_tips: mẹo du lịch, hành trang; mua quà tại chỗ đang đứng / souvenir theo ngân sách baht (không search_tour).
 - policy_faq: hỏi cần FAQ chính xác, gồm: lịch trình/so sánh/thời điểm/độ tuổi; giá/thanh toán/trẻ em; hủy/đổi/hoàn; in-tour/khẩn cấp; visa/bảo hiểm; dịch vụ thêm; hành trang; văn hóa/đổi tiền/ổ cắm; XỬ LÝ SỰ CỐ (bão/mưa tour khởi hành không, đền bù; say sóng/ngộ độc/cấp cứu; mất ví/hộ chiếu trình báo công an); LOCAL SECRETS (quán ẩn, góc check-in, trả giá, taxi); TIỆN ÍCH SỐ (quy đổi USD/Baht, dự báo thời tiết, dịch câu tiếng Thái); SAU CHUYẾN (review/voucher, khiếu nại HDV, gợi ý tour tiếp); SO SÁNH ĐỐI THỦ (bên X rẻ hơn, khách sạn xa); UY TÍN (hoạt động bao lâu, giấy phép) -> policy_faq.
 - unknown: không liên quan tour. reply lịch sự + quick_replies "Tour biển 3 ngày", "Chính sách hủy tour", "Để lại thông tin tư vấn".
 
@@ -237,6 +238,10 @@ Cá nhân hóa: Nếu có block "Hồ sơ khách đang đăng nhập" bên dư�
             }
         }
 
+        FloraGiftShoppingAdvice.GiftAsk giftAsk = FloraGiftShoppingAdvice.parse(content);
+        FloraGiftShoppingAdvice.stripTourBudgetSlots(slots, giftAsk);
+        intent = FloraGiftShoppingAdvice.coerceIntent(intent, giftAsk);
+
         List<ChatbotResponse.QuickReply> quickReplies = new ArrayList<>();
         Object qr = llmJson.get("quick_replies");
         if (qr instanceof List<?> list) {
@@ -249,7 +254,13 @@ Cá nhân hóa: Nếu có block "Hồ sơ khách đang đăng nhập" bên dư�
             }
         }
         if (quickReplies.isEmpty()) {
-            quickReplies.add(ChatbotResponse.QuickReply.builder().label("Xem thêm tour").payload("Xem thêm tour").build());
+            if (giftAsk.giftIntent()) {
+                for (String label : FloraGiftShoppingAdvice.defaultQuickReplyLabels()) {
+                    quickReplies.add(ChatbotResponse.QuickReply.builder().label(label).payload(label).build());
+                }
+            } else {
+                quickReplies.add(ChatbotResponse.QuickReply.builder().label("Xem thêm tour").payload("Xem thêm tour").build());
+            }
         }
         if ("unknown".equals(intent)) {
             quickReplies.add(0, ChatbotResponse.QuickReply.builder().label("Để lại thông tin tư vấn").payload("Để lại thông tin tư vấn").build());

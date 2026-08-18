@@ -6,6 +6,7 @@ import com.flourishtravel.domain.chatbot.security.ChatbotSecurityService;
 import com.flourishtravel.domain.chatbot.service.ChatbotUserContextService;
 import com.flourishtravel.domain.flora.dto.FloraJourneyDto;
 import com.flourishtravel.domain.flora.dto.FloraSuggestedActionDto;
+import com.flourishtravel.domain.flora.recommendation.FloraGiftShoppingHintService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ public class FloraContextBuilder {
     private final FloraPrivacyService privacyService;
     private final FloraJourneyService journeyService;
     private final ChatbotSecurityService chatbotSecurityService;
+    private final FloraGiftShoppingHintService giftShoppingHintService;
 
     @Value("${app.flora.timezone:Asia/Ho_Chi_Minh}")
     private String tourTimezone;
@@ -59,6 +61,12 @@ public class FloraContextBuilder {
                     .append(", lon=")
                     .append(roundCoordinate(request.getLongitude()))
                     .append("\n");
+        }
+
+        String giftHint = giftShoppingHintService.buildHint(request, userId);
+        if (giftHint != null && !giftHint.isBlank()) {
+            if (!sb.isEmpty()) sb.append("\n");
+            sb.append(giftHint);
         }
 
         return sb.toString();

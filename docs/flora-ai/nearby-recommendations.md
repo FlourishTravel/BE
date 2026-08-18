@@ -81,6 +81,25 @@ Phrases like “Gợi ý quán ăn gần đây” with `bookingId` return action
 
 The chatbot does **not** call Overpass on every message; the client calls the Flora endpoint after the user taps the action.
 
+## In-store gift shopping (chat)
+
+When a guest is **already inside** a named supermarket/mall (example: “đang ở Big C Ratchadamri, mua quà cho mẹ ngân sách 500 baht”):
+
+- Flora treats this as **in-store gift advice**, not nearby restaurants and not a tour-budget search.
+- Reply is aisle-level (snack Thái, trái cây, sữa, khăn, drugstore makeup) within the stated **THB/baht** budget.
+- `500 baht` is **not** mapped to `budget_min` 500 triệu VND.
+- No product catalog / SKU prices — Flora must not invent barcode prices.
+- `OPEN_NEARBY_RECOMMENDATIONS` is **not** attached (they are already in the store).
+- If the journey has a confirmed meeting time, mention remaining free time.
+
+If they ask **where to buy** (“mua quà gần đây”) without a named store, chat may attach `OPEN_NEARBY_RECOMMENDATIONS` with label “Xem chỗ mua sắm gần đây”.
+
+If there is no venue and no GPS, Flora asks which supermarket/mall they are in.
+
+Optional: when gift intent + GPS + no venue name, BE may look up the nearest OSM `shop` within ~150m (2s timeout) to name the store in the LLM hint.
+
+Web/mobile Flora chat should send last-known GPS when the browser/app already has location permission (still stripped server-side without Flora location consent).
+
 ## Configuration
 
 ```yaml

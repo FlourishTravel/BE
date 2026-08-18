@@ -17,7 +17,10 @@ public class FloraNearbyChatbotHelper {
     public ChatbotResponse maybeEnhance(ChatbotRequest request, ChatbotResponse response, UUID userId) {
         if (userId == null || request.getBookingId() == null) return response;
         String content = resolveContent(request);
-        if (!looksLikeNearbyIntent(content)) return response;
+        FloraGiftShoppingAdvice.GiftAsk giftAsk = FloraGiftShoppingAdvice.parse(content);
+        if (giftAsk.inStore()) return response;
+        boolean shoppingNearby = giftAsk.wantsNearbyStores();
+        if (!looksLikeNearbyIntent(content) && !shoppingNearby) return response;
 
         List<FloraSuggestedActionDto> actions = new ArrayList<>();
         if (response.getSuggestedActions() != null) {
@@ -25,13 +28,15 @@ public class FloraNearbyChatbotHelper {
         }
         actions.add(FloraSuggestedActionDto.builder()
                 .type(FloraRecommendationConstants.ACTION_OPEN_NEARBY)
-                .label("Xem gợi ý gần đây")
+                .label(shoppingNearby ? "Xem chỗ mua sắm gần đây" : "Xem gợi ý gần đây")
                 .payload(request.getBookingId().toString())
                 .build());
 
         String reply = response.getReply();
         if (reply == null || reply.isBlank()) {
-            reply = "Flora có thể gợi ý địa điểm gần bạn theo thời gian còn lại trong lịch trình. Bạn bấm nút bên dưới để xem nhé.";
+            reply = shoppingNearby
+                    ? "Flora có thể gợi ý chỗ mua sắm gần bạn. Bấm nút bên dưới để xem nhé."
+                    : "Flora có thể gợi ý địa điểm gần bạn theo thời gian còn lại trong lịch trình. Bạn bấm nút bên dưới để xem nhé.";
         }
 
         return response.toBuilder()
