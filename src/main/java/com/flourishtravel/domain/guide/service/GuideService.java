@@ -2,6 +2,7 @@ package com.flourishtravel.domain.guide.service;
 
 import com.flourishtravel.common.exception.BadRequestException;
 import com.flourishtravel.common.exception.ResourceNotFoundException;
+import com.flourishtravel.domain.booking.BookingCodes;
 import com.flourishtravel.domain.booking.entity.Booking;
 import com.flourishtravel.domain.booking.entity.SessionCheckin;
 import com.flourishtravel.domain.booking.entity.SessionParticipant;
@@ -207,6 +208,7 @@ public class GuideService {
 
             rows.add(GuideSessionGuestsDto.GuideGuestBookingRowDto.builder()
                     .bookingId(b.getId())
+                    .bookingCode(BookingCodes.fromId(b.getId()))
                     .travelerUserId(u != null ? u.getId() : null)
                     .travelerName(u != null ? u.getFullName() : null)
                     .email(u != null ? u.getEmail() : null)

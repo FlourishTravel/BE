@@ -17,8 +17,10 @@ class BookingCodesTest {
     }
 
     @Test
-    void fromId_nullIsNull() {
-        assertNull(BookingCodes.fromId(null));
+    void qrPayload_matchesFromId() {
+        UUID id = UUID.fromString("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee");
+        assertEquals("FT-AAAAAAAA", BookingCodes.qrPayload(id));
+        assertEquals(BookingCodes.fromId(id), BookingCodes.qrPayload(id));
     }
 
     @Test

@@ -17,6 +17,11 @@ public final class BookingCodes {
         return "FT-" + id.toString().substring(0, 8).toUpperCase(Locale.ROOT);
     }
 
+    /** Nội dung QR trên vé — trùng mã đặt chỗ, áp dụng cả đơn cũ. */
+    public static String qrPayload(UUID id) {
+        return fromId(id);
+    }
+
     public static Optional<UUID> parseUuid(String raw) {
         if (raw == null || raw.isBlank()) {
             return Optional.empty();

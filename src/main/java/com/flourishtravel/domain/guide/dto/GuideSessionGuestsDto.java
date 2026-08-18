@@ -53,6 +53,8 @@ public class GuideSessionGuestsDto {
     @Builder
     public static class GuideGuestBookingRowDto {
         private UUID bookingId;
+        /** Mã đặt chỗ FT-XXXXXXXX — tính từ UUID, đơn cũ cũng có. */
+        private String bookingCode;
         private UUID travelerUserId;
         private String travelerName;
         private String email;
