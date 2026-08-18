@@ -8,12 +8,15 @@ import com.flourishtravel.domain.flora.dto.FloraLocationResponse;
 import com.flourishtravel.domain.flora.dto.FloraNextMeetingDto;
 import com.flourishtravel.domain.flora.entity.UserLocationPing;
 import com.flourishtravel.domain.flora.repository.UserLocationPingRepository;
+import com.flourishtravel.domain.tour.entity.TourSession;
+import com.flourishtravel.domain.tour.service.TourSessionStatusResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Service
@@ -32,12 +35,18 @@ public class FloraLocationService {
     @Value("${app.flora.return-to-bus-minutes-before:20}")
     private long returnMinutesBefore;
 
+    @Value("${app.flora.timezone:Asia/Ho_Chi_Minh}")
+    private String tourTimezone;
+
     @Transactional
     public FloraLocationResponse recordLocation(UUID bookingId, UUID userId, FloraLocationRequest request) {
-        privacyService.requireLocationConsent(userId);
         validateCoordinates(request.getLatitude(), request.getLongitude());
 
         Booking booking = privacyService.requireOwnedBooking(bookingId, userId);
+        LocalDate today = TourSessionStatusResolver.todayInZone(tourTimezone);
+        if (!skipFloraConsentDuringTrip(booking.getSession(), today)) {
+            privacyService.requireLocationConsent(userId);
+        }
         Instant captured = request.getCapturedAt() != null ? request.getCapturedAt() : Instant.now();
 
         pingRepository.findTopByBookingIdAndUserIdOrderByCapturedAtDesc(bookingId, userId)
@@ -110,6 +119,11 @@ public class FloraLocationService {
                 .returnToBusSuggested(suggestReturn)
                 .message(message)
                 .build();
+    }
+
+    /** Trong ngày tour đang diễn ra, ping GPS phục vụ HDV không cần consent Flora nearby. */
+    static boolean skipFloraConsentDuringTrip(TourSession session, LocalDate today) {
+        return TourSessionStatusResolver.isOngoing(session, today);
     }
 
     static void validateCoordinates(Double lat, Double lon) {

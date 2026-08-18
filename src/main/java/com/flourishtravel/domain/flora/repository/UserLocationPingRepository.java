@@ -7,12 +7,21 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 public interface UserLocationPingRepository extends JpaRepository<UserLocationPing, UUID> {
 
     Optional<UserLocationPing> findTopByBookingIdAndUserIdOrderByCapturedAtDesc(UUID bookingId, UUID userId);
+
+    @Query("""
+            SELECT p FROM UserLocationPing p
+            JOIN FETCH p.user
+            JOIN FETCH p.booking b
+            WHERE b.session.id = :sessionId
+            """)
+    List<UserLocationPing> findBySessionId(@Param("sessionId") UUID sessionId);
 
     @Modifying
     @Query("DELETE FROM UserLocationPing p WHERE p.user.id = :userId")

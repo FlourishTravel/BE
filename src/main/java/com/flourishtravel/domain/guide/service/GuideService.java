@@ -13,9 +13,12 @@ import com.flourishtravel.domain.booking.repository.SessionParticipantActivityAt
 import com.flourishtravel.domain.booking.repository.SessionParticipantRepository;
 import com.flourishtravel.domain.booking.service.SessionOccupancyService;
 import com.flourishtravel.domain.booking.service.SessionParticipantSyncService;
+import com.flourishtravel.domain.flora.entity.UserLocationPing;
+import com.flourishtravel.domain.flora.repository.UserLocationPingRepository;
 import com.flourishtravel.domain.guide.dto.ActivityBulkAttendanceResultDto;
 import com.flourishtravel.domain.guide.dto.GuideSessionDetailDto;
 import com.flourishtravel.domain.guide.dto.GuideSessionGuestsDto;
+import com.flourishtravel.domain.guide.dto.GuideSessionLiveMapDto;
 import com.flourishtravel.domain.guide.dto.GuideSessionMemberDto;
 import com.flourishtravel.domain.guide.dto.GuideSessionSummaryDto;
 import com.flourishtravel.domain.guide.dto.ParticipantActivityAttendanceResultDto;
@@ -29,6 +32,7 @@ import com.flourishtravel.domain.tour.entity.TourSession;
 import com.flourishtravel.domain.tour.repository.TourActivityRepository;
 import com.flourishtravel.domain.tour.repository.TourRepository;
 import com.flourishtravel.domain.tour.repository.TourSessionRepository;
+import com.flourishtravel.domain.tour.service.TourSessionStatusResolver;
 import com.flourishtravel.domain.user.entity.User;
 import com.flourishtravel.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -44,12 +49,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class GuideService {
+
+    private static final ZoneId ZONE_VN = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final TourSessionRepository sessionRepository;
     private final BookingRepository bookingRepository;
@@ -61,6 +69,7 @@ public class GuideService {
     private final TourRepository tourRepository;
     private final TourActivityRepository tourActivityRepository;
     private final UserRepository userRepository;
+    private final UserLocationPingRepository locationPingRepository;
 
     @Transactional(readOnly = true)
     public List<GuideSessionSummaryDto> getMySessions(UUID guideId, Integer year, Integer month, LocalDate weekStart) {
@@ -119,6 +128,79 @@ public class GuideService {
         TourSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Session", sessionId));
         return buildSessionGuests(session);
+    }
+
+    /**
+     * Vị trí khách cho HDV. Ngoài cửa sổ ngày tour: {@code live=false} và không trả tọa độ.
+     */
+    @Transactional(readOnly = true)
+    public GuideSessionLiveMapDto getSessionLiveMap(UUID sessionId, UUID guideId) {
+        TourSession session = assertGuideOwnsSession(sessionId, guideId);
+        LocalDate today = TourSessionStatusResolver.todayInZone(ZONE_VN.getId());
+        Instant now = Instant.now();
+        if (!GuideLiveMap.isLive(session, today)) {
+            return GuideSessionLiveMapDto.builder()
+                    .live(false)
+                    .message(GuideLiveMap.offlineReason(session, today))
+                    .sessionStartDate(session.getStartDate())
+                    .sessionEndDate(session.getEndDate())
+                    .generatedAt(now)
+                    .freshCount(0)
+                    .staleCount(0)
+                    .markers(List.of())
+                    .build();
+        }
+
+        Set<UUID> rosterBookingIds = bookingRepository.findBySessionAndRosterStatusesWithGuests(session)
+                .stream()
+                .map(Booking::getId)
+                .collect(Collectors.toSet());
+
+        List<GuideSessionLiveMapDto.Marker> markers = new ArrayList<>();
+        for (UserLocationPing ping : locationPingRepository.findBySessionId(sessionId)) {
+            Booking booking = ping.getBooking();
+            if (booking == null || !rosterBookingIds.contains(booking.getId())) {
+                continue;
+            }
+            if (ping.getLatitude() == null || ping.getLongitude() == null) {
+                continue;
+            }
+            boolean stale = GuideLiveMap.isStale(ping.getCapturedAt(), now);
+            User user = ping.getUser();
+            markers.add(GuideSessionLiveMapDto.Marker.builder()
+                    .bookingId(booking.getId())
+                    .bookingCode(BookingCodes.fromId(booking.getId()))
+                    .displayName(user != null ? user.getFullName() : null)
+                    .latitude(ping.getLatitude())
+                    .longitude(ping.getLongitude())
+                    .capturedAt(ping.getCapturedAt())
+                    .stale(stale)
+                    .build());
+        }
+        markers.sort(Comparator.comparing(GuideSessionLiveMapDto.Marker::getDisplayName,
+                Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)));
+
+        int staleCount = (int) markers.stream().filter(GuideSessionLiveMapDto.Marker::isStale).count();
+        int freshCount = markers.size() - staleCount;
+        String message;
+        if (markers.isEmpty()) {
+            message = "Chưa có khách nào chia sẻ vị trí. Họ cần mở chuyến đi trên web/app trong ngày tour và cho phép GPS.";
+        } else if (freshCount == 0) {
+            message = "Các vị trí trên bản đồ đã cũ hơn 20 phút.";
+        } else {
+            message = "Đang theo dõi " + freshCount + " khách trong chuyến.";
+        }
+
+        return GuideSessionLiveMapDto.builder()
+                .live(true)
+                .message(message)
+                .sessionStartDate(session.getStartDate())
+                .sessionEndDate(session.getEndDate())
+                .generatedAt(now)
+                .freshCount(freshCount)
+                .staleCount(staleCount)
+                .markers(markers)
+                .build();
     }
 
     private GuideSessionGuestsDto buildSessionGuests(TourSession session) {

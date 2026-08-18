@@ -29,6 +29,11 @@ public final class TourSessionStatusResolver {
         return LocalDate.now(ZoneId.of(zoneId != null && !zoneId.isBlank() ? zoneId : "Asia/Ho_Chi_Minh"));
     }
 
+    /** Đúng ngày tour (từ startDate đến endDate), chưa hủy / chưa ghi nhận completed. */
+    public static boolean isOngoing(TourSession session, LocalDate today) {
+        return ONGOING.equals(resolveEffectiveStatus(session, today));
+    }
+
     /** Trạng thái hiển thị (có thể khác DB nếu job chưa chạy). */
     public static String resolveEffectiveStatus(TourSession session, LocalDate today) {
         if (session == null) {

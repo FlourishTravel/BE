@@ -4,6 +4,7 @@ import com.flourishtravel.common.dto.ApiResponse;
 import com.flourishtravel.domain.guide.dto.ActivityBulkAttendanceResultDto;
 import com.flourishtravel.domain.guide.dto.GuideSessionDetailDto;
 import com.flourishtravel.domain.guide.dto.GuideSessionGuestsDto;
+import com.flourishtravel.domain.guide.dto.GuideSessionLiveMapDto;
 import com.flourishtravel.domain.guide.dto.GuideSessionMemberDto;
 import com.flourishtravel.domain.guide.dto.GuideSessionSummaryDto;
 import com.flourishtravel.domain.guide.dto.ParticipantActivityAttendanceResultDto;
@@ -82,6 +83,18 @@ public class GuideController {
             return ResponseEntity.status(401).build();
         }
         GuideSessionGuestsDto data = guideService.getSessionGuestsBookings(sessionId, principal.getId());
+        return ResponseEntity.ok(ApiResponse.ok(data));
+    }
+
+    /** Vị trí khách realtime — chỉ trả tọa độ khi session đang diễn ra. */
+    @GetMapping("/sessions/{sessionId}/live-map")
+    public ResponseEntity<ApiResponse<GuideSessionLiveMapDto>> getSessionLiveMap(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID sessionId) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        GuideSessionLiveMapDto data = guideService.getSessionLiveMap(sessionId, principal.getId());
         return ResponseEntity.ok(ApiResponse.ok(data));
     }
 

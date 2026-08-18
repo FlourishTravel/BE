@@ -40,6 +40,21 @@ class TourSessionStatusResolverTest {
         assertEquals("ongoing", TourSessionStatusResolver.resolveStatusToPersist(session, LocalDate.of(2026, 6, 27)));
     }
 
+    @Test
+    void isOngoing_onlyWithinInclusiveDateWindow() {
+        TourSession session = session(LocalDate.of(2026, 8, 18), LocalDate.of(2026, 8, 20), "scheduled");
+        assertEquals(false, TourSessionStatusResolver.isOngoing(session, LocalDate.of(2026, 8, 17)));
+        assertEquals(true, TourSessionStatusResolver.isOngoing(session, LocalDate.of(2026, 8, 18)));
+        assertEquals(true, TourSessionStatusResolver.isOngoing(session, LocalDate.of(2026, 8, 20)));
+        assertEquals(false, TourSessionStatusResolver.isOngoing(session, LocalDate.of(2026, 8, 21)));
+    }
+
+    @Test
+    void isOngoing_falseWhenCancelledEvenOnTripDates() {
+        TourSession session = session(LocalDate.of(2026, 8, 18), LocalDate.of(2026, 8, 20), "cancelled");
+        assertEquals(false, TourSessionStatusResolver.isOngoing(session, LocalDate.of(2026, 8, 18)));
+    }
+
     private static TourSession session(LocalDate start, LocalDate end, String status) {
         return TourSession.builder().startDate(start).endDate(end).status(status).build();
     }
