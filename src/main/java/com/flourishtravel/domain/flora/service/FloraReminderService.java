@@ -88,9 +88,8 @@ public class FloraReminderService {
             UUID userId = booking.getUser().getId();
             if (!privacyService.hasNotificationConsent(userId)) continue;
             if (reviewRepository.existsByBooking_Id(booking.getId())) continue;
-            String key = meetingReminderKey(booking.getId(), FloraReminderTypes.POST_TOUR_FEEDBACK, Instant.EPOCH);
-            if (deliveryRepository.existsByIdempotencyKey(key)) continue;
-            deliverOnce(booking, userId, FloraReminderTypes.POST_TOUR_FEEDBACK, Instant.now(),
+            // Stable key bookingId:POST_TOUR_FEEDBACK:0 — must match deliverOnce, not Instant.now().
+            deliverOnce(booking, userId, FloraReminderTypes.POST_TOUR_FEEDBACK, Instant.EPOCH,
                     POST_TOUR_FEEDBACK_BODY, POST_TOUR_FEEDBACK_TITLE);
         }
     }

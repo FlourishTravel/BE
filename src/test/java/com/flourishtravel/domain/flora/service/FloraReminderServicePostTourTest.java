@@ -97,7 +97,25 @@ class FloraReminderServicePostTourTest {
                 eq(userId), eq(FloraReminderTypes.POST_TOUR_FEEDBACK),
                 eq("Flora muốn nghe cảm nhận của bạn"), bodyCaptor.capture(), eq(bookingId));
         assertTrue(bodyCaptor.getValue().contains("Chia sẻ vài điều"));
-        verify(deliveryRepository).save(any());
+        ArgumentCaptor<com.flourishtravel.domain.flora.entity.FloraReminderDelivery> deliveryCaptor =
+                ArgumentCaptor.forClass(com.flourishtravel.domain.flora.entity.FloraReminderDelivery.class);
+        verify(deliveryRepository).save(deliveryCaptor.capture());
+        assertEquals(bookingId + ":POST_TOUR_FEEDBACK:0", deliveryCaptor.getValue().getIdempotencyKey());
+    }
+
+    @Test
+    void postTourReminder_secondTickDoesNotSpam() throws Exception {
+        LocalDate today = LocalDate.of(2026, 6, 23);
+        when(bookingRepository.findRecentlyCompletedForFlora(today.minusDays(1), Set.of("completed")))
+                .thenReturn(List.of(booking));
+        when(privacyService.hasNotificationConsent(userId)).thenReturn(true);
+        when(reviewRepository.existsByBooking_Id(bookingId)).thenReturn(false);
+        when(deliveryRepository.existsByIdempotencyKey(bookingId + ":POST_TOUR_FEEDBACK:0")).thenReturn(true);
+
+        invokeCheckPostTourFeedback(today);
+
+        verify(notificationService, never()).createFloraNotification(any(), any(), any(), any(), any());
+        verify(deliveryRepository, never()).save(any());
     }
 
     @Test

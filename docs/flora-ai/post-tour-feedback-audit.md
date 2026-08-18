@@ -47,7 +47,7 @@ No separate admin review reporting module found for user-submitted tour reviews.
 
 - `FloraReminderService.checkPostTourFeedback()` — scheduled job, in-app only.
 - `NotificationService.createFloraNotification` — `data` JSON includes `bookingId`.
-- Idempotency: `FloraReminderDelivery.idempotencyKey` = `bookingId:POST_TOUR_FEEDBACK:0`.
+- Idempotency: `FloraReminderDelivery.idempotencyKey` = `bookingId:POST_TOUR_FEEDBACK:0` (must use `Instant.EPOCH` in `deliverOnce`, not `Instant.now()`, or the minute job will spam).
 - **Gaps fixed in 1.4:** skip when review exists; spec title/body; respect `notificationConsent` (already checked).
 
 ## 7. Safe completion recognition
