@@ -37,6 +37,9 @@ public class SiteContent extends BaseEntity {
     @Column(name = "image_url", length = 500)
     private String imageUrl;
 
+    @Column(name = "video_url", length = 1000)
+    private String videoUrl;
+
     @Column(length = 120)
     private String category;
 

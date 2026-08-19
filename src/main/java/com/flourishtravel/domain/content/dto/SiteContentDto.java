@@ -16,6 +16,7 @@ public class SiteContentDto {
     private String summary;
     private String body;
     private String imageUrl;
+    private String videoUrl;
     private String category;
     private Boolean published;
     private Integer sortOrder;

@@ -21,7 +21,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class SiteContentService {
 
-    private static final Set<String> ALLOWED_TYPES = Set.of("news", "story", "career", "help", "guide");
+    private static final Set<String> ALLOWED_TYPES = Set.of("news", "story", "career", "help", "guide", "video");
 
     private final SiteContentRepository siteContentRepository;
 
@@ -66,6 +66,7 @@ public class SiteContentService {
                 .summary(normalizeNullable(request.getSummary()))
                 .body(normalizeNullable(request.getBody()))
                 .imageUrl(normalizeNullable(request.getImageUrl()))
+                .videoUrl(normalizeNullable(request.getVideoUrl()))
                 .category(normalizeNullable(request.getCategory()))
                 .published(Boolean.TRUE.equals(request.getPublished()))
                 .sortOrder(request.getSortOrder())
@@ -91,6 +92,7 @@ public class SiteContentService {
         if (request.getSummary() != null) content.setSummary(normalizeNullable(request.getSummary()));
         if (request.getBody() != null) content.setBody(normalizeNullable(request.getBody()));
         if (request.getImageUrl() != null) content.setImageUrl(normalizeNullable(request.getImageUrl()));
+        if (request.getVideoUrl() != null) content.setVideoUrl(normalizeNullable(request.getVideoUrl()));
         if (request.getCategory() != null) content.setCategory(normalizeNullable(request.getCategory()));
         if (request.getSortOrder() != null) content.setSortOrder(request.getSortOrder());
         if (request.getPublished() != null) {
@@ -154,6 +156,7 @@ public class SiteContentService {
                 .summary(content.getSummary())
                 .body(content.getBody())
                 .imageUrl(content.getImageUrl())
+                .videoUrl(content.getVideoUrl())
                 .category(content.getCategory())
                 .published(content.getPublished())
                 .sortOrder(content.getSortOrder())
