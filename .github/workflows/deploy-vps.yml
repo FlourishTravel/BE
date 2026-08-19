@@ -156,9 +156,10 @@ jobs:
             # Ensure uploads directory exists with correct permissions (no docker-compose.yml modification)
             mkdir -p uploads && chmod 777 uploads
 
-            # Set UPLOAD_STORAGE=local in .env if not already set
-            grep -q '^UPLOAD_STORAGE=' .env || echo 'UPLOAD_STORAGE=local' >> .env
-            grep -q '^UPLOAD_DIR=' .env    || echo 'UPLOAD_DIR=uploads' >> .env
+            # Set UPLOAD_STORAGE=s3 in .env (S3 credentials already present on VPS)
+            grep -q '^UPLOAD_STORAGE=' .env \
+              && sed -i 's|^UPLOAD_STORAGE=.*|UPLOAD_STORAGE=s3|' .env \
+              || echo 'UPLOAD_STORAGE=s3' >> .env
 
             pg_ok=0
             for i in $(seq 1 40); do
