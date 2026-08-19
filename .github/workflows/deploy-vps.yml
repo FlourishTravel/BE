@@ -153,6 +153,16 @@ jobs:
               done
             fi
 
+            # Ensure uploads directory exists and is mounted into BE container
+            mkdir -p uploads
+            if ! grep -q 'uploads:/app/uploads' docker-compose.yml; then
+              sed -i '/image: flourish-be/a\    volumes:\n      - ./uploads:/app/uploads' docker-compose.yml 2>/dev/null || true
+            fi
+
+            # Set UPLOAD_STORAGE=local in .env if not already set
+            grep -q '^UPLOAD_STORAGE=' .env || echo 'UPLOAD_STORAGE=local' >> .env
+            grep -q '^UPLOAD_DIR=' .env    || echo 'UPLOAD_DIR=/app/uploads' >> .env
+
             pg_ok=0
             for i in $(seq 1 40); do
               if docker compose exec -T postgres pg_isready -q 2>/dev/null \
