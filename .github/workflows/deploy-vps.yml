@@ -161,6 +161,13 @@ jobs:
               && sed -i 's|^UPLOAD_STORAGE=.*|UPLOAD_STORAGE=s3|' .env \
               || echo 'UPLOAD_STORAGE=s3' >> .env
 
+            # Ensure AWS/S3 vars are passed to BE container via docker-compose env
+            for key in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY S3_BUCKET S3_REGION S3_PUBLIC_URL_PREFIX UPLOAD_STORAGE; do
+              if ! grep -q "${key}:" docker-compose.yml 2>/dev/null; then
+                sed -i "/FRONTEND_URL: \${FRONTEND_URL}/a\\      ${key}: \${${key}:-}" docker-compose.yml 2>/dev/null || true
+              fi
+            done
+
             pg_ok=0
             for i in $(seq 1 40); do
               if docker compose exec -T postgres pg_isready -q 2>/dev/null \

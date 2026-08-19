@@ -19,8 +19,13 @@ public class S3ClientConfig {
     public S3Client s3Client(
             @Value("${app.s3.region:ap-southeast-1}") String region,
             @Value("${app.s3.upload-access-key-id:}") String uploadAccessKeyId,
-            @Value("${app.s3.upload-secret-access-key:}") String uploadSecretAccessKey) {
-        AwsCredentialsProvider credentials = resolveCredentials(uploadAccessKeyId, uploadSecretAccessKey);
+            @Value("${app.s3.upload-secret-access-key:}") String uploadSecretAccessKey,
+            @Value("${AWS_ACCESS_KEY_ID:}") String awsAccessKeyId,
+            @Value("${AWS_SECRET_ACCESS_KEY:}") String awsSecretAccessKey) {
+        // Prefer app.s3.* keys, fallback to standard AWS_* env vars
+        String keyId = uploadAccessKeyId.isBlank() ? awsAccessKeyId : uploadAccessKeyId;
+        String secret = uploadSecretAccessKey.isBlank() ? awsSecretAccessKey : uploadSecretAccessKey;
+        AwsCredentialsProvider credentials = resolveCredentials(keyId, secret);
         return S3Client.builder()
                 .region(Region.of(region))
                 .credentialsProvider(credentials)
